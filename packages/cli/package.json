@@ -1,0 +1,16 @@
+{
+  "name": "@deep-agent-template/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "deep-agent-template": "./src/index.ts"
+  },
+  "dependencies": {
+    "@deep-agent-template/core": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}
