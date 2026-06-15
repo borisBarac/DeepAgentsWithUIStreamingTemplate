@@ -1,0 +1,61 @@
+import { describe, expect, it } from "bun:test";
+
+import {
+  MAX_SKILL_DESCRIPTION_LENGTH,
+  MAX_SKILL_NAME_LENGTH,
+  parseSkillMetadata,
+} from "deepagents";
+
+import { createDefaultSubagents } from "./scaffold";
+import {
+  CLARIFY_DEEPLY_SKILL_CONTENT,
+  CLARIFY_DEEPLY_SKILL_DESCRIPTION,
+  CLARIFY_DEEPLY_SKILL_DIR,
+  CLARIFY_DEEPLY_SKILL_NAME,
+  CLARIFY_DEEPLY_SKILL_PATH,
+  createDefaultSkillFiles,
+} from "./skills";
+
+describe("bundled skills", () => {
+  it("keeps clarify-deeply metadata within skill spec limits", () => {
+    expect(CLARIFY_DEEPLY_SKILL_NAME.length).toBeLessThanOrEqual(MAX_SKILL_NAME_LENGTH);
+    expect(CLARIFY_DEEPLY_SKILL_NAME).toMatch(/^[a-z]+(?:-[a-z]+)*$/);
+    expect(CLARIFY_DEEPLY_SKILL_DESCRIPTION.length).toBeLessThanOrEqual(
+      MAX_SKILL_DESCRIPTION_LENGTH,
+    );
+  });
+
+  it("ships a parsable SKILL.md file", () => {
+    const metadata = parseSkillMetadata(
+      "/Users/boris/Documents/dev/DeepAgentTemplate/packages/core/skills/clarify-deeply/SKILL.md",
+      "project",
+    );
+
+    expect(metadata).not.toBeNull();
+    expect(metadata?.name).toBe(CLARIFY_DEEPLY_SKILL_NAME);
+    expect(metadata?.description).toBe(CLARIFY_DEEPLY_SKILL_DESCRIPTION);
+  });
+
+  it("creates invoke-ready skill files for the state backend", () => {
+    const issuedAt = new Date("2026-06-15T00:00:00.000Z");
+    const files = createDefaultSkillFiles(issuedAt);
+
+    expect(files).toEqual({
+      [CLARIFY_DEEPLY_SKILL_PATH]: {
+        content: CLARIFY_DEEPLY_SKILL_CONTENT,
+        mimeType: "text/markdown",
+        created_at: issuedAt.toISOString(),
+        modified_at: issuedAt.toISOString(),
+      },
+    });
+  });
+
+  it("attaches clarify-deeply to the clarifier by default", () => {
+    const [clarifier, researcher, analyst, critic] = createDefaultSubagents();
+
+    expect(clarifier?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
+    expect(researcher?.skills).toEqual([]);
+    expect(analyst?.skills).toEqual([]);
+    expect(critic?.skills).toEqual([]);
+  });
+});

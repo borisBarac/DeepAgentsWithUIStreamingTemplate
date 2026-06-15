@@ -1,21 +1,21 @@
 import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 
+import type { ClarificationConfig } from "./clarification";
 import { type CreateChatModelOptions, createChatModel } from "./models";
 import { configureLangSmithTracing, type LangSmithTracingOptions } from "./observability";
 import {
-  DEFAULT_BASELINE_SYSTEM_PROMPT,
   createSupervisorSystemPrompt,
+  DEFAULT_BASELINE_SYSTEM_PROMPT,
   DEFAULT_SYSTEM_PROMPT,
 } from "./prompts";
 import {
-  type CreateSupervisorBlueprintOptions,
   type CreateCompositeBackendOptions,
   type CreateDefaultPermissionsOptions,
   type CreateDefaultSubagentsOptions,
+  type CreateSupervisorBlueprintOptions,
   createDefaultCompositeBackend,
   createSupervisorBlueprint,
 } from "./scaffold";
-import type { ClarificationConfig } from "./clarification";
 
 export const DEFAULT_AGENT_NAME = "deep-agent-template";
 

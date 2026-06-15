@@ -10,11 +10,12 @@ import {
 
 import { type ClarificationConfig, createClarificationConfig } from "./clarification";
 import {
-  DEFAULT_ANALYST_SYSTEM_PROMPT,
   createClarifierSystemPrompt,
+  DEFAULT_ANALYST_SYSTEM_PROMPT,
   DEFAULT_CRITIC_SYSTEM_PROMPT,
   DEFAULT_RESEARCHER_SYSTEM_PROMPT,
 } from "./prompts";
+import { CLARIFY_DEEPLY_SKILL_DIR } from "./skills";
 
 export const DEFAULT_SCRATCH_ROOT = "/scratch";
 export const DEFAULT_PLANS_ROOT = "/plans";
@@ -176,7 +177,7 @@ export function createDefaultSubagents(
       systemPrompt: createClarifierSystemPrompt(clarification),
       interruptOn: sharedInterrupts,
       tools: [],
-      skills: [],
+      skills: [CLARIFY_DEEPLY_SKILL_DIR],
     },
     options.clarifier,
   );

@@ -1,8 +1,8 @@
 import {
+  type ClarificationConfig,
   createClarificationConfig,
   DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
-  type ClarificationConfig,
 } from "./clarification";
 
 export const DEFAULT_BASELINE_SYSTEM_PROMPT =

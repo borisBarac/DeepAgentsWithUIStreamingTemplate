@@ -8,6 +8,7 @@ import * as models from "./models";
 import * as observability from "./observability";
 import * as prompts from "./prompts";
 import * as scaffold from "./scaffold";
+import * as skills from "./skills";
 import * as tools from "./tools";
 
 describe("index barrel exports", () => {
@@ -70,6 +71,15 @@ describe("index barrel exports", () => {
     expect(index.DEFAULT_REPORTS_ROOT).toBe(scaffold.DEFAULT_REPORTS_ROOT);
     expect(index.DEFAULT_SCRATCH_ROOT).toBe(scaffold.DEFAULT_SCRATCH_ROOT);
     expect(index.DEFAULT_SKILLS_ROOT).toBe(scaffold.DEFAULT_SKILLS_ROOT);
+  });
+
+  it("re-exports skill helpers from the skills module", () => {
+    expect(index.CLARIFY_DEEPLY_SKILL_CONTENT).toBe(skills.CLARIFY_DEEPLY_SKILL_CONTENT);
+    expect(index.CLARIFY_DEEPLY_SKILL_DESCRIPTION).toBe(skills.CLARIFY_DEEPLY_SKILL_DESCRIPTION);
+    expect(index.CLARIFY_DEEPLY_SKILL_DIR).toBe(skills.CLARIFY_DEEPLY_SKILL_DIR);
+    expect(index.CLARIFY_DEEPLY_SKILL_NAME).toBe(skills.CLARIFY_DEEPLY_SKILL_NAME);
+    expect(index.CLARIFY_DEEPLY_SKILL_PATH).toBe(skills.CLARIFY_DEEPLY_SKILL_PATH);
+    expect(index.createDefaultSkillFiles).toBe(skills.createDefaultSkillFiles);
   });
 
   it("re-exports specialized tool helpers from the tools module", () => {

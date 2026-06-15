@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import {
-  DEFAULT_CLARIFIER_SYSTEM_PROMPT,
-  DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
+  DEFAULT_CLARIFIER_SYSTEM_PROMPT,
+  DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
 } from "./prompts";
 
 describe("prompt defaults", () => {

@@ -6,6 +6,7 @@ import {
   createDefaultSubagents,
   createSupervisorBlueprint,
 } from "./scaffold";
+import { CLARIFY_DEEPLY_SKILL_DIR } from "./skills";
 
 describe("scaffolding defaults", () => {
   it("creates the default interrupt configuration for sensitive tools", () => {
@@ -72,7 +73,12 @@ describe("scaffolding defaults", () => {
       "critic",
     ]);
     expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], [], []]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([
+      [CLARIFY_DEEPLY_SKILL_DIR],
+      [],
+      [],
+      [],
+    ]);
   });
 
   it("builds a supervisor blueprint with the recommended architecture", () => {

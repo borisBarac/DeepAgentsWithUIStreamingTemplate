@@ -42,6 +42,7 @@ openrouter:deepseek/deepseek-v4-pro
 ```ts
 import {
   createBasicAgent,
+  createDefaultSkillFiles,
   createDefaultCompositeBackend,
   createSupervisorBlueprint,
 } from "@deep-agent-template/core";
@@ -55,12 +56,15 @@ const agent = createBasicAgent({
 
 const result = await agent.invoke({
   messages: [{ role: "user", content: "Create a short plan for the project." }],
+  files: createDefaultSkillFiles(),
 });
 ```
 
 `createBasicAgent` is an alias for the scaffolded factory. For a thinner single-agent control variant, use `createBaselineAgent`.
 
-The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` and `skills` lists, and you should wire specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists, and only the default `clarifier` ships with a bundled `clarify-deeply` skill. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+
+The default `clarifier` subagent includes the bundled `clarify-deeply` skill at `/skills/clarify-deeply/`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
 
 ## Clarification-first supervisor flow
 
