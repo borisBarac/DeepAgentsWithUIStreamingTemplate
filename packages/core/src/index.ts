@@ -1,6 +1,11 @@
 export {
+  type CreateBaselineAgentOptions,
   type CreateBasicAgentOptions,
+  type CreateScaffoldedAgentOptions,
+  createBaselineAgent,
   createBasicAgent,
+  createScaffoldedAgent,
+  createSupervisorBlueprint,
   DEFAULT_AGENT_NAME,
   DEFAULT_SYSTEM_PROMPT,
 } from "./agent";
@@ -22,3 +27,30 @@ export {
   type LangSmithTracingConfig,
   type LangSmithTracingOptions,
 } from "./observability";
+export {
+  DEFAULT_ANALYST_SYSTEM_PROMPT,
+  DEFAULT_BASELINE_SYSTEM_PROMPT,
+  DEFAULT_CRITIC_SYSTEM_PROMPT,
+  DEFAULT_RESEARCHER_SYSTEM_PROMPT,
+  DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+} from "./prompts";
+export {
+  type CreateCompositeBackendOptions,
+  type CreateDefaultPermissionsOptions,
+  type CreateDefaultSubagentsOptions,
+  createDefaultCompositeBackend,
+  createDefaultInterrupts,
+  createDefaultPermissions,
+  createDefaultSubagents,
+  createVirtualFilesystemLayout,
+  DEFAULT_ARTIFACTS_ROOT,
+  DEFAULT_MEMORY_FILE_PATHS,
+  DEFAULT_MEMORY_ROOT,
+  DEFAULT_PLANS_ROOT,
+  DEFAULT_REPORTS_ROOT,
+  DEFAULT_SCRATCH_ROOT,
+  DEFAULT_SKILLS_ROOT,
+  type DeepAgentBlueprint,
+  type SpecialistRole,
+  type VirtualFilesystemLayout,
+} from "./scaffold";

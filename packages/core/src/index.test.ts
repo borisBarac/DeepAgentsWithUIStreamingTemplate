@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import {
   configureLangSmithTracing,
+  createBasicAgent,
   createChatModel,
+  createDefaultInterrupts,
+  createDefaultPermissions,
+  createDefaultSubagents,
+  createSupervisorBlueprint,
   DEFAULT_DEEPSEEK_MODEL,
   DEFAULT_MODEL_ID,
   resolveModelIdentifier,
@@ -94,5 +99,101 @@ describe("configureLangSmithTracing", () => {
       endpoint: undefined,
     });
     expect(process.env.LANGSMITH_TRACING).toBeUndefined();
+  });
+});
+
+describe("scaffolding defaults", () => {
+  it("creates the default interrupt configuration for sensitive tools", () => {
+    expect(createDefaultInterrupts()).toEqual({
+      write_file: true,
+      edit_file: true,
+      execute: true,
+    });
+  });
+
+  it("locks the filesystem down to the scaffold roots by default", () => {
+    expect(createDefaultPermissions()).toEqual([
+      {
+        operations: ["read"],
+        paths: ["/"],
+      },
+      {
+        operations: ["read", "write"],
+        paths: [
+          "/scratch",
+          "/scratch/**",
+          "/plans",
+          "/plans/**",
+          "/reports",
+          "/reports/**",
+          "/artifacts",
+          "/artifacts/**",
+          "/memory",
+          "/memory/**",
+        ],
+      },
+      {
+        operations: ["read"],
+        paths: [
+          "/scratch",
+          "/scratch/**",
+          "/plans",
+          "/plans/**",
+          "/reports",
+          "/reports/**",
+          "/artifacts",
+          "/artifacts/**",
+          "/memory",
+          "/memory/**",
+          "/skills",
+          "/skills/**",
+        ],
+      },
+      {
+        operations: ["read", "write"],
+        paths: ["/**"],
+        mode: "deny",
+      },
+    ]);
+  });
+
+  it("provides specialist subagents for research, analysis, and critique", () => {
+    const subagents = createDefaultSubagents();
+
+    expect(subagents.map((subagent) => subagent.name)).toEqual(["researcher", "analyst", "critic"]);
+    expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], []]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], []]);
+  });
+
+  it("builds a supervisor blueprint with the recommended architecture", () => {
+    const blueprint = createSupervisorBlueprint();
+
+    expect(blueprint.architecture).toBe("supervisor-specialists");
+    expect(blueprint.memoryFilePaths).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
+    expect(blueprint.virtualFilesystem.reports).toBe("/reports");
+  });
+});
+
+describe("createBasicAgent", () => {
+  it("returns a scaffolded deep agent instance", () => {
+    const agent = createBasicAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+    });
+
+    expect(typeof agent.invoke).toBe("function");
+  });
+
+  it("loads the scaffold memory files by default", () => {
+    const agent = createBasicAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+    });
+
+    expect(agent.options.middleware?.map((middleware) => middleware.name)).toContain(
+      "MemoryMiddleware",
+    );
   });
 });
