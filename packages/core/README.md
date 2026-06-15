@@ -7,7 +7,8 @@ The default export path is intentionally a scaffold, not a finished product. It 
 ## What is scaffolded
 
 - A supervisor-first agent factory: `createScaffoldedAgent` and `createBasicAgent`
-- Three default specialist subagents: `researcher`, `analyst`, `critic`
+- Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `critic`
+- A mandatory clarification-first intake gate for new supervisor-path requests
 - A specialized tool store for building explicit role-based tool bundles
 - Safe-by-default interrupt rules for `write_file`, `edit_file`, and `execute`
 - A fixed persistent memory store mounted at `/memory`
@@ -60,6 +61,65 @@ const result = await agent.invoke({
 `createBasicAgent` is an alias for the scaffolded factory. For a thinner single-agent control variant, use `createBaselineAgent`.
 
 The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` and `skills` lists, and you should wire specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+
+## Clarification-first supervisor flow
+
+The scaffolded supervisor treats clarification as a required preflight phase. Every new top-level request is expected to route through the `clarifier` subagent before normal planning, tool use, or downstream delegation begins.
+
+The clarifier returns a structured readiness payload with:
+
+- `status`
+- `readyToProceed`
+- `questions`
+- `missingInformation`
+- `answeredInformation`
+- `reasoningSummary`
+- `roundCount`
+- `maxRounds`
+
+The default clarification policy is:
+
+- `enabled: true`
+- `mode: "mandatory-preflight"`
+- `maxRounds: 10`
+- `questionsPerRound: 3`
+
+If the request is still unresolved at the round cap, the clarification state becomes blocked instead of silently proceeding.
+
+Use the exported clarification helpers to manage intake state outside the prompt layer:
+
+```ts
+import {
+  applyClarificationResult,
+  createClarificationState,
+  resolveClarificationGate,
+} from "@deep-agent-template/core";
+
+const intake = createClarificationState("Plan the launch.");
+
+const gate = resolveClarificationGate({
+  isNewRequest: true,
+  request: intake.originalRequest,
+  state: intake,
+});
+```
+
+You can override or disable the default clarification behavior through the scaffolded factory and blueprint helpers:
+
+```ts
+const blueprint = createSupervisorBlueprint({
+  clarification: {
+    maxRounds: 6,
+    questionsPerRound: 2,
+  },
+});
+
+const agent = createBasicAgent({
+  clarificationOptions: {
+    enabled: false,
+  },
+});
+```
 
 ## Specialized tool store
 

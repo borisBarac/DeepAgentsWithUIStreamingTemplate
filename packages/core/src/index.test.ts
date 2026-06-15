@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import * as agent from "./agent";
+import * as clarification from "./clarification";
 import * as greeting from "./greeting";
 import * as index from "./index";
 import * as models from "./models";
@@ -32,18 +33,35 @@ describe("index barrel exports", () => {
     expect(index.configureLangSmithTracing).toBe(observability.configureLangSmithTracing);
   });
 
+  it("re-exports clarification helpers from the clarification module", () => {
+    expect(index.createClarificationConfig).toBe(clarification.createClarificationConfig);
+    expect(index.createClarificationState).toBe(clarification.createClarificationState);
+    expect(index.applyClarificationResult).toBe(clarification.applyClarificationResult);
+    expect(index.resolveClarificationGate).toBe(clarification.resolveClarificationGate);
+    expect(index.DEFAULT_CLARIFICATION_MAX_ROUNDS).toBe(
+      clarification.DEFAULT_CLARIFICATION_MAX_ROUNDS,
+    );
+    expect(index.DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND).toBe(
+      clarification.DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
+    );
+  });
+
   it("re-exports prompt constants from the prompts module", () => {
     expect(index.DEFAULT_ANALYST_SYSTEM_PROMPT).toBe(prompts.DEFAULT_ANALYST_SYSTEM_PROMPT);
     expect(index.DEFAULT_BASELINE_SYSTEM_PROMPT).toBe(prompts.DEFAULT_BASELINE_SYSTEM_PROMPT);
+    expect(index.DEFAULT_CLARIFIER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CLARIFIER_SYSTEM_PROMPT);
     expect(index.DEFAULT_CRITIC_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CRITIC_SYSTEM_PROMPT);
     expect(index.DEFAULT_RESEARCHER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_RESEARCHER_SYSTEM_PROMPT);
     expect(index.DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toBe(prompts.DEFAULT_SUPERVISOR_SYSTEM_PROMPT);
+    expect(index.createClarifierSystemPrompt).toBe(prompts.createClarifierSystemPrompt);
+    expect(index.createSupervisorSystemPrompt).toBe(prompts.createSupervisorSystemPrompt);
   });
 
   it("re-exports scaffold helpers from the scaffold module", () => {
     expect(index.createDefaultInterrupts).toBe(scaffold.createDefaultInterrupts);
     expect(index.createDefaultPermissions).toBe(scaffold.createDefaultPermissions);
     expect(index.createDefaultSubagents).toBe(scaffold.createDefaultSubagents);
+    expect(index.createSupervisorBlueprint).toBe(scaffold.createSupervisorBlueprint);
     expect(index.createVirtualFilesystemLayout).toBe(scaffold.createVirtualFilesystemLayout);
     expect(index.DEFAULT_ARTIFACTS_ROOT).toBe(scaffold.DEFAULT_ARTIFACTS_ROOT);
     expect(index.DEFAULT_MEMORY_FILE_PATHS).toBe(scaffold.DEFAULT_MEMORY_FILE_PATHS);

@@ -4,16 +4,18 @@ import { type CreateChatModelOptions, createChatModel } from "./models";
 import { configureLangSmithTracing, type LangSmithTracingOptions } from "./observability";
 import {
   DEFAULT_BASELINE_SYSTEM_PROMPT,
-  DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+  createSupervisorSystemPrompt,
   DEFAULT_SYSTEM_PROMPT,
 } from "./prompts";
 import {
+  type CreateSupervisorBlueprintOptions,
   type CreateCompositeBackendOptions,
   type CreateDefaultPermissionsOptions,
   type CreateDefaultSubagentsOptions,
   createDefaultCompositeBackend,
   createSupervisorBlueprint,
 } from "./scaffold";
+import type { ClarificationConfig } from "./clarification";
 
 export const DEFAULT_AGENT_NAME = "deep-agent-template";
 
@@ -51,6 +53,7 @@ export type CreateScaffoldedAgentOptions = Omit<
   permissionOptions?: CreateDefaultPermissionsOptions;
   subagents?: CreateDeepAgentParams["subagents"];
   subagentOverrides?: CreateDefaultSubagentsOptions;
+  clarificationOptions?: Partial<ClarificationConfig>;
 };
 
 export type CreateBasicAgentOptions = CreateScaffoldedAgentOptions;
@@ -81,19 +84,21 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     permissionOptions,
     subagents,
     subagentOverrides,
+    clarificationOptions,
     ...agentOptions
   } = options;
 
   const blueprint = createSupervisorBlueprint({
     ...subagentOverrides,
+    clarification: clarificationOptions,
     permissions: permissionOptions,
-  });
+  } satisfies CreateSupervisorBlueprintOptions);
 
   configureLangSmithTracing(langSmith);
 
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
-    systemPrompt: DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+    systemPrompt: createSupervisorSystemPrompt(blueprint.clarification.config),
     backend: backend ?? createDefaultCompositeBackend(backendOptions),
     interruptOn: interruptOn ?? blueprint.interruptOn,
     memory: memory ?? [...blueprint.memoryFilePaths],

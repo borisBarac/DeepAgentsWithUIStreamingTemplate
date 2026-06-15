@@ -43,6 +43,7 @@ export type SpecializedToolStore<TRole extends RoleId = RoleId> = {
 };
 
 const DEFAULT_SPECIALIST_ROLE_PURPOSES: Record<SpecialistRole, string> = {
+  clarifier: "Structured intake, requirement checks, and preflight readiness gating.",
   researcher: "Evidence gathering, retrieval, search, and source collection.",
   analyst: "Computation, extraction, transformation, and file-based analysis.",
   critic: "Grounding, citation checks, and policy or quality verification.",
@@ -142,6 +143,11 @@ function dedupeResolvedTools<TRole extends RoleId>(
 export function createDefaultSpecialistRoleToolsets(): readonly SpecializedRoleToolset<SpecialistRole>[] {
   return freezeRoleToolsets([
     {
+      role: "clarifier",
+      toolIds: [],
+      purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.clarifier,
+    },
+    {
       role: "researcher",
       toolIds: [],
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.researcher,
@@ -168,7 +174,9 @@ export function createSpecializedToolStore<TRole extends RoleId = RoleId>(
 
   const toolDefinitions = freezeToolDefinitions(options.tools);
   const roleToolsets = freezeRoleToolsets(options.roles);
-  const toolDefinitionsById = new Map(toolDefinitions.map((toolDefinition) => [toolDefinition.id, toolDefinition]));
+  const toolDefinitionsById = new Map(
+    toolDefinitions.map((toolDefinition) => [toolDefinition.id, toolDefinition]),
+  );
   const roleToolsetsByRole = new Map<RoleId, SpecializedRoleToolset<TRole>>(
     roleToolsets.map((roleToolset) => [roleToolset.role, roleToolset]),
   );

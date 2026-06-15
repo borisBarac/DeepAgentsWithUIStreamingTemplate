@@ -77,10 +77,9 @@ describe("specialized tool store", () => {
       ],
     });
 
-    expect(resolveSpecializedTools(store, "researcher").map((resolvedTool) => resolvedTool.name)).toEqual([
-      "search_sources",
-      "retrieve_document",
-    ]);
+    expect(
+      resolveSpecializedTools(store, "researcher").map((resolvedTool) => resolvedTool.name),
+    ).toEqual(["search_sources", "retrieve_document"]);
     expect(
       resolveSpecializedToolsForRoles(store, ["researcher", "critic"]).map(
         (resolvedTool) => resolvedTool.name,
@@ -151,10 +150,16 @@ describe("specialized tool store", () => {
     expect(store.roleHasRestrictedTools("researcher")).toBeFalse();
     expect(store.roleHasRestrictedTools("analyst")).toBeTrue();
     expect(store.roleHasRestrictedTools("critic")).toBeFalse();
+    expect(store.roleHasRestrictedTools("clarifier")).toBeFalse();
   });
 
   it("provides explicit default specialist role bundles", () => {
     expect(createDefaultSpecialistRoleToolsets()).toEqual([
+      {
+        role: "clarifier",
+        toolIds: [],
+        purpose: "Structured intake, requirement checks, and preflight readiness gating.",
+      },
       {
         role: "researcher",
         toolIds: [],

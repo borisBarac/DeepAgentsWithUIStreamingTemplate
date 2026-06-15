@@ -62,12 +62,17 @@ describe("scaffolding defaults", () => {
     ]);
   });
 
-  it("provides specialist subagents for research, analysis, and critique", () => {
+  it("provides specialist subagents for clarification, research, analysis, and critique", () => {
     const subagents = createDefaultSubagents();
 
-    expect(subagents.map((subagent) => subagent.name)).toEqual(["researcher", "analyst", "critic"]);
-    expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], []]);
+    expect(subagents.map((subagent) => subagent.name)).toEqual([
+      "clarifier",
+      "researcher",
+      "analyst",
+      "critic",
+    ]);
+    expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], [], []]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], [], []]);
   });
 
   it("builds a supervisor blueprint with the recommended architecture", () => {
@@ -76,5 +81,12 @@ describe("scaffolding defaults", () => {
     expect(blueprint.architecture).toBe("supervisor-specialists");
     expect(blueprint.memoryFilePaths).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
     expect(blueprint.virtualFilesystem.reports).toBe("/reports");
+    expect(blueprint.clarification.requiredSubagent).toBe("clarifier");
+    expect(blueprint.clarification.config).toEqual({
+      enabled: true,
+      maxRounds: 10,
+      questionsPerRound: 3,
+      mode: "mandatory-preflight",
+    });
   });
 });

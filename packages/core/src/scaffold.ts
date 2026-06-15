@@ -8,8 +8,10 @@ import {
   type SubAgent,
 } from "deepagents";
 
+import { type ClarificationConfig, createClarificationConfig } from "./clarification";
 import {
   DEFAULT_ANALYST_SYSTEM_PROMPT,
+  createClarifierSystemPrompt,
   DEFAULT_CRITIC_SYSTEM_PROMPT,
   DEFAULT_RESEARCHER_SYSTEM_PROMPT,
 } from "./prompts";
@@ -26,7 +28,7 @@ export const DEFAULT_MEMORY_FILE_PATHS = [
   `${DEFAULT_MEMORY_ROOT}/user-preferences.md`,
 ] as const;
 
-export type SpecialistRole = "researcher" | "analyst" | "critic";
+export type SpecialistRole = "researcher" | "analyst" | "critic" | "clarifier";
 
 export type VirtualFilesystemLayout = {
   scratch: string;
@@ -54,6 +56,7 @@ export type CreateDefaultSubagentsOptions = {
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
   critic?: Partial<SubAgent>;
+  clarifier?: Partial<SubAgent>;
 };
 
 export type DeepAgentBlueprint = {
@@ -63,6 +66,10 @@ export type DeepAgentBlueprint = {
   interruptOn: NonNullable<CreateDeepAgentParams["interruptOn"]>;
   permissions: FilesystemPermission[];
   subagents: SubAgent[];
+  clarification: {
+    config: ClarificationConfig;
+    requiredSubagent: "clarifier";
+  };
 };
 
 const DEFAULT_WRITABLE_ROOTS = [
@@ -154,8 +161,25 @@ export function createDefaultPermissions(
   return permissions;
 }
 
-export function createDefaultSubagents(options: CreateDefaultSubagentsOptions = {}): SubAgent[] {
+export function createDefaultSubagents(
+  options: CreateDefaultSubagentsOptions = {},
+  clarificationOptions: Partial<ClarificationConfig> = {},
+): SubAgent[] {
   const sharedInterrupts = createDefaultInterrupts();
+  const clarification = createClarificationConfig(clarificationOptions);
+
+  const clarifier = mergeSubagent(
+    {
+      name: "clarifier",
+      description:
+        "Gate new requests, ask only the missing high-value questions, and return structured readiness decisions.",
+      systemPrompt: createClarifierSystemPrompt(clarification),
+      interruptOn: sharedInterrupts,
+      tools: [],
+      skills: [],
+    },
+    options.clarifier,
+  );
 
   const researcher = mergeSubagent(
     {
@@ -195,7 +219,7 @@ export function createDefaultSubagents(options: CreateDefaultSubagentsOptions = 
     options.critic,
   );
 
-  return [researcher, analyst, critic];
+  return [clarifier, researcher, analyst, critic];
 }
 
 export function createVirtualFilesystemLayout(): VirtualFilesystemLayout {
@@ -224,18 +248,27 @@ export function createDefaultCompositeBackend(
   });
 }
 
+export type CreateSupervisorBlueprintOptions = CreateDefaultSubagentsOptions & {
+  clarification?: Partial<ClarificationConfig>;
+  permissions?: CreateDefaultPermissionsOptions;
+  memoryFilePaths?: readonly string[];
+};
+
 export function createSupervisorBlueprint(
-  options: CreateDefaultSubagentsOptions & {
-    permissions?: CreateDefaultPermissionsOptions;
-    memoryFilePaths?: readonly string[];
-  } = {},
+  options: CreateSupervisorBlueprintOptions = {},
 ): DeepAgentBlueprint {
+  const clarification = createClarificationConfig(options.clarification);
+
   return {
     architecture: "supervisor-specialists",
     virtualFilesystem: createVirtualFilesystemLayout(),
     memoryFilePaths: options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS,
     interruptOn: createDefaultInterrupts(),
     permissions: createDefaultPermissions(options.permissions),
-    subagents: createDefaultSubagents(options),
+    subagents: createDefaultSubagents(options, clarification),
+    clarification: {
+      config: clarification,
+      requiredSubagent: "clarifier",
+    },
   };
 }
