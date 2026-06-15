@@ -54,3 +54,18 @@ export {
   type SpecialistRole,
   type VirtualFilesystemLayout,
 } from "./scaffold";
+export {
+  createDefaultSpecialistRoleToolsets,
+  createSpecializedToolStore,
+  resolveSpecializedTools,
+  resolveSpecializedToolsForRoles,
+  type CreateSpecializedToolStoreOptions,
+  type RoleId,
+  type SpecializedAgentTool,
+  type SpecializedRoleToolset,
+  type SpecializedToolDefinition,
+  type SpecializedToolEvidenceMode,
+  type SpecializedToolRiskLevel,
+  type SpecializedToolStore,
+  type ToolId,
+} from "./tools";

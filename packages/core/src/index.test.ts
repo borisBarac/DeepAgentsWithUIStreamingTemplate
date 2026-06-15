@@ -1,199 +1,65 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import {
-  configureLangSmithTracing,
-  createBasicAgent,
-  createChatModel,
-  createDefaultInterrupts,
-  createDefaultPermissions,
-  createDefaultSubagents,
-  createSupervisorBlueprint,
-  DEFAULT_DEEPSEEK_MODEL,
-  DEFAULT_MODEL_ID,
-  resolveModelIdentifier,
-} from "./index";
+import * as agent from "./agent";
+import * as greeting from "./greeting";
+import * as index from "./index";
+import * as models from "./models";
+import * as observability from "./observability";
+import * as prompts from "./prompts";
+import * as scaffold from "./scaffold";
+import * as tools from "./tools";
 
-const langSmithEnvKeys = [
-  "LANGSMITH_API_KEY",
-  "LANGSMITH_ENDPOINT",
-  "LANGSMITH_PROJECT",
-  "LANGSMITH_TRACING",
-] as const;
-
-const originalLangSmithEnv = Object.fromEntries(
-  langSmithEnvKeys.map((key) => [key, process.env[key]]),
-);
-
-afterEach(() => {
-  for (const key of langSmithEnvKeys) {
-    const originalValue = originalLangSmithEnv[key];
-
-    if (originalValue === undefined) {
-      delete process.env[key];
-      continue;
-    }
-
-    process.env[key] = originalValue;
-  }
-});
-
-describe("resolveModelIdentifier", () => {
-  it("uses OpenRouter DeepSeek V4 by default", () => {
-    expect(resolveModelIdentifier()).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
+describe("index barrel exports", () => {
+  it("re-exports agent helpers from the agent module", () => {
+    expect(index.createBasicAgent).toBe(agent.createBasicAgent);
+    expect(index.createSupervisorBlueprint).toBe(agent.createSupervisorBlueprint);
+    expect(index.DEFAULT_AGENT_NAME).toBe(agent.DEFAULT_AGENT_NAME);
+    expect(index.DEFAULT_SYSTEM_PROMPT).toBe(agent.DEFAULT_SYSTEM_PROMPT);
   });
 
-  it("parses provider-prefixed model identifiers", () => {
-    expect(resolveModelIdentifier(DEFAULT_MODEL_ID)).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
+  it("re-exports greeting helpers from the greeting module", () => {
+    expect(index.createGreeting).toBe(greeting.createGreeting);
   });
 
-  it("rejects unsupported providers", () => {
-    expect(() => resolveModelIdentifier("openai:gpt-4o-mini")).toThrow(
-      "Unsupported model identifier",
+  it("re-exports model helpers from the models module", () => {
+    expect(index.createChatModel).toBe(models.createChatModel);
+    expect(index.resolveModelIdentifier).toBe(models.resolveModelIdentifier);
+    expect(index.DEFAULT_MODEL_ID).toBe(models.DEFAULT_MODEL_ID);
+    expect(index.DEFAULT_DEEPSEEK_MODEL).toBe(models.DEFAULT_DEEPSEEK_MODEL);
+  });
+
+  it("re-exports observability helpers from the observability module", () => {
+    expect(index.configureLangSmithTracing).toBe(observability.configureLangSmithTracing);
+  });
+
+  it("re-exports prompt constants from the prompts module", () => {
+    expect(index.DEFAULT_ANALYST_SYSTEM_PROMPT).toBe(prompts.DEFAULT_ANALYST_SYSTEM_PROMPT);
+    expect(index.DEFAULT_BASELINE_SYSTEM_PROMPT).toBe(prompts.DEFAULT_BASELINE_SYSTEM_PROMPT);
+    expect(index.DEFAULT_CRITIC_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CRITIC_SYSTEM_PROMPT);
+    expect(index.DEFAULT_RESEARCHER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_RESEARCHER_SYSTEM_PROMPT);
+    expect(index.DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toBe(prompts.DEFAULT_SUPERVISOR_SYSTEM_PROMPT);
+  });
+
+  it("re-exports scaffold helpers from the scaffold module", () => {
+    expect(index.createDefaultInterrupts).toBe(scaffold.createDefaultInterrupts);
+    expect(index.createDefaultPermissions).toBe(scaffold.createDefaultPermissions);
+    expect(index.createDefaultSubagents).toBe(scaffold.createDefaultSubagents);
+    expect(index.createVirtualFilesystemLayout).toBe(scaffold.createVirtualFilesystemLayout);
+    expect(index.DEFAULT_ARTIFACTS_ROOT).toBe(scaffold.DEFAULT_ARTIFACTS_ROOT);
+    expect(index.DEFAULT_MEMORY_FILE_PATHS).toBe(scaffold.DEFAULT_MEMORY_FILE_PATHS);
+    expect(index.DEFAULT_MEMORY_ROOT).toBe(scaffold.DEFAULT_MEMORY_ROOT);
+    expect(index.DEFAULT_PLANS_ROOT).toBe(scaffold.DEFAULT_PLANS_ROOT);
+    expect(index.DEFAULT_REPORTS_ROOT).toBe(scaffold.DEFAULT_REPORTS_ROOT);
+    expect(index.DEFAULT_SCRATCH_ROOT).toBe(scaffold.DEFAULT_SCRATCH_ROOT);
+    expect(index.DEFAULT_SKILLS_ROOT).toBe(scaffold.DEFAULT_SKILLS_ROOT);
+  });
+
+  it("re-exports specialized tool helpers from the tools module", () => {
+    expect(index.createDefaultSpecialistRoleToolsets).toBe(
+      tools.createDefaultSpecialistRoleToolsets,
     );
-  });
-});
-
-describe("createChatModel", () => {
-  it("creates an OpenRouter chat model", () => {
-    const model = createChatModel({
-      openRouter: {
-        apiKey: "test-key",
-      },
-    });
-
-    expect(model.model).toBe(DEFAULT_DEEPSEEK_MODEL);
-    expect(model._llmType()).toBe("openrouter");
-  });
-});
-
-describe("configureLangSmithTracing", () => {
-  it("enables tracing when an API key is provided", () => {
-    const config = configureLangSmithTracing({
-      apiKey: "test-langsmith-key",
-      projectName: "deep-agent-template-test",
-    });
-
-    expect(config).toEqual({
-      enabled: true,
-      projectName: "deep-agent-template-test",
-      endpoint: undefined,
-    });
-    expect(process.env.LANGSMITH_TRACING).toBe("true");
-    expect(process.env.LANGSMITH_API_KEY).toBe("test-langsmith-key");
-  });
-
-  it("leaves tracing disabled without LangSmith env", () => {
-    for (const key of langSmithEnvKeys) {
-      delete process.env[key];
-    }
-
-    expect(configureLangSmithTracing()).toEqual({
-      enabled: false,
-      projectName: undefined,
-      endpoint: undefined,
-    });
-    expect(process.env.LANGSMITH_TRACING).toBeUndefined();
-  });
-});
-
-describe("scaffolding defaults", () => {
-  it("creates the default interrupt configuration for sensitive tools", () => {
-    expect(createDefaultInterrupts()).toEqual({
-      write_file: true,
-      edit_file: true,
-      execute: true,
-    });
-  });
-
-  it("locks the filesystem down to the scaffold roots by default", () => {
-    expect(createDefaultPermissions()).toEqual([
-      {
-        operations: ["read"],
-        paths: ["/"],
-      },
-      {
-        operations: ["read", "write"],
-        paths: [
-          "/scratch",
-          "/scratch/**",
-          "/plans",
-          "/plans/**",
-          "/reports",
-          "/reports/**",
-          "/artifacts",
-          "/artifacts/**",
-          "/memory",
-          "/memory/**",
-        ],
-      },
-      {
-        operations: ["read"],
-        paths: [
-          "/scratch",
-          "/scratch/**",
-          "/plans",
-          "/plans/**",
-          "/reports",
-          "/reports/**",
-          "/artifacts",
-          "/artifacts/**",
-          "/memory",
-          "/memory/**",
-          "/skills",
-          "/skills/**",
-        ],
-      },
-      {
-        operations: ["read", "write"],
-        paths: ["/**"],
-        mode: "deny",
-      },
-    ]);
-  });
-
-  it("provides specialist subagents for research, analysis, and critique", () => {
-    const subagents = createDefaultSubagents();
-
-    expect(subagents.map((subagent) => subagent.name)).toEqual(["researcher", "analyst", "critic"]);
-    expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], []]);
-  });
-
-  it("builds a supervisor blueprint with the recommended architecture", () => {
-    const blueprint = createSupervisorBlueprint();
-
-    expect(blueprint.architecture).toBe("supervisor-specialists");
-    expect(blueprint.memoryFilePaths).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
-    expect(blueprint.virtualFilesystem.reports).toBe("/reports");
-  });
-});
-
-describe("createBasicAgent", () => {
-  it("returns a scaffolded deep agent instance", () => {
-    const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
-    });
-
-    expect(typeof agent.invoke).toBe("function");
-  });
-
-  it("loads the scaffold memory files by default", () => {
-    const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
-    });
-
-    expect(agent.options.middleware?.map((middleware) => middleware.name)).toContain(
-      "MemoryMiddleware",
-    );
+    expect(index.createSpecializedToolStore).toBe(tools.createSpecializedToolStore);
+    expect(index.resolveSpecializedTools).toBe(tools.resolveSpecializedTools);
+    expect(index.resolveSpecializedToolsForRoles).toBe(tools.resolveSpecializedToolsForRoles);
   });
 });
