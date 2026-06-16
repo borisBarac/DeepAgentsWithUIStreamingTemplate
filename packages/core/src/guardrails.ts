@@ -3,7 +3,6 @@ import { AIMessage, createMiddleware } from "langchain";
 import OpenAI from "openai";
 import { z } from "zod";
 
-import safetyPolicyText from "../guardrails/safety.md" with { type: "text" };
 import allowedTasksText from "../guardrails/taskScope.allowedTasks.md" with { type: "text" };
 import disallowedTasksText from "../guardrails/taskScope.disallowedTasks.md" with { type: "text" };
 import requiredContextText from "../guardrails/taskScope.requiredContext.md" with { type: "text" };
@@ -16,25 +15,19 @@ export const DEFAULT_GUARDRAIL_REFUSAL =
 
 export type DeepAgentMiddleware = NonNullable<CreateDeepAgentParams["middleware"]>[number];
 
-export type GuardrailPolicyBundle = {
-  safety: string;
+export type TaskScopePolicyBundle = {
   requiredContext: string;
   allowedTasks: string;
   disallowedTasks: string;
 };
 
 export interface GuardrailPolicyLoader {
-  getSafetyPolicy(): string;
   getRequiredContextPolicy(): string;
   getAllowedTasksPolicy(): string;
   getDisallowedTasksPolicy(): string;
 }
 
 export class MarkdownGuardrailPolicyLoader implements GuardrailPolicyLoader {
-  getSafetyPolicy(): string {
-    return safetyPolicyText;
-  }
-
   getRequiredContextPolicy(): string {
     return requiredContextText;
   }
@@ -77,7 +70,7 @@ export type CreateSafetyGuardrailOptions = {
 export type CreateTaskScopeGuardrailOptions = {
   classifier?: TaskScopeClassifier;
   model?: StructuredTaskScopeModel;
-  policies?: Partial<Omit<GuardrailPolicyBundle, "safety">>;
+  policies?: Partial<TaskScopePolicyBundle>;
   refusalMessage?: string;
 };
 
@@ -161,7 +154,7 @@ function refusal(reason: string): AIMessage {
 }
 
 export const contentSafetyGuardrail = (
-  openai: OpenAIContentSafetyClient = new OpenAI(),
+  openai?: OpenAIContentSafetyClient,
   options: Pick<CreateSafetyGuardrailOptions, "model"> = {},
 ): DeepAgentMiddleware =>
   createMiddleware({
@@ -174,7 +167,7 @@ export const contentSafetyGuardrail = (
           return;
         }
 
-        const moderation = await openai.moderations.create({
+        const moderation = await (openai ?? new OpenAI()).moderations.create({
           model: options.model ?? DEFAULT_OPENAI_MODERATION_MODEL,
           input,
         });
@@ -196,46 +189,12 @@ export const contentSafetyGuardrail = (
 export function createSafetyGuardrail(
   options: CreateSafetyGuardrailOptions = {},
 ): DeepAgentMiddleware {
-  if (options.openai) {
-    return contentSafetyGuardrail(options.openai, {
-      model: options.model,
-    });
-  }
-
-  return createMiddleware({
-    name: DEFAULT_SAFETY_GUARDRAIL_NAME,
-    beforeAgent: {
-      hook: async (state: AgentStateLike) => {
-        const input = getLatestHumanMessageText(state);
-
-        if (!input) {
-          return;
-        }
-
-        const moderation = await new OpenAI().moderations.create({
-          model: options.model ?? DEFAULT_OPENAI_MODERATION_MODEL,
-          input,
-        });
-
-        const result = moderation.results[0];
-        if (result?.flagged) {
-          return {
-            messages: [refusal("unsafe content")],
-            jumpTo: "end",
-          };
-        }
-
-        return;
-      },
-      canJumpTo: ["end"],
-    },
+  return contentSafetyGuardrail(options.openai, {
+    model: options.model,
   });
 }
 
-function createTaskScopePrompt(
-  request: string,
-  policies: Omit<GuardrailPolicyBundle, "safety">,
-): string {
+function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle): string {
   return [
     "Classify whether the user request is inside the agent's task scope.",
     "Use required context to decide whether the request needs clarification, but do not mark it out of scope solely because context is missing.",

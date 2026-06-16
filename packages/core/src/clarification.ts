@@ -98,8 +98,6 @@ export const clarificationResultSchema = z.object({
   maxRounds: z.number().int(),
 });
 
-export type ClarificationResultInferred = z.infer<typeof clarificationResultSchema>;
-
 const DEFAULT_CLARIFICATION_CONFIG_VALUE: ClarificationConfig = Object.freeze({
   enabled: true,
   maxRounds: DEFAULT_CLARIFICATION_MAX_ROUNDS,

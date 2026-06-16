@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 
-import { createGreeting } from "@deep-agent-template/core";
-
 export type CliResult = {
   exitCode: number;
   output: string;
@@ -15,6 +13,10 @@ Usage:
   deep-agent-template [name]
   deep-agent-template --help
   deep-agent-template --version`;
+
+function createGreeting(name: string | undefined): string {
+  return `Hello, ${name?.trim() || "world"}!`;
+}
 
 export function runCli(args: string[]): CliResult {
   if (args.includes("--help") || args.includes("-h")) {
@@ -35,7 +37,7 @@ export function runCli(args: string[]): CliResult {
 
   return {
     exitCode: 0,
-    output: createGreeting({ name }),
+    output: createGreeting(name),
   };
 }
 

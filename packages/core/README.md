@@ -110,7 +110,7 @@ Task-scope policy is controlled by markdown files under `packages/core/guardrail
 - `taskScope.allowedTasks.md`
 - `taskScope.disallowedTasks.md`
 
-The safety policy reference lives in `packages/core/guardrails/safety.md`. The default runtime safety decision uses OpenAI moderation; provide `OPENAI_API_KEY` for live invocations.
+The default runtime safety decision uses OpenAI moderation; provide `OPENAI_API_KEY` for live invocations.
 
 Disable the default guardrails when building a custom runtime:
 

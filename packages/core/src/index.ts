@@ -39,7 +39,6 @@ export {
   resolveClarificationGate,
   selectUserFacingQuestions,
 } from "./clarification";
-export { type CreateGreetingOptions, createGreeting } from "./greeting";
 export {
   type CreateDefaultGuardrailsOptions,
   type CreateSafetyGuardrailOptions,
@@ -54,13 +53,13 @@ export {
   DEFAULT_SAFETY_GUARDRAIL_NAME,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
   type DeepAgentMiddleware,
-  type GuardrailPolicyBundle,
   type GuardrailPolicyLoader,
   MarkdownGuardrailPolicyLoader,
   type OpenAIContentSafetyClient,
   type StructuredTaskScopeModel,
   type TaskScopeClassifier,
   type TaskScopeDecision,
+  type TaskScopePolicyBundle,
   taskScopeDecisionSchema,
 } from "./guardrails";
 export {

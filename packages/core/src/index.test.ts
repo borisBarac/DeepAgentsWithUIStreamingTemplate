@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 
 import * as agent from "./agent";
 import * as clarification from "./clarification";
-import * as greeting from "./greeting";
 import * as index from "./index";
 import * as models from "./models";
 import * as observability from "./observability";
@@ -17,10 +16,6 @@ describe("index barrel exports", () => {
     expect(index.createSupervisorBlueprint).toBe(agent.createSupervisorBlueprint);
     expect(index.DEFAULT_AGENT_NAME).toBe(agent.DEFAULT_AGENT_NAME);
     expect(index.DEFAULT_SYSTEM_PROMPT).toBe(agent.DEFAULT_SYSTEM_PROMPT);
-  });
-
-  it("re-exports greeting helpers from the greeting module", () => {
-    expect(index.createGreeting).toBe(greeting.createGreeting);
   });
 
   it("re-exports model helpers from the models module", () => {

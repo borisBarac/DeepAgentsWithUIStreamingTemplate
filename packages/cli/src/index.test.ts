@@ -17,7 +17,7 @@ describe("runCli", () => {
     });
   });
 
-  it("runs the default command with core behavior", () => {
+  it("runs the default greeting command", () => {
     expect(runCli(["CLI"])).toEqual({
       exitCode: 0,
       output: "Hello, CLI!",

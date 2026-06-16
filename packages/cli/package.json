@@ -6,9 +6,6 @@
   "bin": {
     "deep-agent-template": "./src/index.ts"
   },
-  "dependencies": {
-    "@deep-agent-template/core": "workspace:*"
-  },
   "exports": {
     ".": "./src/index.ts"
   },

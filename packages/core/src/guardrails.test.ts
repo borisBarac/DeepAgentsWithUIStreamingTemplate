@@ -44,10 +44,9 @@ function createFakeOpenAI(flagged: boolean): OpenAIContentSafetyClient {
 }
 
 describe("guardrail policies", () => {
-  it("loads safety and task-scope policy from markdown", () => {
+  it("loads task-scope policy from markdown", () => {
     const loader = new MarkdownGuardrailPolicyLoader();
 
-    expect(loader.getSafetyPolicy()).toContain("Safety Policy");
     expect(loader.getRequiredContextPolicy()).toContain("Required Context");
     expect(loader.getAllowedTasksPolicy()).toContain("Allowed Tasks");
     expect(loader.getDisallowedTasksPolicy()).toContain("Disallowed Tasks");
