@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const DEFAULT_CLARIFICATION_MAX_ROUNDS = 10 as const;
 export const DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND = 3 as const;
 export const DEFAULT_CLARIFICATION_MODE = "mandatory-preflight" as const;
@@ -67,6 +69,36 @@ export type ClarificationGateDecision = {
   state: ClarificationState | null;
   config: ClarificationConfig;
 };
+
+export const clarificationStatusSchema = z.enum([
+  "needs_clarification",
+  "ready_to_proceed",
+  "blocked",
+]);
+
+export const clarificationQuestionSchema = z.object({
+  id: z.string(),
+  question: z.string(),
+  context: z.string().optional(),
+});
+
+export const clarificationAnsweredInformationSchema = z.object({
+  key: z.string(),
+  value: z.string(),
+});
+
+export const clarificationResultSchema = z.object({
+  status: clarificationStatusSchema,
+  readyToProceed: z.boolean(),
+  questions: z.array(clarificationQuestionSchema),
+  missingInformation: z.array(z.string()),
+  answeredInformation: z.array(clarificationAnsweredInformationSchema),
+  reasoningSummary: z.string(),
+  roundCount: z.number().int(),
+  maxRounds: z.number().int(),
+});
+
+export type ClarificationResultInferred = z.infer<typeof clarificationResultSchema>;
 
 const DEFAULT_CLARIFICATION_CONFIG_VALUE: ClarificationConfig = Object.freeze({
   enabled: true,
@@ -246,6 +278,12 @@ export function applyClarificationResult(
     roundCount: result.roundCount,
     maxRounds: result.maxRounds,
   };
+}
+
+export function selectUserFacingQuestions(result: ClarificationResult): readonly string[] {
+  return result.status === "needs_clarification"
+    ? result.questions.map((question) => question.question)
+    : [];
 }
 
 export function resolveClarificationGate(

@@ -8,13 +8,12 @@ import {
   type SubAgent,
 } from "deepagents";
 
-import { type ClarificationConfig, createClarificationConfig } from "./clarification";
 import {
-  createClarifierSystemPrompt,
-  DEFAULT_ANALYST_SYSTEM_PROMPT,
-  DEFAULT_CRITIC_SYSTEM_PROMPT,
-  DEFAULT_RESEARCHER_SYSTEM_PROMPT,
-} from "./prompts";
+  type ClarificationConfig,
+  clarificationResultSchema,
+  createClarificationConfig,
+} from "./clarification";
+import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "./prompts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "./skills";
 
 export const DEFAULT_SCRATCH_ROOT = "/scratch";
@@ -165,6 +164,7 @@ export function createDefaultPermissions(
 export function createDefaultSubagents(
   options: CreateDefaultSubagentsOptions = {},
   clarificationOptions: Partial<ClarificationConfig> = {},
+  promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
 ): SubAgent[] {
   const sharedInterrupts = createDefaultInterrupts();
   const clarification = createClarificationConfig(clarificationOptions);
@@ -174,7 +174,8 @@ export function createDefaultSubagents(
       name: "clarifier",
       description:
         "Gate new requests, ask only the missing high-value questions, and return structured readiness decisions.",
-      systemPrompt: createClarifierSystemPrompt(clarification),
+      systemPrompt: promptLoader.getClarifierPrompt(clarification),
+      responseFormat: clarificationResultSchema,
       interruptOn: sharedInterrupts,
       tools: [],
       skills: [CLARIFY_DEEPLY_SKILL_DIR],
@@ -186,7 +187,7 @@ export function createDefaultSubagents(
     {
       name: "researcher",
       description: "Gather evidence, collect source-backed notes, and isolate research context.",
-      systemPrompt: DEFAULT_RESEARCHER_SYSTEM_PROMPT,
+      systemPrompt: promptLoader.getResearcherPrompt(),
       interruptOn: sharedInterrupts,
       tools: [],
       skills: [],
@@ -199,7 +200,7 @@ export function createDefaultSubagents(
       name: "analyst",
       description:
         "Turn findings into structured tradeoffs, plans, and implementation-ready analysis.",
-      systemPrompt: DEFAULT_ANALYST_SYSTEM_PROMPT,
+      systemPrompt: promptLoader.getAnalystPrompt(),
       interruptOn: sharedInterrupts,
       tools: [],
       skills: [],
@@ -212,7 +213,7 @@ export function createDefaultSubagents(
       name: "critic",
       description:
         "Challenge weak reasoning, missing evidence, and risky actions before final output.",
-      systemPrompt: DEFAULT_CRITIC_SYSTEM_PROMPT,
+      systemPrompt: promptLoader.getCriticPrompt(),
       interruptOn: sharedInterrupts,
       tools: [],
       skills: [],
@@ -253,6 +254,7 @@ export type CreateSupervisorBlueprintOptions = CreateDefaultSubagentsOptions & {
   clarification?: Partial<ClarificationConfig>;
   permissions?: CreateDefaultPermissionsOptions;
   memoryFilePaths?: readonly string[];
+  promptLoader?: PromptLoader;
 };
 
 export function createSupervisorBlueprint(
@@ -266,7 +268,7 @@ export function createSupervisorBlueprint(
     memoryFilePaths: options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS,
     interruptOn: createDefaultInterrupts(),
     permissions: createDefaultPermissions(options.permissions),
-    subagents: createDefaultSubagents(options, clarification),
+    subagents: createDefaultSubagents(options, clarification, options.promptLoader),
     clarification: {
       config: clarification,
       requiredSubagent: "clarifier",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import { type SpecialistRole } from "./scaffold";
+import type { SpecialistRole } from "./scaffold";
 import {
   createDefaultSpecialistRoleToolsets,
   createSpecializedToolStore,

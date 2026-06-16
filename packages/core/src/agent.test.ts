@@ -1,6 +1,20 @@
 import { describe, expect, it } from "bun:test";
 
-import { createBasicAgent } from "./agent";
+import { createBaselineAgent, createBasicAgent } from "./agent";
+import type { PromptLoader } from "./prompts";
+
+const testPromptLoader: PromptLoader = {
+  getBaselinePrompt: () => "custom baseline prompt",
+  getSupervisorPrompt: () => "custom supervisor prompt",
+  getClarifierPrompt: () => "custom clarifier prompt",
+  getResearcherPrompt: () => "custom researcher prompt",
+  getAnalystPrompt: () => "custom analyst prompt",
+  getCriticPrompt: () => "custom critic prompt",
+};
+
+function expectSystemPromptToContain(systemPrompt: unknown, text: string): void {
+  expect(JSON.stringify(systemPrompt)).toContain(text);
+}
 
 describe("createBasicAgent", () => {
   it("returns a scaffolded deep agent instance", () => {
@@ -23,5 +37,41 @@ describe("createBasicAgent", () => {
     expect(agent.options.middleware?.map((middleware) => middleware.name)).toContain(
       "MemoryMiddleware",
     );
+  });
+
+  it("uses a custom prompt loader for the scaffolded supervisor", () => {
+    const agent = createBasicAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+      promptLoader: testPromptLoader,
+    });
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "custom supervisor prompt");
+  });
+
+  it("lets an explicit scaffolded system prompt win over the prompt loader", () => {
+    const agent = createBasicAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+      promptLoader: testPromptLoader,
+      systemPrompt: "explicit supervisor prompt",
+    });
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "explicit supervisor prompt");
+  });
+});
+
+describe("createBaselineAgent", () => {
+  it("uses a custom prompt loader for the baseline prompt", () => {
+    const agent = createBaselineAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+      promptLoader: testPromptLoader,
+    });
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
   });
 });

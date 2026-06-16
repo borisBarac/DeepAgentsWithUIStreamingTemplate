@@ -1,13 +1,15 @@
 import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 
 import type { ClarificationConfig } from "./clarification";
+import {
+  type CreateDefaultGuardrailsOptions,
+  createDefaultGuardrails,
+  type DeepAgentMiddleware,
+  type StructuredTaskScopeModel,
+} from "./guardrails";
 import { type CreateChatModelOptions, createChatModel } from "./models";
 import { configureLangSmithTracing, type LangSmithTracingOptions } from "./observability";
-import {
-  createSupervisorSystemPrompt,
-  DEFAULT_BASELINE_SYSTEM_PROMPT,
-  DEFAULT_SYSTEM_PROMPT,
-} from "./prompts";
+import { DEFAULT_PROMPT_LOADER, DEFAULT_SYSTEM_PROMPT, type PromptLoader } from "./prompts";
 import {
   type CreateCompositeBackendOptions,
   type CreateDefaultPermissionsOptions,
@@ -37,7 +39,9 @@ type DeepAgentScaffoldOptions = Pick<
 
 export type CreateBaselineAgentOptions = DeepAgentScaffoldOptions &
   CreateChatModelOptions & {
+    guardrails?: false | CreateDefaultGuardrailsOptions;
     name?: string;
+    promptLoader?: PromptLoader;
     systemPrompt?: string;
     langSmith?: LangSmithTracingOptions;
   };
@@ -59,15 +63,26 @@ export type CreateScaffoldedAgentOptions = Omit<
 export type CreateBasicAgentOptions = CreateScaffoldedAgentOptions;
 
 export function createBaselineAgent(options: CreateBaselineAgentOptions = {}): DeepAgent {
-  const { langSmith, model, openRouter, ...agentOptions } = options;
+  const {
+    guardrails,
+    langSmith,
+    middleware,
+    model,
+    openRouter,
+    promptLoader = DEFAULT_PROMPT_LOADER,
+    systemPrompt,
+    ...agentOptions
+  } = options;
 
   configureLangSmithTracing(langSmith);
+  const chatModel = createChatModel({ model, openRouter });
 
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
-    systemPrompt: DEFAULT_BASELINE_SYSTEM_PROMPT,
+    systemPrompt: systemPrompt ?? promptLoader.getBaselinePrompt(),
     ...agentOptions,
-    model: createChatModel({ model, openRouter }),
+    middleware: composeGuardrailMiddleware(guardrails, chatModel, middleware),
+    model: chatModel,
   });
 }
 
@@ -75,15 +90,19 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
   const {
     backend,
     backendOptions,
+    guardrails,
     interruptOn,
     langSmith,
     memory,
+    middleware,
     model,
     openRouter,
     permissions,
     permissionOptions,
+    promptLoader = DEFAULT_PROMPT_LOADER,
     subagents,
     subagentOverrides,
+    systemPrompt,
     clarificationOptions,
     ...agentOptions
   } = options;
@@ -92,20 +111,23 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     ...subagentOverrides,
     clarification: clarificationOptions,
     permissions: permissionOptions,
+    promptLoader,
   } satisfies CreateSupervisorBlueprintOptions);
 
   configureLangSmithTracing(langSmith);
+  const chatModel = createChatModel({ model, openRouter });
 
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
-    systemPrompt: createSupervisorSystemPrompt(blueprint.clarification.config),
+    systemPrompt: systemPrompt ?? promptLoader.getSupervisorPrompt(blueprint.clarification.config),
     backend: backend ?? createDefaultCompositeBackend(backendOptions),
     interruptOn: interruptOn ?? blueprint.interruptOn,
     memory: memory ?? [...blueprint.memoryFilePaths],
     permissions: permissions ?? blueprint.permissions,
     subagents: subagents ?? blueprint.subagents,
     ...agentOptions,
-    model: createChatModel({ model, openRouter }),
+    middleware: composeGuardrailMiddleware(guardrails, chatModel, middleware),
+    model: chatModel,
   });
 }
 
@@ -114,3 +136,14 @@ export function createBasicAgent(options: CreateScaffoldedAgentOptions = {}): De
 }
 
 export { createSupervisorBlueprint, DEFAULT_SYSTEM_PROMPT };
+
+function composeGuardrailMiddleware(
+  guardrails: false | CreateDefaultGuardrailsOptions | undefined,
+  taskScopeModel: StructuredTaskScopeModel,
+  middleware: CreateDeepAgentParams["middleware"],
+): DeepAgentMiddleware[] {
+  const defaultGuardrails =
+    guardrails === false ? [] : createDefaultGuardrails({ ...guardrails, taskScopeModel });
+
+  return [...defaultGuardrails, ...(middleware ?? [])];
+}

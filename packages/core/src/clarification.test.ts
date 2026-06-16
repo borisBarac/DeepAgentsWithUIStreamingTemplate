@@ -3,11 +3,13 @@ import { describe, expect, it } from "bun:test";
 import {
   applyClarificationResult,
   archiveClarificationState,
+  clarificationResultSchema,
   clearClarificationState,
   createClarificationConfig,
   createClarificationState,
   recordClarificationAnswers,
   resolveClarificationGate,
+  selectUserFacingQuestions,
 } from "./clarification";
 
 describe("clarification defaults", () => {
@@ -18,6 +20,127 @@ describe("clarification defaults", () => {
       questionsPerRound: 3,
       mode: "mandatory-preflight",
     });
+  });
+});
+
+describe("clarification result schema", () => {
+  const validResult = {
+    status: "needs_clarification",
+    readyToProceed: false,
+    questions: [{ id: "platform", question: "Which platform should this ship on first?" }],
+    missingInformation: ["platform"],
+    answeredInformation: [],
+    reasoningSummary: "Platform choice changes the implementation path.",
+    roundCount: 1,
+    maxRounds: 10,
+  } as const;
+
+  it("parses a valid clarifier payload", () => {
+    const parsed = clarificationResultSchema.parse(validResult);
+
+    expect(parsed.status).toBe("needs_clarification");
+    expect(parsed.questions).toHaveLength(1);
+  });
+
+  it("produces a value assignable to the ClarificationResult domain type", () => {
+    const parsed: import("./clarification").ClarificationResult =
+      clarificationResultSchema.parse(validResult);
+
+    expect(parsed.readyToProceed).toBe(false);
+  });
+
+  it("rejects payloads with an unknown status", () => {
+    expect(() => clarificationResultSchema.parse({ ...validResult, status: "unknown" })).toThrow();
+  });
+
+  it("rejects payloads that omit required fields", () => {
+    const { roundCount, ...missingRoundCount } = validResult;
+
+    expect(() => clarificationResultSchema.parse(missingRoundCount)).toThrow();
+    void roundCount;
+  });
+});
+
+describe("user-facing question selection", () => {
+  it("returns the exact question texts when clarification is needed", () => {
+    const questions = selectUserFacingQuestions({
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [
+        { id: "platform", question: "Which platform ships first?", context: "affects sequencing" },
+        { id: "deadline", question: "What deadline should we hit?" },
+      ],
+      missingInformation: ["platform", "deadline"],
+      answeredInformation: [],
+      reasoningSummary: "Both materially change the plan.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual(["Which platform ships first?", "What deadline should we hit?"]);
+  });
+
+  it("preserves question order and ignores id and context", () => {
+    const questions = selectUserFacingQuestions({
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [
+        { id: "b", question: "second?" },
+        { id: "a", question: "first?" },
+      ],
+      missingInformation: [],
+      answeredInformation: [],
+      reasoningSummary: "Order matters for the relay.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual(["second?", "first?"]);
+  });
+
+  it("returns no questions once the request is ready to proceed", () => {
+    const questions = selectUserFacingQuestions({
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "platform", value: "web" }],
+      reasoningSummary: "Sufficiently specified.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual([]);
+  });
+
+  it("returns no questions when the intake is blocked", () => {
+    const questions = selectUserFacingQuestions({
+      status: "blocked",
+      readyToProceed: false,
+      questions: [],
+      missingInformation: ["market"],
+      answeredInformation: [],
+      reasoningSummary: "Unresolved at the round cap.",
+      roundCount: 10,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual([]);
+  });
+
+  it("returns no questions when needs_clarification carries an empty batch", () => {
+    const questions = selectUserFacingQuestions({
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [],
+      reasoningSummary: "Nothing specific to ask yet.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual([]);
   });
 });
 

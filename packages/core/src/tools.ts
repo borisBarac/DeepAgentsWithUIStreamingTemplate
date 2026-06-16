@@ -188,7 +188,15 @@ export function createSpecializedToolStore<TRole extends RoleId = RoleId>(
       return [];
     }
 
-    return roleToolset.toolIds.map((toolId) => toolDefinitionsById.get(toolId)!);
+    return roleToolset.toolIds.map((toolId) => {
+      const toolDefinition = toolDefinitionsById.get(toolId);
+
+      if (!toolDefinition) {
+        throw new Error(`Unknown tool id referenced by role ${role}: ${toolId}`);
+      }
+
+      return toolDefinition;
+    });
   }
 
   return {

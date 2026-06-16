@@ -9,11 +9,13 @@ The default export path is intentionally a scaffold, not a finished product. It 
 - A supervisor-first agent factory: `createScaffoldedAgent` and `createBasicAgent`
 - Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `critic`
 - A mandatory clarification-first intake gate for new supervisor-path requests
+- Two default preflight guardrails: `safety` and `taskScope`
 - A specialized tool store for building explicit role-based tool bundles
 - Safe-by-default interrupt rules for `write_file`, `edit_file`, and `execute`
 - A fixed persistent memory store mounted at `/memory`
 - A constrained virtual filesystem layout for `/scratch`, `/plans`, `/reports`, `/artifacts`, `/memory`, and `/skills`
 - Inspectable blueprint helpers so the next implementation pass can extend the defaults instead of replacing them blindly
+- Markdown-backed default prompts with a typed `PromptLoader` extension point
 
 ## Environment
 
@@ -21,6 +23,12 @@ Required for live agent calls:
 
 ```sh
 OPENROUTER_API_KEY=...
+```
+
+Required when the default safety guardrail is enabled:
+
+```sh
+OPENAI_API_KEY=...
 ```
 
 Optional LangSmith tracing:
@@ -66,9 +74,74 @@ The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by defa
 
 The default `clarifier` subagent includes the bundled `clarify-deeply` skill at `/skills/clarify-deeply/`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
 
+## Prompts
+
+Default agent and specialist prompts live in Markdown files under `packages/core/prompts/` and are loaded through the typed `PromptLoader` interface. The bundled `MarkdownPromptLoader` is used by default.
+
+Use a custom loader when your application wants to source prompts from another package, database, CMS, or tenant-specific configuration without editing core code:
+
+```ts
+import type { PromptLoader } from "@deep-agent-template/core";
+
+const promptLoader: PromptLoader = {
+  getBaselinePrompt: () => "Baseline prompt",
+  getSupervisorPrompt: (config) => `Supervisor prompt with ${config.maxRounds} rounds`,
+  getClarifierPrompt: (config) => `Clarifier prompt with ${config.questionsPerRound} questions`,
+  getResearcherPrompt: () => "Researcher prompt",
+  getAnalystPrompt: () => "Analyst prompt",
+  getCriticPrompt: () => "Critic prompt",
+};
+
+const agent = createBasicAgent({ promptLoader });
+```
+
+Explicit `systemPrompt` values and `subagentOverrides.<role>.systemPrompt` still take precedence over loader defaults.
+
+## Guardrails
+
+The scaffolded and baseline factories install two LangChain middleware guardrails by default:
+
+- `OpenAIContentSafetyGuardrail` runs before the agent and uses OpenAI moderation (`omni-moderation-latest`) to block unsafe user requests.
+- `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope.
+
+Task-scope policy is controlled by markdown files under `packages/core/guardrails/`:
+
+- `taskScope.requiredContext.md`
+- `taskScope.allowedTasks.md`
+- `taskScope.disallowedTasks.md`
+
+The safety policy reference lives in `packages/core/guardrails/safety.md`. The default runtime safety decision uses OpenAI moderation; provide `OPENAI_API_KEY` for live invocations.
+
+Disable the default guardrails when building a custom runtime:
+
+```ts
+const agent = createBasicAgent({
+  guardrails: false,
+});
+```
+
+Or override one rail while keeping the other:
+
+```ts
+const agent = createBasicAgent({
+  guardrails: {
+    safety: {
+      model: "omni-moderation-latest",
+    },
+    taskScope: {
+      policies: {
+        allowedTasks: "Only answer questions about the current repository.",
+      },
+    },
+  },
+});
+```
+
 ## Clarification-first supervisor flow
 
 The scaffolded supervisor treats clarification as a required preflight phase. Every new top-level request is expected to route through the `clarifier` subagent before normal planning, tool use, or downstream delegation begins.
+
+The `clarifier` is wired with a Zod `responseFormat` (`clarificationResultSchema`), so its readiness payload is returned to the supervisor as machine-readable structured output rather than free text. The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
 
 The clarifier returns a structured readiness payload with:
 
@@ -89,6 +162,14 @@ The default clarification policy is:
 - `questionsPerRound: 3`
 
 If the request is still unresolved at the round cap, the clarification state becomes blocked instead of silently proceeding.
+
+The intended end-to-end intake loop is:
+
+1. User sends a new request.
+2. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
+3. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
+4. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`.
+5. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning) or the intake becomes `blocked`.
 
 Use the exported clarification helpers to manage intake state outside the prompt layer:
 
