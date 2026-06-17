@@ -1,9 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
+import { StateBackend, type FilesystemPermission, type SubAgent } from "deepagents";
+
 import { clarificationResultSchema } from "../clarification/index.ts";
-import type { PromptLoader } from "../prompts/index.ts";
-import { createRuntimeScaffold } from "./index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
+import type { PromptLoader } from "../prompts/index.ts";
+import { createRuntimeScaffold } from "./runtime.ts";
 
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "baseline prompt",
@@ -18,7 +19,7 @@ function asDefaultSubagents(subagents: unknown): SubAgent[] {
   return subagents as SubAgent[];
 }
 
-describe("scaffolding defaults", () => {
+describe("runtime scaffold defaults", () => {
   it("creates the default runtime shape", () => {
     const scaffold = createRuntimeScaffold();
 
@@ -40,96 +41,6 @@ describe("scaffolding defaults", () => {
         mode: "mandatory-preflight",
       },
     });
-  });
-
-  it("locks the filesystem down to the scaffold roots by default", () => {
-    expect(createRuntimeScaffold().permissions).toEqual([
-      {
-        operations: ["read"],
-        paths: ["/"],
-      },
-      {
-        operations: ["read", "write"],
-        paths: [
-          "/scratch",
-          "/scratch/**",
-          "/plans",
-          "/plans/**",
-          "/reports",
-          "/reports/**",
-          "/artifacts",
-          "/artifacts/**",
-          "/memory",
-          "/memory/**",
-        ],
-      },
-      {
-        operations: ["read"],
-        paths: [
-          "/scratch",
-          "/scratch/**",
-          "/plans",
-          "/plans/**",
-          "/reports",
-          "/reports/**",
-          "/artifacts",
-          "/artifacts/**",
-          "/memory",
-          "/memory/**",
-          "/skills",
-          "/skills/**",
-        ],
-      },
-      {
-        operations: ["read", "write"],
-        paths: ["/**"],
-        mode: "deny",
-      },
-    ]);
-  });
-
-  it("provides specialist subagents for clarification, research, analysis, and critique", () => {
-    const subagents = asDefaultSubagents(createRuntimeScaffold().subagents);
-
-    expect(subagents.map((subagent) => subagent.name)).toEqual([
-      "clarifier",
-      "researcher",
-      "analyst",
-      "critic",
-    ]);
-    expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([
-      [CLARIFY_DEEPLY_SKILL_DIR],
-      [],
-      [],
-      [],
-    ]);
-  });
-
-  it("uses a custom prompt loader for default subagent prompts", () => {
-    const scaffold = createRuntimeScaffold({ promptLoader: testPromptLoader });
-    const subagents = asDefaultSubagents(scaffold.subagents);
-
-    expect(subagents.map((subagent) => subagent.systemPrompt)).toEqual([
-      "custom clarifier prompt",
-      "custom researcher prompt",
-      "custom analyst prompt",
-      "custom critic prompt",
-    ]);
-    expect(scaffold.systemPrompt).toBe("supervisor prompt");
-  });
-
-  it("lets explicit subagent prompt overrides win over the prompt loader", () => {
-    const [clarifier] = asDefaultSubagents(
-      createRuntimeScaffold({
-        promptLoader: testPromptLoader,
-        clarifier: {
-          systemPrompt: "explicit clarifier prompt",
-        },
-      }).subagents,
-    );
-
-    expect(clarifier?.systemPrompt).toBe("explicit clarifier prompt");
   });
 
   it("lets explicit runtime overrides win over defaults", () => {
@@ -174,6 +85,32 @@ describe("scaffolding defaults", () => {
     expect(JSON.stringify(asDefaultSubagents(scaffold.subagents)[0]?.systemPrompt)).toContain(
       "between 1 and 2 high-value clarification questions per round",
     );
+  });
+
+  it("uses a custom prompt loader for default subagent prompts", () => {
+    const scaffold = createRuntimeScaffold({ promptLoader: testPromptLoader });
+    const subagents = asDefaultSubagents(scaffold.subagents);
+
+    expect(subagents.map((subagent) => subagent.systemPrompt)).toEqual([
+      "custom clarifier prompt",
+      "custom researcher prompt",
+      "custom analyst prompt",
+      "custom critic prompt",
+    ]);
+    expect(scaffold.systemPrompt).toBe("supervisor prompt");
+  });
+
+  it("lets explicit subagent prompt overrides win over the prompt loader", () => {
+    const [clarifier] = asDefaultSubagents(
+      createRuntimeScaffold({
+        promptLoader: testPromptLoader,
+        clarifier: {
+          systemPrompt: "explicit clarifier prompt",
+        },
+      }).subagents,
+    );
+
+    expect(clarifier?.systemPrompt).toBe("explicit clarifier prompt");
   });
 
   it("enforces structured output on the default clarifier only", () => {

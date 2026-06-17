@@ -64,6 +64,19 @@ describe("createBasicAgent", () => {
 });
 
 describe("createBaselineAgent", () => {
+  it("uses the bundled baseline prompt by default", () => {
+    const agent = createBaselineAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+    });
+
+    expectSystemPromptToContain(
+      agent.options.systemPrompt,
+      "helpful general-purpose deep agent",
+    );
+  });
+
   it("uses a custom prompt loader for the baseline prompt", () => {
     const agent = createBaselineAgent({
       openRouter: {
@@ -73,5 +86,18 @@ describe("createBaselineAgent", () => {
     });
 
     expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
+  });
+
+  it("does not allow untyped callers to override the baseline prompt inline", () => {
+    const agent = createBaselineAgent({
+      openRouter: {
+        apiKey: "test-key",
+      },
+      promptLoader: testPromptLoader,
+      systemPrompt: "inline override",
+    } as Parameters<typeof createBaselineAgent>[0]);
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
+    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("inline override");
   });
 });

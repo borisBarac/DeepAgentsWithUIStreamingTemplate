@@ -69,6 +69,10 @@ const result = await agent.invoke({
 
 `createBasicAgent` is an alias for the scaffolded factory. For a thinner single-agent control variant, use `createBaselineAgent`.
 
+`createBaselineAgent` always gets its system prompt from `PromptLoader.getBaselinePrompt()`. With
+the default loader, that is `packages/core/prompts/baseline.md`; callers cannot bypass the loader
+with an inline `systemPrompt`.
+
 The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists, and only the default `clarifier` ships with a bundled `clarify-deeply` skill. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
 The default `clarifier` subagent includes the bundled `clarify-deeply` skill at `/skills/clarify-deeply/`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
@@ -94,7 +98,8 @@ const promptLoader: PromptLoader = {
 const agent = createBasicAgent({ promptLoader });
 ```
 
-Explicit `systemPrompt` values and `subagentOverrides.<role>.systemPrompt` still take precedence over loader defaults.
+For scaffolded agents, explicit `systemPrompt` values and
+`subagentOverrides.<role>.systemPrompt` still take precedence over loader defaults.
 
 ## Guardrails
 

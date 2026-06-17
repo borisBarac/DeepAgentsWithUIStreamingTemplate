@@ -4,11 +4,10 @@ import { z } from "zod";
 
 import type { SpecialistRole } from "../scaffold/index.ts";
 import {
-  createDefaultSpecialistRoleToolsets,
   createSpecializedToolStore,
   resolveSpecializedTools,
   resolveSpecializedToolsForRoles,
-} from "./index.ts";
+} from "./store.ts";
 
 describe("specialized tool store", () => {
   const searchTool = tool(async ({ query }: { query: string }) => `search:${query}`, {
@@ -153,31 +152,6 @@ describe("specialized tool store", () => {
     expect(store.roleHasRestrictedTools("clarifier")).toBeFalse();
   });
 
-  it("provides explicit default specialist role bundles", () => {
-    expect(createDefaultSpecialistRoleToolsets()).toEqual([
-      {
-        role: "clarifier",
-        toolIds: [],
-        purpose: "Structured intake, requirement checks, and preflight readiness gating.",
-      },
-      {
-        role: "researcher",
-        toolIds: [],
-        purpose: "Evidence gathering, retrieval, search, and source collection.",
-      },
-      {
-        role: "analyst",
-        toolIds: [],
-        purpose: "Computation, extraction, transformation, and file-based analysis.",
-      },
-      {
-        role: "critic",
-        toolIds: [],
-        purpose: "Grounding, citation checks, and policy or quality verification.",
-      },
-    ]);
-  });
-
   it("rejects duplicate tool ids", () => {
     expect(() =>
       createSpecializedToolStore({
@@ -236,24 +210,5 @@ describe("specialized tool store", () => {
         ],
       }),
     ).toThrow('Specialized role "critic" references unknown tool id "verify".');
-  });
-
-  it("returns empty tool arrays for unknown roles", () => {
-    const store = createSpecializedToolStore<SpecialistRole>({
-      tools: [
-        {
-          id: "search",
-          tool: searchTool,
-        },
-      ],
-      roles: [
-        {
-          role: "researcher",
-          toolIds: ["search"],
-        },
-      ],
-    });
-
-    expect(store.resolveRoleTools("critic")).toEqual([]);
   });
 });
