@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { StateBackend, type FilesystemPermission, type SubAgent } from "deepagents";
+import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
+import { reviewReportSchema } from "../review/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
 
 const testPromptLoader: PromptLoader = {
@@ -13,6 +13,7 @@ const testPromptLoader: PromptLoader = {
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getCriticPrompt: () => "custom critic prompt",
+  getReviewAgentPrompt: () => "custom review prompt",
 };
 
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
@@ -95,7 +96,7 @@ describe("runtime scaffold defaults", () => {
       "custom clarifier prompt",
       "custom researcher prompt",
       "custom analyst prompt",
-      "custom critic prompt",
+      "custom review prompt",
     ]);
     expect(scaffold.systemPrompt).toBe("supervisor prompt");
   });
@@ -113,15 +114,15 @@ describe("runtime scaffold defaults", () => {
     expect(clarifier?.systemPrompt).toBe("explicit clarifier prompt");
   });
 
-  it("enforces structured output on the default clarifier only", () => {
-    const [clarifier, researcher, analyst, critic] = asDefaultSubagents(
+  it("enforces structured output on the clarifier and review agent", () => {
+    const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
       createRuntimeScaffold().subagents,
     );
 
     expect(clarifier?.responseFormat).toBe(clarificationResultSchema);
     expect(researcher?.responseFormat).toBeUndefined();
     expect(analyst?.responseFormat).toBeUndefined();
-    expect(critic?.responseFormat).toBeUndefined();
+    expect(reviewer?.responseFormat).toBe(reviewReportSchema);
   });
 
   it("lets an explicit clarifier responseFormat override the default schema", () => {

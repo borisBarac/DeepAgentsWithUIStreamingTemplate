@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
-
-import { createBaselineAgent, createBasicAgent } from "./index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
+import { createBaselineAgent, createBasicAgent } from "./index.ts";
 
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "custom baseline prompt",
@@ -10,6 +9,7 @@ const testPromptLoader: PromptLoader = {
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getCriticPrompt: () => "custom critic prompt",
+  getReviewAgentPrompt: () => "custom review prompt",
 };
 
 function expectSystemPromptToContain(systemPrompt: unknown, text: string): void {
@@ -71,10 +71,7 @@ describe("createBaselineAgent", () => {
       },
     });
 
-    expectSystemPromptToContain(
-      agent.options.systemPrompt,
-      "helpful general-purpose deep agent",
-    );
+    expectSystemPromptToContain(agent.options.systemPrompt, "helpful general-purpose deep agent");
   });
 
   it("uses a custom prompt loader for the baseline prompt", () => {

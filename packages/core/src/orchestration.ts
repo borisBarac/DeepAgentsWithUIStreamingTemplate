@@ -14,6 +14,16 @@ import type {
   OpenRouterModelOptions,
 } from "./models/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "./prompts/index.ts";
+import {
+  createReviewConfig,
+  createReviewState,
+  markReviewCaveated,
+  parseReviewReport,
+  type ReviewConfig,
+  type ReviewReport,
+  type ReviewState,
+  recordReviewReport,
+} from "./review/index.ts";
 
 //#region Public state and route types
 
@@ -59,6 +69,7 @@ export type OrchestratedDeepAgentState = {
   criticResult?: string;
   judgeResult?: string;
   finalAnswer?: string;
+  review?: ReviewState;
   next: OrchestratedDeepAgentRoute;
   errors: OrchestratedDeepAgentError[];
 };
@@ -75,7 +86,13 @@ export type OrchestratedDeepAgentInvokeOutput = {
   messages: OrchestratedDeepAgentMessage[];
 };
 
-export type OrchestratedDeepAgentRole = "researcher" | "coder" | "critic" | "judge" | "finalizer";
+export type OrchestratedDeepAgentRole =
+  | "researcher"
+  | "coder"
+  | "critic"
+  | "judge"
+  | "finalizer"
+  | "reviewer";
 
 export type OrchestratedDeepAgent = {
   invoke(input: OrchestratedDeepAgentInvokeInput): Promise<OrchestratedDeepAgentInvokeOutput>;
@@ -285,6 +302,7 @@ export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions & {
   routing?: OrchestratedDeepAgentRoutingOptions;
   clarification?: Partial<ClarificationConfig>;
   guardrails?: false | CreateGuardrailDecisionOptions;
+  review?: Partial<ReviewConfig>;
   promptLoader?: PromptLoader;
 };
 
@@ -326,6 +344,10 @@ const OrchestratedStateAnnotation = Annotation.Root({
     default: () => undefined,
     reducer: (_current, next) => next,
   }),
+  review: Annotation<ReviewState | undefined>({
+    default: () => undefined,
+    reducer: (_current, next) => next,
+  }),
   next: Annotation<OrchestratedDeepAgentRoute>({
     default: () => "final",
     reducer: (_current, next) => next,
@@ -347,6 +369,7 @@ type NodeContext = {
   routing: OrchestratedDeepAgentRoutingOptions;
   clarification: Partial<ClarificationConfig>;
   guardrails: false | CreateGuardrailDecisionOptions;
+  review: ReviewConfig;
   promptLoader: PromptLoader;
   model?: ModelIdentifier;
   openRouter?: OpenRouterModelOptions;
@@ -386,6 +409,8 @@ function rolePromptForRole(role: OrchestratedDeepAgentRole, promptLoader: Prompt
       return promptLoader.getResearcherPrompt();
     case "critic":
       return promptLoader.getCriticPrompt();
+    case "reviewer":
+      return promptLoader.getReviewAgentPrompt();
     default:
       return promptLoader.getBaselinePrompt();
   }
@@ -400,6 +425,7 @@ function rolePromptLoader(role: OrchestratedDeepAgentRole, base: PromptLoader): 
     getResearcherPrompt: base.getResearcherPrompt.bind(base),
     getAnalystPrompt: base.getAnalystPrompt.bind(base),
     getCriticPrompt: base.getCriticPrompt.bind(base),
+    getReviewAgentPrompt: base.getReviewAgentPrompt.bind(base),
   };
 }
 
@@ -621,10 +647,178 @@ function createJudgeNode(ctx: NodeContext) {
   });
 }
 
+//#region Review finalization gate
+
+function buildReviewContextPacket(
+  state: OrchestratedGraphState,
+  candidate: string,
+): OrchestratedDeepAgentMessage[] {
+  const messages: OrchestratedDeepAgentMessage[] = [];
+  messages.push({ role: "system", content: `Original user request:\n${state.task}` });
+
+  if (state.researchResult) {
+    messages.push({ role: "system", content: `Research performed:\n${state.researchResult}` });
+  }
+  if (state.codeResult) {
+    messages.push({
+      role: "system",
+      content: `Implementation notes:\n${state.codeResult}`,
+    });
+  }
+  if (state.criticResult) {
+    messages.push({ role: "system", content: `Prior critique:\n${state.criticResult}` });
+  }
+
+  const errors = state.errors ?? [];
+  if (errors.length > 0) {
+    messages.push({
+      role: "system",
+      content: `Known limitations:\n${errors
+        .map((entry) => `- [${entry.category}] ${entry.node}: ${entry.message}`)
+        .join("\n")}`,
+    });
+  }
+
+  messages.push({
+    role: "user",
+    content: `Review the following candidate final answer. Return the structured review report only.\n\nCandidate:\n${candidate}`,
+  });
+  return messages;
+}
+
+async function reviseCandidate(
+  ctx: NodeContext,
+  candidate: string,
+  report: ReviewReport,
+): Promise<string | null> {
+  const reviser = ctx.agents.finalizer;
+  if (!reviser) return null;
+
+  try {
+    const result = await reviser.invoke({
+      messages: [
+        {
+          role: "system",
+          content: `Required changes from review:\n${report.requiredChanges
+            .map((change) => `- ${change}`)
+            .join("\n")}`,
+        },
+        {
+          role: "user",
+          content: `Revise the following candidate to address every required change. Return only the revised final answer.\n\nCandidate:\n${candidate}`,
+        },
+      ],
+    });
+    const revised = extractStageOutput(result.messages);
+    return revised || null;
+  } catch {
+    return null;
+  }
+}
+
+type ReviewOutcome = {
+  state: ReviewState;
+  candidate: string;
+  errors?: OrchestratedDeepAgentError[];
+};
+
+async function runReviewLoop(
+  ctx: NodeContext,
+  state: OrchestratedGraphState,
+  candidate: string,
+): Promise<ReviewOutcome> {
+  const maxRevisions = ctx.review.maxRevisions;
+  let reviewState = createReviewState({ maxRevisions });
+  const reviewer = resolveAgent(ctx, "reviewer");
+
+  if (!reviewer) {
+    const blocked = markReviewCaveated({ ...reviewState, status: "blocked" });
+    return {
+      state: blocked,
+      candidate,
+      errors: [missingAgentError("reviewer", false)],
+    };
+  }
+
+  let currentCandidate = candidate;
+
+  for (let attempt = 1; attempt <= maxRevisions; attempt += 1) {
+    reviewState = { ...reviewState, status: "review_requested" };
+
+    let report: ReviewReport;
+    try {
+      const result = await reviewer.invoke({
+        messages: buildReviewContextPacket(state, currentCandidate),
+      });
+      report = parseReviewReport(extractStageOutput(result.messages));
+    } catch (error) {
+      const failed = markReviewCaveated({
+        ...reviewState,
+        status: "blocked",
+        reviewCount: attempt,
+      });
+      return {
+        state: failed,
+        candidate: currentCandidate,
+        errors: [toStructuredError(error, "reviewer", { required: false })],
+      };
+    }
+
+    reviewState = recordReviewReport(reviewState, report, attempt);
+
+    if (report.status === "approved") {
+      return { state: { ...reviewState, status: "approved" }, candidate: currentCandidate };
+    }
+
+    if (report.status === "blocked") {
+      return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
+    }
+
+    if (attempt < maxRevisions) {
+      const revised = await reviseCandidate(ctx, currentCandidate, report);
+      if (revised !== null) {
+        currentCandidate = revised;
+      } else {
+        return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
+      }
+    }
+  }
+
+  return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
+}
+
+function composeCaveatedAnswer(candidate: string, reviewState: ReviewState): string {
+  const report = reviewState.report;
+  const lines: string[] = [];
+
+  if (reviewState.status === "blocked") {
+    lines.push("Review could not approve this result (blocked).");
+  } else if (reviewState.status === "changes_required") {
+    lines.push(
+      `Review required changes after ${reviewState.reviewCount} review pass(es); the review loop limit (${reviewState.maxRevisions}) was reached without approval.`,
+    );
+  } else {
+    lines.push("Review did not approve this result.");
+  }
+
+  if (report?.requiredChanges.length) {
+    lines.push(
+      `Required changes:\n${report.requiredChanges.map((change) => `- ${change}`).join("\n")}`,
+    );
+  }
+  if (report?.finalRecommendation) {
+    lines.push(`Reviewer recommendation: ${report.finalRecommendation}`);
+  }
+
+  return `${candidate}\n\n## Review Caveats\nThis result was NOT approved by review.\n${lines.join("\n")}`.trim();
+}
+
 function createFinalizerNode(ctx: NodeContext) {
   return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
     const draft = composeFinalAnswer(state);
+    const errors: OrchestratedDeepAgentError[] = [];
 
+    let candidate = draft;
     if (ctx.agents.finalizer) {
       try {
         const result = await ctx.agents.finalizer.invoke({
@@ -636,17 +830,26 @@ function createFinalizerNode(ctx: NodeContext) {
           ],
         });
         const refined = extractStageOutput(result.messages);
-        return { finalAnswer: refined || draft, next: "end" };
+        if (refined) candidate = refined;
       } catch (error) {
-        return {
-          finalAnswer: draft,
-          next: "end",
-          errors: [toStructuredError(error, "finalizer", { required: false })],
-        };
+        errors.push(toStructuredError(error, "finalizer", { required: false }));
       }
     }
 
-    return { finalAnswer: draft, next: "end" };
+    const outcome = await runReviewLoop(ctx, state, candidate);
+    if (outcome.errors) errors.push(...outcome.errors);
+
+    const finalAnswer = outcome.state.caveated
+      ? composeCaveatedAnswer(outcome.candidate, outcome.state)
+      : outcome.candidate;
+
+    const update: Partial<OrchestratedGraphState> = {
+      finalAnswer,
+      review: outcome.state,
+      next: "end",
+    };
+    if (errors.length > 0) update.errors = errors;
+    return update;
   };
 }
 
@@ -664,6 +867,7 @@ export function createOrchestratedDeepAgentGraph(
     routing: options.routing ?? {},
     clarification: options.clarification ?? {},
     guardrails: options.guardrails ?? false,
+    review: createReviewConfig(options.review),
     promptLoader: options.promptLoader ?? DEFAULT_PROMPT_LOADER,
     model: options.model,
     openRouter: options.openRouter,

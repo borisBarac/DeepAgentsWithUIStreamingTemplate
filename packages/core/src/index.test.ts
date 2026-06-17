@@ -7,6 +7,7 @@ import * as index from "./index";
 import * as models from "./models/index.ts";
 import * as observability from "./observability/index.ts";
 import * as prompts from "./prompts/index.ts";
+import * as review from "./review/index.ts";
 import * as scaffold from "./scaffold/index.ts";
 import * as skills from "./skills/index.ts";
 import * as tools from "./tools/index.ts";
@@ -53,9 +54,23 @@ describe("index barrel exports", () => {
     expect(index.DEFAULT_CLARIFIER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CLARIFIER_SYSTEM_PROMPT);
     expect(index.DEFAULT_CRITIC_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CRITIC_SYSTEM_PROMPT);
     expect(index.DEFAULT_RESEARCHER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_RESEARCHER_SYSTEM_PROMPT);
+    expect(index.DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toBe(
+      prompts.DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
+    );
     expect(index.DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toBe(prompts.DEFAULT_SUPERVISOR_SYSTEM_PROMPT);
     expect(index.createClarifierSystemPrompt).toBe(prompts.createClarifierSystemPrompt);
     expect(index.createSupervisorSystemPrompt).toBe(prompts.createSupervisorSystemPrompt);
+  });
+
+  it("re-exports review helpers from the review module", () => {
+    expect(index.createReviewConfig).toBe(review.createReviewConfig);
+    expect(index.createReviewState).toBe(review.createReviewState);
+    expect(index.parseReviewReport).toBe(review.parseReviewReport);
+    expect(index.recordReviewReport).toBe(review.recordReviewReport);
+    expect(index.isReviewApproved).toBe(review.isReviewApproved);
+    expect(index.DEFAULT_REVIEW_MAX_REVISIONS).toBe(review.DEFAULT_REVIEW_MAX_REVISIONS);
+    expect(index.DEFAULT_REVIEW_AGENT_NAME).toBe(review.DEFAULT_REVIEW_AGENT_NAME);
+    expect(index.reviewReportSchema).toBe(review.reviewReportSchema);
   });
 
   it("re-exports the runtime scaffold interface from the scaffold module", () => {

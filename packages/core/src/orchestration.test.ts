@@ -13,6 +13,7 @@ import {
   selectWorkRoute,
   toStructuredError,
 } from "./orchestration.ts";
+import type { ReviewReport } from "./review/index.ts";
 
 function createMockAgent(response: string): {
   agent: OrchestratedDeepAgent;
@@ -39,6 +40,34 @@ function createFailingAgent(error: unknown): {
     invoke: async (input) => {
       calls.push(input);
       throw error;
+    },
+  };
+  return { agent, calls };
+}
+
+const APPROVED_REVIEW: ReviewReport = {
+  status: "approved",
+  score: 91,
+  criticalIssues: [],
+  majorIssues: [],
+  minorIssues: [],
+  requiredChanges: [],
+  finalRecommendation: "ready to deliver",
+};
+
+function createReviewAgent(reports: ReviewReport | ReviewReport[]): {
+  agent: OrchestratedDeepAgent;
+  calls: OrchestratedDeepAgentInvokeInput[];
+} {
+  const queue = Array.isArray(reports) ? [...reports] : [reports];
+  const calls: OrchestratedDeepAgentInvokeInput[] = [];
+  const agent: OrchestratedDeepAgent = {
+    invoke: async (input) => {
+      calls.push(input);
+      const report = queue.shift() ?? APPROVED_REVIEW;
+      return {
+        messages: [...input.messages, { role: "assistant", content: JSON.stringify(report) }],
+      };
     },
   };
   return { agent, calls };
@@ -147,9 +176,11 @@ describe("toStructuredError", () => {
 
 describe("createOrchestratedDeepAgentGraph state shape", () => {
   it("returns a state object with the contract fields", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
@@ -159,14 +190,17 @@ describe("createOrchestratedDeepAgentGraph state shape", () => {
     expect(result.next).toBe("end");
     expect(typeof result.finalAnswer).toBe("string");
     expect(result.finalAnswer).toBe("hello");
+    expect(result.review?.status).toBe("approved");
   });
 });
 
 describe("createOrchestratedDeepAgentGraph clarification gate", () => {
   it("skips clarification when disabled and runs the finalizer", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -193,8 +227,10 @@ describe("createOrchestratedDeepAgentGraph clarification gate", () => {
   });
 
   it("proceeds to work when clarification is already resolved", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
     });
 
     const resolved = {
@@ -215,10 +251,11 @@ describe("createOrchestratedDeepAgentGraph clarification gate", () => {
 describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
   it("invokes an injected researcher and flows output to the finalizer", async () => {
     const { agent: researcher, calls } = createMockAgent("Redis streams are append-only logs.");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: true, enableCoding: false, requireCritic: false },
-      agents: { researcher },
+      agents: { researcher, reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -234,10 +271,11 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
   it("runs the critic after research when requireCritic is enabled", async () => {
     const researcher = createMockAgent("research notes");
     const critic = createMockAgent("research is sound");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: true, enableCoding: false, requireCritic: true },
-      agents: { researcher: researcher.agent, critic: critic.agent },
+      agents: { researcher: researcher.agent, critic: critic.agent, reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -255,10 +293,11 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
 describe("createOrchestratedDeepAgentGraph error propagation", () => {
   it("records a structured error and still finalizes when an optional stage fails", async () => {
     const { agent: researcher } = createFailingAgent(new Error("model rate limit 429"));
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: true, enableCoding: false, requireCritic: false },
-      agents: { researcher },
+      agents: { researcher, reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -294,10 +333,11 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
 
   it("routes a code task through the coder node", async () => {
     const coder = createMockAgent("implementation plan");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: { enableResearch: false, enableCoding: true, requireCritic: false },
-      agents: { coder: coder.agent },
+      agents: { coder: coder.agent, reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -313,6 +353,7 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
 describe("createOrchestratedDeepAgentGraph routing", () => {
   it("routes a debate task to the judge node when debate is enabled", async () => {
     const judge = createMockAgent("winning synthesis");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
       routing: {
@@ -321,7 +362,7 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
         enableDebate: true,
         requireCritic: false,
       },
-      agents: { judge: judge.agent },
+      agents: { judge: judge.agent, reviewer: reviewer.agent },
     });
 
     const result = (await graph.invoke(
@@ -365,5 +406,178 @@ describe("createOrchestratedDeepAgentGraph message passthrough", () => {
     )) as OrchestratedDeepAgentState;
 
     expect(result.messages).toEqual(messages);
+  });
+});
+
+const CHANGES_REQUIRED_REVIEW: ReviewReport = {
+  status: "changes_required",
+  score: 58,
+  criticalIssues: [{ issue: "no tests", impact: "correctness", evidence: "none present" }],
+  majorIssues: [],
+  minorIssues: [],
+  requiredChanges: ["add tests for the consumer"],
+  finalRecommendation: "address required changes before delivery",
+};
+
+const BLOCKED_REVIEW: ReviewReport = {
+  status: "blocked",
+  score: 20,
+  criticalIssues: [],
+  majorIssues: [],
+  minorIssues: [],
+  requiredChanges: [],
+  finalRecommendation: "missing decision-critical context",
+};
+
+describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
+  it("finalizes the candidate unchanged when review approves", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).toBe("approved");
+    expect(result.review?.caveated).toBe(false);
+    expect(result.review?.report?.score).toBe(91);
+    expect(result.review?.reviewCount).toBe(1);
+    expect(result.finalAnswer).toBe("hello");
+    expect(result.finalAnswer).not.toContain("Review Caveats");
+  });
+
+  it("sends the original request and candidate to the reviewer", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    (await graph.invoke(invokeInput("summarize the report"))) as OrchestratedDeepAgentState;
+
+    const reviewInput = reviewer.calls[0]?.messages.map((m) => m.content).join("\n") ?? "";
+    expect(reviewInput).toContain("Original user request:\nsummarize the report");
+    expect(reviewInput).toContain("Candidate:\nsummarize the report");
+  });
+
+  it("finalizes with explicit caveats when review is blocked", async () => {
+    const reviewer = createReviewAgent(BLOCKED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).toBe("blocked");
+    expect(result.review?.caveated).toBe(true);
+    expect(result.finalAnswer).toContain("## Review Caveats");
+    expect(result.finalAnswer).toContain("NOT approved by review");
+    expect(result.finalAnswer).toContain("missing decision-critical context");
+    expect(result.finalAnswer).toContain("hello");
+  });
+
+  it("explicitly represents blocked delivery and never claims approval", async () => {
+    const reviewer = createReviewAgent(BLOCKED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).not.toBe("approved");
+    expect(result.review?.caveated).toBe(true);
+  });
+
+  it("revises the candidate when review requires changes and re-reviews until approved", async () => {
+    const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW, APPROVED_REVIEW]);
+    const reviser = createMockAgent("polished candidate");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent, finalizer: reviser.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("draft"))) as OrchestratedDeepAgentState;
+
+    expect(reviewer.calls.length).toBe(2);
+    expect(result.review?.status).toBe("approved");
+    expect(result.review?.reviewCount).toBe(2);
+    expect(result.review?.reports[0]?.status).toBe("changes_required");
+    expect(result.review?.reports[1]?.status).toBe("approved");
+    expect(result.finalAnswer).toBe("polished candidate");
+  });
+
+  it("delivers caveated output when the review loop limit is exhausted without approval", async () => {
+    const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW, CHANGES_REQUIRED_REVIEW]);
+    const reviser = createMockAgent("polished candidate");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent, finalizer: reviser.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("draft"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).toBe("changes_required");
+    expect(result.review?.caveated).toBe(true);
+    expect(result.review?.reviewCount).toBe(2);
+    expect(result.review?.maxRevisions).toBe(2);
+    expect(result.finalAnswer).toContain("## Review Caveats");
+    expect(result.finalAnswer).toContain("add tests for the consumer");
+    expect(result.review?.status).not.toBe("approved");
+  });
+
+  it("honours a configured review loop limit lower than the default", async () => {
+    const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW]);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      review: { maxRevisions: 1 },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("draft"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.maxRevisions).toBe(1);
+    expect(result.review?.reviewCount).toBe(1);
+    expect(result.review?.caveated).toBe(true);
+    expect(result.finalAnswer).toContain("## Review Caveats");
+  });
+
+  it("represents delivery as blocked/caveated when no reviewer is configured", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).toBe("blocked");
+    expect(result.review?.caveated).toBe(true);
+    expect(result.finalAnswer).toContain("## Review Caveats");
+    expect(result.review?.status).not.toBe("approved");
+  });
+
+  it("reviews a pure conversational answer using only the candidate final message", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("what is 2+2?"))) as OrchestratedDeepAgentState;
+
+    expect(result.review?.status).toBe("approved");
+    expect(result.finalAnswer).toBe("what is 2+2?");
+    const reviewInput = reviewer.calls[0]?.messages.map((m) => m.content).join("\n") ?? "";
+    expect(reviewInput).toContain("Candidate:\nwhat is 2+2?");
   });
 });

@@ -3,6 +3,7 @@ import baselinePromptText from "../../prompts/baseline.md" with { type: "text" }
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
 import criticPromptText from "../../prompts/critic.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
+import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
 import supervisorPromptText from "../../prompts/supervisor.md" with { type: "text" };
 import {
   type ClarificationConfig,
@@ -18,6 +19,7 @@ export interface PromptLoader {
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
   getCriticPrompt(): string;
+  getReviewAgentPrompt(): string;
 }
 
 function renderPromptTemplate(template: string, values: Record<string, string | number>): string {
@@ -60,6 +62,10 @@ export class MarkdownPromptLoader implements PromptLoader {
   getCriticPrompt(): string {
     return criticPromptText;
   }
+
+  getReviewAgentPrompt(): string {
+    return reviewAgentPromptText;
+  }
 }
 
 export const DEFAULT_PROMPT_LOADER = new MarkdownPromptLoader();
@@ -87,6 +93,8 @@ export const DEFAULT_RESEARCHER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getResearc
 export const DEFAULT_ANALYST_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getAnalystPrompt();
 
 export const DEFAULT_CRITIC_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getCriticPrompt();
+
+export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
 
 export const DEFAULT_CLARIFIER_SYSTEM_PROMPT = createClarifierSystemPrompt({
   maxRounds: DEFAULT_CLARIFICATION_MAX_ROUNDS,

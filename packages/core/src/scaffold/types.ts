@@ -36,7 +36,7 @@ export type CreateDefaultPermissionsOptions = {
 export type CreateDefaultSubagentsOptions = {
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
-  critic?: Partial<SubAgent>;
+  reviewer?: Partial<SubAgent>;
   clarifier?: Partial<SubAgent>;
 };
 
