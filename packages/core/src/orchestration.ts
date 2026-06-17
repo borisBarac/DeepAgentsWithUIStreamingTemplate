@@ -81,6 +81,8 @@ export type OrchestratedDeepAgent = {
   invoke(input: OrchestratedDeepAgentInvokeInput): Promise<OrchestratedDeepAgentInvokeOutput>;
 };
 
+type MessageContentPart = { text?: unknown };
+
 function normalizeMessages(messages: unknown): OrchestratedDeepAgentMessage[] {
   if (!Array.isArray(messages)) return [];
   return messages
@@ -95,18 +97,20 @@ function normalizeMessages(messages: unknown): OrchestratedDeepAgentMessage[] {
     });
 }
 
+function messageContentPartToString(part: unknown): string {
+  if (typeof part === "string") {
+    return part;
+  }
+  if (part !== null && typeof part === "object" && "text" in part) {
+    return String((part as MessageContentPart).text ?? "");
+  }
+  return "";
+}
+
 function messageContentToString(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
-    return content
-      .map((part) =>
-        typeof part === "string"
-          ? part
-          : part !== null && typeof part === "object" && "text" in part
-            ? String((part as { text?: unknown }).text ?? "")
-            : "",
-      )
-      .join("");
+    return content.map((part) => messageContentPartToString(part)).join("");
   }
   return "";
 }
@@ -436,6 +440,14 @@ type StageRunResult = {
   errors?: OrchestratedDeepAgentError[];
 };
 
+type StageNodeConfig = {
+  role: OrchestratedDeepAgentRole;
+  instruction: string;
+  required: boolean;
+  successRoute: OrchestratedDeepAgentRoute;
+  assignOutput(update: Partial<OrchestratedGraphState>, output: string): void;
+};
+
 async function runStageAgent(
   state: OrchestratedGraphState,
   ctx: NodeContext,
@@ -468,16 +480,8 @@ async function runStageAgent(
 
 //#region Routing between nodes
 
-function routeAfterIntake(state: OrchestratedGraphState): string {
-  return nextNodeName(state.next, { clarifyTarget: "clarify" });
-}
-
-function routeAfterClarify(state: OrchestratedGraphState): string {
-  return nextNodeName(state.next, { clarifyTarget: END });
-}
-
-function routeAfterWork(state: OrchestratedGraphState): string {
-  return nextNodeName(state.next, { clarifyTarget: END });
+function routeToNextNode(state: OrchestratedGraphState, clarifyTarget: string): string {
+  return nextNodeName(state.next, { clarifyTarget });
 }
 
 function nextNodeName(
@@ -550,96 +554,71 @@ function createClarifyNode(ctx: NodeContext) {
   };
 }
 
-function createResearchNode(ctx: NodeContext) {
+function createStageNode(ctx: NodeContext, config: StageNodeConfig) {
   return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
-    const result = await runStageAgent(
-      state,
-      ctx,
-      "researcher",
-      "Produce concise findings with source notes and unresolved questions.",
-      {
-        required: false,
-        successRoute: ctx.routing.requireCritic ? "critic" : "final",
-      },
-    );
+    const result = await runStageAgent(state, ctx, config.role, config.instruction, {
+      required: config.required,
+      successRoute: config.successRoute,
+    });
     const update: Partial<OrchestratedGraphState> = { next: result.next };
     if (result.output !== undefined) {
-      update.researchResult = result.output;
+      config.assignOutput(update, result.output);
     }
     if (result.errors) {
       update.errors = result.errors;
     }
     return update;
   };
+}
+
+function createResearchNode(ctx: NodeContext) {
+  return createStageNode(ctx, {
+    role: "researcher",
+    instruction: "Produce concise findings with source notes and unresolved questions.",
+    required: false,
+    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    assignOutput: (update, output) => {
+      update.researchResult = output;
+    },
+  });
 }
 
 function createCodeNode(ctx: NodeContext) {
-  return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
-    const result = await runStageAgent(
-      state,
-      ctx,
-      "coder",
-      "Produce implementation guidance, a changed-file plan, and risks.",
-      {
-        required: false,
-        successRoute: ctx.routing.requireCritic ? "critic" : "final",
-      },
-    );
-    const update: Partial<OrchestratedGraphState> = { next: result.next };
-    if (result.output !== undefined) {
-      update.codeResult = result.output;
-    }
-    if (result.errors) {
-      update.errors = result.errors;
-    }
-    return update;
-  };
+  return createStageNode(ctx, {
+    role: "coder",
+    instruction: "Produce implementation guidance, a changed-file plan, and risks.",
+    required: false,
+    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    assignOutput: (update, output) => {
+      update.codeResult = output;
+    },
+  });
 }
 
 function createCriticNode(ctx: NodeContext) {
-  return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
-    const result = await runStageAgent(
-      state,
-      ctx,
-      "critic",
+  return createStageNode(ctx, {
+    role: "critic",
+    instruction:
       "Identify correctness risks, missing evidence, unsafe assumptions, and required revisions.",
-      {
-        required: ctx.routing.requireCritic ?? false,
-        successRoute: "final",
-      },
-    );
-    const update: Partial<OrchestratedGraphState> = { next: result.next };
-    if (result.output !== undefined) {
-      update.criticResult = result.output;
-    }
-    if (result.errors) {
-      update.errors = result.errors;
-    }
-    return update;
-  };
+    required: ctx.routing.requireCritic ?? false,
+    successRoute: "final",
+    assignOutput: (update, output) => {
+      update.criticResult = output;
+    },
+  });
 }
 
 function createJudgeNode(ctx: NodeContext) {
-  return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
-    const result = await runStageAgent(
-      state,
-      ctx,
-      "judge",
+  return createStageNode(ctx, {
+    role: "judge",
+    instruction:
       "Adjudicate the competing positions with a rubric and produce a grounded synthesis.",
-      {
-        required: false,
-        successRoute: ctx.routing.requireCritic ? "critic" : "final",
-      },
-    );
-    const update: Partial<OrchestratedGraphState> = { next: result.next };
-    if (result.output !== undefined) {
-      update.judgeResult = result.output;
-    }
-    if (result.errors) {
-      update.errors = result.errors;
-    }
-    return update;
-  };
+    required: false,
+    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    assignOutput: (update, output) => {
+      update.judgeResult = output;
+    },
+  });
 }
 
 function createFinalizerNode(ctx: NodeContext) {
@@ -700,12 +679,12 @@ export function createOrchestratedDeepAgentGraph(
     .addNode("judge", createJudgeNode(ctx))
     .addNode("finalizer", createFinalizerNode(ctx))
     .addEdge(START, "route_intake")
-    .addConditionalEdges("route_intake", routeAfterIntake)
-    .addConditionalEdges("clarify", routeAfterClarify)
-    .addConditionalEdges("research", routeAfterWork)
-    .addConditionalEdges("code", routeAfterWork)
-    .addConditionalEdges("critic", routeAfterWork)
-    .addConditionalEdges("judge", routeAfterWork)
+    .addConditionalEdges("route_intake", (state) => routeToNextNode(state, "clarify"))
+    .addConditionalEdges("clarify", (state) => routeToNextNode(state, END))
+    .addConditionalEdges("research", (state) => routeToNextNode(state, END))
+    .addConditionalEdges("code", (state) => routeToNextNode(state, END))
+    .addConditionalEdges("critic", (state) => routeToNextNode(state, END))
+    .addConditionalEdges("judge", (state) => routeToNextNode(state, END))
     .addEdge("finalizer", END);
 
   return builder.compile();

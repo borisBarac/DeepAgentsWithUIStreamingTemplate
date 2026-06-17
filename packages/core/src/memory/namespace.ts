@@ -16,13 +16,13 @@ export {
 
 export const DEFAULT_SINGLE_USER_MEMORY_NAMESPACE = ["single-user"] as const;
 
-export type SingleUserMemoryNamespace = readonly string[];
+export type SingleUserMemoryNamespace = string[];
 
-export function createSingleUserMemoryNamespace(): string[] {
+export function createSingleUserMemoryNamespace(): SingleUserMemoryNamespace {
   return [...DEFAULT_SINGLE_USER_MEMORY_NAMESPACE];
 }
 
-export type MemoryNamespaceInput = string[] | StoreBackendNamespaceFactory;
+export type MemoryNamespaceInput = SingleUserMemoryNamespace | StoreBackendNamespaceFactory;
 
 export function resolveMemoryNamespace(namespace?: MemoryNamespaceInput): MemoryNamespaceInput {
   return namespace ?? createSingleUserMemoryNamespace();
