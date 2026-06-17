@@ -63,6 +63,13 @@ export type OrchestratedDeepAgentState = {
   errors: OrchestratedDeepAgentError[];
 };
 
+type OrchestratedStageResultKey =
+  | "researchResult"
+  | "codeResult"
+  | "debateResult"
+  | "criticResult"
+  | "judgeResult";
+
 //#endregion
 
 //#region Agent callable contract and adapter
@@ -237,27 +244,27 @@ function missingAgentError(
 export function composeFinalAnswer(state: OrchestratedDeepAgentState): string {
   const sections: string[] = [];
   const answers = state.clarification?.answeredInformation ?? [];
+  const stageSections: Array<{ key: OrchestratedStageResultKey; heading: string }> = [
+    { key: "researchResult", heading: "Research" },
+    { key: "codeResult", heading: "Implementation" },
+    { key: "debateResult", heading: "Debate" },
+    { key: "criticResult", heading: "Critique" },
+    { key: "judgeResult", heading: "Judgment" },
+  ];
 
   if (answers.length > 0) {
     sections.push(
       `## Clarifications\n${answers.map((answer) => `- ${answer.key}: ${answer.value}`).join("\n")}`,
     );
   }
-  if (state.researchResult) {
-    sections.push(`## Research\n${state.researchResult}`);
+
+  for (const section of stageSections) {
+    const content = state[section.key];
+    if (content) {
+      sections.push(`## ${section.heading}\n${content}`);
+    }
   }
-  if (state.codeResult) {
-    sections.push(`## Implementation\n${state.codeResult}`);
-  }
-  if (state.debateResult) {
-    sections.push(`## Debate\n${state.debateResult}`);
-  }
-  if (state.criticResult) {
-    sections.push(`## Critique\n${state.criticResult}`);
-  }
-  if (state.judgeResult) {
-    sections.push(`## Judgment\n${state.judgeResult}`);
-  }
+
   if (sections.length === 0) {
     sections.push(state.task);
   }
@@ -409,27 +416,28 @@ function buildStageMessages(
 ): OrchestratedDeepAgentMessage[] {
   const messages: OrchestratedDeepAgentMessage[] = [];
   const answers = state.clarification?.answeredInformation ?? [];
+  const priorStageContext: Array<{ content?: string; label: string }> = [
+    {
+      content:
+        answers.length > 0
+          ? answers.map((answer) => `- ${answer.key}: ${answer.value}`).join("\n")
+          : undefined,
+      label: "Clarifications provided",
+    },
+    { content: state.researchResult, label: "Prior research" },
+    { content: state.codeResult, label: "Prior implementation notes" },
+    { content: state.criticResult, label: "Prior critique" },
+  ];
 
-  if (answers.length > 0) {
-    messages.push({
-      role: "system",
-      content: `Clarifications provided:\n${answers
-        .map((answer) => `- ${answer.key}: ${answer.value}`)
-        .join("\n")}`,
-    });
+  for (const context of priorStageContext) {
+    if (context.content) {
+      messages.push({
+        role: "system",
+        content: `${context.label}:\n${context.content}`,
+      });
+    }
   }
-  if (state.researchResult) {
-    messages.push({ role: "system", content: `Prior research:\n${state.researchResult}` });
-  }
-  if (state.codeResult) {
-    messages.push({
-      role: "system",
-      content: `Prior implementation notes:\n${state.codeResult}`,
-    });
-  }
-  if (state.criticResult) {
-    messages.push({ role: "system", content: `Prior critique:\n${state.criticResult}` });
-  }
+
   messages.push({ role: "user", content: `${instruction}\n\nTask: ${state.task}` });
   return messages;
 }
@@ -474,6 +482,10 @@ async function runStageAgent(
       errors: [toStructuredError(error, role, { required: options.required })],
     };
   }
+}
+
+function routeAfterPrimaryStage(requireCritic: boolean | undefined): OrchestratedDeepAgentRoute {
+  return requireCritic ? "critic" : "final";
 }
 
 //#endregion
@@ -576,7 +588,7 @@ function createResearchNode(ctx: NodeContext) {
     role: "researcher",
     instruction: "Produce concise findings with source notes and unresolved questions.",
     required: false,
-    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
     assignOutput: (update, output) => {
       update.researchResult = output;
     },
@@ -588,7 +600,7 @@ function createCodeNode(ctx: NodeContext) {
     role: "coder",
     instruction: "Produce implementation guidance, a changed-file plan, and risks.",
     required: false,
-    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
     assignOutput: (update, output) => {
       update.codeResult = output;
     },
@@ -614,7 +626,7 @@ function createJudgeNode(ctx: NodeContext) {
     instruction:
       "Adjudicate the competing positions with a rubric and produce a grounded synthesis.",
     required: false,
-    successRoute: ctx.routing.requireCritic ? "critic" : "final",
+    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
     assignOutput: (update, output) => {
       update.judgeResult = output;
     },
