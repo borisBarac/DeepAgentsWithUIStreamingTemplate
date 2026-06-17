@@ -722,6 +722,14 @@ type ReviewOutcome = {
   errors?: OrchestratedDeepAgentError[];
 };
 
+function reviewOutcome(
+  state: ReviewState,
+  candidate: string,
+  errors?: OrchestratedDeepAgentError[],
+): ReviewOutcome {
+  return { state, candidate, errors };
+}
+
 async function runReviewLoop(
   ctx: NodeContext,
   state: OrchestratedGraphState,
@@ -732,12 +740,9 @@ async function runReviewLoop(
   const reviewer = resolveAgent(ctx, "reviewer");
 
   if (!reviewer) {
-    const blocked = markReviewCaveated({ ...reviewState, status: "blocked" });
-    return {
-      state: blocked,
-      candidate,
-      errors: [missingAgentError("reviewer", false)],
-    };
+    return reviewOutcome(markReviewCaveated({ ...reviewState, status: "blocked" }), candidate, [
+      missingAgentError("reviewer", false),
+    ]);
   }
 
   let currentCandidate = candidate;
@@ -752,39 +757,38 @@ async function runReviewLoop(
       });
       report = parseReviewReport(extractStageOutput(result.messages));
     } catch (error) {
-      const failed = markReviewCaveated({
-        ...reviewState,
-        status: "blocked",
-        reviewCount: attempt,
-      });
-      return {
-        state: failed,
-        candidate: currentCandidate,
-        errors: [toStructuredError(error, "reviewer", { required: false })],
-      };
+      return reviewOutcome(
+        markReviewCaveated({
+          ...reviewState,
+          status: "blocked",
+          reviewCount: attempt,
+        }),
+        currentCandidate,
+        [toStructuredError(error, "reviewer", { required: false })],
+      );
     }
 
     reviewState = recordReviewReport(reviewState, report, attempt);
 
-    if (report.status === "approved") {
-      return { state: { ...reviewState, status: "approved" }, candidate: currentCandidate };
-    }
-
-    if (report.status === "blocked") {
-      return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
-    }
-
-    if (attempt < maxRevisions) {
-      const revised = await reviseCandidate(ctx, currentCandidate, report);
-      if (revised !== null) {
-        currentCandidate = revised;
-      } else {
-        return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
-      }
+    switch (report.status) {
+      case "approved":
+        return reviewOutcome({ ...reviewState, status: "approved" }, currentCandidate);
+      case "blocked":
+        return reviewOutcome(markReviewCaveated(reviewState), currentCandidate);
+      case "changes_required":
+        if (attempt < maxRevisions) {
+          const revised = await reviseCandidate(ctx, currentCandidate, report);
+          if (revised !== null) {
+            currentCandidate = revised;
+            break;
+          }
+          return reviewOutcome(markReviewCaveated(reviewState), currentCandidate);
+        }
+        break;
     }
   }
 
-  return { state: markReviewCaveated(reviewState), candidate: currentCandidate };
+  return reviewOutcome(markReviewCaveated(reviewState), currentCandidate);
 }
 
 function composeCaveatedAnswer(candidate: string, reviewState: ReviewState): string {

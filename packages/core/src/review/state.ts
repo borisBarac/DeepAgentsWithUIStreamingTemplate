@@ -66,6 +66,16 @@ export type ReviewTraceSummary = {
   delivery: "approved" | "caveated" | "pending";
 };
 
+function deliveryStatusForReview(state: ReviewState): ReviewTraceSummary["delivery"] {
+  if (state.caveated) {
+    return "caveated";
+  }
+  if (state.status === "approved") {
+    return "approved";
+  }
+  return "pending";
+}
+
 export function summarizeReviewForTrace(state: ReviewState | undefined): ReviewTraceSummary {
   if (!state) {
     return {
@@ -79,12 +89,6 @@ export function summarizeReviewForTrace(state: ReviewState | undefined): ReviewT
     };
   }
 
-  const delivery: ReviewTraceSummary["delivery"] = state.caveated
-    ? "caveated"
-    : state.status === "approved"
-      ? "approved"
-      : "pending";
-
   return {
     requested: state.reviewCount > 0,
     status: state.status,
@@ -92,6 +96,6 @@ export function summarizeReviewForTrace(state: ReviewState | undefined): ReviewT
     requiredChanges: state.report?.requiredChanges ?? [],
     followUp: state.reviewCount > 1,
     reviewCount: state.reviewCount,
-    delivery,
+    delivery: deliveryStatusForReview(state),
   };
 }
