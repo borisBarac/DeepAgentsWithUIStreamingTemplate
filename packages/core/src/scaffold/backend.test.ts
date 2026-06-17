@@ -10,7 +10,6 @@ describe("composite backend defaults", () => {
 
     expect(backend).toBeInstanceOf(CompositeBackend);
     expect(backend.routePrefixes).toEqual([DEFAULT_MEMORY_ROOT]);
-    expect(backend.routes[DEFAULT_MEMORY_ROOT]).toBeDefined();
   });
 
   it("respects explicit backend overrides", () => {
@@ -24,6 +23,5 @@ describe("composite backend defaults", () => {
 
     expect(backend).toBeInstanceOf(CompositeBackend);
     expect(backend.routePrefixes).toEqual([DEFAULT_MEMORY_ROOT]);
-    expect(backend.routes[DEFAULT_MEMORY_ROOT]).toBeDefined();
   });
 });

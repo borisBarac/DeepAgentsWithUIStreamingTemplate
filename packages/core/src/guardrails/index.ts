@@ -15,8 +15,6 @@ export {
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
   createTaskScopeGuardrail,
   taskScopeDecisionSchema,
-  type StructuredTaskScopeModel,
-  type TaskScopeClassifier,
   type TaskScopeDecision,
 } from "./task-scope.ts";
 export type {
@@ -26,4 +24,6 @@ export type {
   GuardrailSafetyOptions,
   GuardrailTaskScopeOptions,
   OpenAIContentSafetyClient,
+  StructuredTaskScopeModel,
+  TaskScopeClassifier,
 } from "./types.ts";

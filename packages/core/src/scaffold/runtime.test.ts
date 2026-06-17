@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { StateBackend, type FilesystemPermission, type SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
 
