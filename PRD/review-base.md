@@ -2,28 +2,32 @@
 
 ## Overview
 
-Add a built-in review subagent pattern to the Deep Agent template. The system should make non-trivial work safer by requiring the main agent to produce an artifact, request a structured review from a dedicated review agent, and revise the artifact when the review identifies required changes.
+Add a built-in review subagent pattern to the Deep Agent template. The system should make final results safer by requiring the main agent to produce an output candidate, request a structured review from a dedicated review agent, and revise the candidate when the review identifies required changes.
 
-The review agent is not a second implementer. Its role is to inspect completed work for correctness, completeness, safety, adherence to the original user request, and unnecessary changes. The main agent remains responsible for planning, implementation, revision, and final delivery.
+The review agent is not a second implementer. Its role is to inspect completed work or a candidate final message for correctness, completeness, safety, adherence to the original user request, and unnecessary changes. The main agent remains responsible for planning, implementation, revision, and final delivery.
 
 ## Goals
 
 - Provide a default `review-agent` subagent for scaffolded Deep Agents.
-- Establish a clear review loop for non-trivial tasks.
+- Establish a clear review loop for final results.
 - Produce structured review reports that are easy for the main agent and host application to parse.
 - Catch incomplete work, incorrect behavior, missing validation, unsafe implementation choices, unnecessary changes, and missed edge cases before final response.
 - Keep review behavior compatible with `create_deep_agent` and the existing subagent configuration model.
 - Make the final response honest when review approval cannot be achieved.
+- Integrate review enforcement with the future state system before this PRD is considered implementable.
+- Keep the base review system generalist with one default `review-agent`.
 
 ## Non-Goals
 
 - Replace human review, code review, QA, or security review.
 - Automatically rewrite artifacts inside the review agent.
-- Require review for every trivial user request.
+- Provide a review bypass for trivial final output.
 - Add a new orchestration framework outside Deep Agents.
 - Add domain-specific tools in this PRD.
+- Add domain-specific review agents in this PRD.
 - Define a scoring model that must be mathematically precise.
 - Implement this PRD in the same change.
+- Ship a prompt-only, wrapper-only, or middleware-only interim version before the state system exists.
 
 ## Current System
 
@@ -75,11 +79,11 @@ agent = create_deep_agent(
     system_prompt="""
 You are the main deep agent.
 
-For non-trivial work:
+Before final output:
 1. Plan the task.
-2. Produce the artifact.
-3. Ask the review-agent to review the final artifact.
-4. If the review requires changes, revise the artifact.
+2. Produce the output candidate.
+3. Ask the review-agent to review the candidate.
+4. If the review requires changes, revise the candidate.
 5. Do not finalize until the review is approved or you clearly explain remaining caveats.
 """,
     subagents=[review_subagent],
@@ -92,7 +96,7 @@ This PRD expands that snippet into product behavior and implementation requireme
 
 ### Main Agent Workflow
 
-For non-trivial work, the main agent should follow this loop:
+Before returning the final result, the main agent should follow this loop:
 
 1. Understand the user request and constraints.
 2. Create a short plan for the work.
@@ -104,6 +108,12 @@ For non-trivial work, the main agent should follow this loop:
 8. If the review status is `blocked`, either resolve the blocker or explain the caveat clearly in the final response.
 
 The main agent should not ask for review before the artifact is complete enough to inspect. Premature review creates noisy feedback and increases task cost without improving quality.
+
+Finalization is the point where `agent.invoke` returns a result that the host application can send to the user. Runtime enforcement should guard this boundary so the final result cannot be returned unless review has approved it or caveats are explicitly surfaced.
+
+Progress and status updates during long-running work do not require review before being sent, as long as they are not presented as the final result.
+
+This PRD is not implementable before the future state system exists. The state system is a hard dependency because runtime enforcement needs durable review state before the `agent.invoke` finalization boundary.
 
 ### Review Agent Responsibilities
 
@@ -204,11 +214,11 @@ Return a structured review report with:
 The main agent prompt should define when review is required and how to respond to review results:
 
 ```text
-For non-trivial work:
+Before final output:
 1. Plan the task.
-2. Produce the artifact.
-3. Ask the review-agent to review the final artifact.
-4. If the review requires changes, revise the artifact.
+2. Produce the output candidate.
+3. Ask the review-agent to review the candidate.
+4. If the review requires changes, revise the candidate.
 5. Do not finalize until the review is approved or you clearly explain remaining caveats.
 ```
 
@@ -216,7 +226,9 @@ The host application may extend the prompt with domain-specific quality bars, to
 
 ## Trigger Policy
 
-Review should be used for non-trivial work, including:
+Review is always required before final output is sent to the user. The review path may be lightweight for simple answers, but final delivery should not bypass review.
+
+Review is especially important for:
 
 - Multi-file code changes.
 - User-facing behavior changes.
@@ -225,17 +237,23 @@ Review should be used for non-trivial work, including:
 - Security-sensitive, privacy-sensitive, destructive, or irreversible operations.
 - Tasks where correctness depends on tests, external constraints, or careful interpretation.
 
-Review may be skipped for trivial work, including:
-
-- Simple factual answers.
-- Small formatting changes.
-- One-line mechanical edits.
-- Commands where the user only asks for direct output.
-- Exploratory brainstorming where no final artifact is being delivered.
-
-When in doubt, the main agent should prefer review if the cost is reasonable and the task has meaningful risk.
+Exploratory internal reasoning and progress/status updates do not require the review gate. The final result sent to the user requires review.
 
 ## Implementation Requirements
+
+### State System Dependency
+
+This PRD must not ship before the future state system exists. Review enforcement depends on state that can represent whether review is required, requested, approved, blocked, or still requiring changes.
+
+The implementation must integrate with that state system rather than relying on prompt-only compliance.
+
+The minimum review lifecycle states for final output are:
+
+- `review_required`
+- `review_requested`
+- `changes_required`
+- `approved`
+- `blocked`
 
 ### Default Subagent
 
@@ -278,6 +296,12 @@ When asking for review, the main agent should provide:
 
 The review agent needs enough context to judge the result without guessing.
 
+The default review agent should review only the context packet supplied by the main agent. It should not independently inspect workspace state or call tools in the base configuration. Its central judgment is whether the candidate artifact is good enough for the user or whether more work is required.
+
+The context packet is not schema-enforced before review starts. If the packet omits decision-critical context, the review agent may return `blocked`.
+
+For pure conversational answers with no files or separate artifact, the candidate final message is sufficient review input.
+
 ### Revision Loop
 
 If `status` is `changes_required`, the main agent should:
@@ -287,12 +311,15 @@ If `status` is `changes_required`, the main agent should:
 - Consider `minor_issues` when they are cheap and aligned with the user request.
 - Request another review after substantial revisions.
 
+The maximum review loop count should be configurable and default to 2.
+
 The loop should stop when:
 
 - The review returns `approved`.
 - The remaining issues are explicitly out of scope.
 - A blocker prevents further progress and is explained to the user.
 - The user interrupts or redirects the task.
+- The configured review loop count is exhausted, in which case the system uses caveated delivery rather than representing the result as approved.
 
 ## Safety And Quality Requirements
 
@@ -317,21 +344,23 @@ The system should make review outcomes visible in traces or logs where supported
 
 This enables quality monitoring without requiring users to inspect every subagent message.
 
+The base system should not persist review history beyond the current run. Host applications may add their own persistence if they need auditability.
+
 ## Acceptance Criteria
 
+- The required state system exists and can represent the review lifecycle.
 - A scaffolded Deep Agent can be created with a default `review-agent` subagent.
-- Non-trivial work prompts the main agent to request review before finalization.
+- The final result is prevented from being sent unless review has approved it or blocked/caveated delivery is explicitly represented.
 - The review agent returns the required structured fields.
 - The main agent revises artifacts when review returns `changes_required`.
 - The main agent can finalize with clear caveats when review is `blocked`.
-- Trivial requests can complete without unnecessary review.
+- Simple requests can use a lightweight review path, but the final result still passes the review gate.
+- Pure conversational answers can be reviewed using only the candidate final message.
 - Review reports identify missing tests or validation when relevant.
 - The review agent does not rewrite artifacts unless explicitly asked.
+- The review loop limit is configurable and defaults to 2.
+- Exhausting the review loop limit results in caveated delivery.
 
 ## Open Questions
 
-- Should the review report be enforced as strict JSON, YAML, or a typed schema?
-- Should review be mandatory at the runtime level or only prompt-guided?
-- Should the review agent have access to the same tools as the main agent, read-only tools only, or no tools by default?
-- Should review history be persisted for later audit?
-- Should different domains provide specialized review agents in addition to the base `review-agent`?
+- None currently.

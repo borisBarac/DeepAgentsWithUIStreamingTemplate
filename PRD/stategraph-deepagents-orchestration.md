@@ -13,6 +13,11 @@ The current system already exposes a strong default Deep Agents scaffold through
 
 This PRD does not replace that scaffold. It defines when and how to add a higher-level `StateGraph` controller above it.
 
+Companion docs:
+
+- [Decision log](./stategraph-deepagents-orchestration-adr.md)
+- [Glossary](./stategraph-deepagents-orchestration-glossary.md)
+
 The intended mental model is:
 
 ```text
@@ -226,7 +231,16 @@ export type OrchestratedDeepAgentRoute =
   | "critic"
   | "judge"
   | "final"
+  | "blocked"
   | "end";
+
+export type OrchestratedDeepAgentError = {
+  node: string;
+  category: "model" | "tool" | "permission" | "validation" | "host" | "unknown";
+  message: string;
+  retryCount: number;
+  required: boolean;
+};
 
 export type OrchestratedDeepAgentState = {
   task: string;
@@ -239,7 +253,7 @@ export type OrchestratedDeepAgentState = {
   judgeResult?: string;
   finalAnswer?: string;
   next: OrchestratedDeepAgentRoute;
-  errors: string[];
+  errors: OrchestratedDeepAgentError[];
 };
 ```
 
@@ -538,11 +552,11 @@ console.log(result.finalAnswer);
 
 ## Open Questions
 
-- Should v1 include a generic orchestrated graph only, or also a debate-specific graph factory?
-- Should coding be a first-class specialist role in the default scaffold, or only a graph-level node backed by `createBaselineAgent(...)`?
-- Should graph-level approval gates use LangGraph interrupts directly, host-app state, or both?
-- Should finalization be deterministic formatting in v1, or a model-backed Deep Agent node?
-- Should graph state be persisted through LangGraph checkpointers in the first implementation pass?
+- Should v1 include a generic orchestrated graph only, or also a debate-specific graph factory? Resolved by ADR-002.
+- Should coding be a first-class specialist role in the default scaffold, or only a graph-level node backed by `createBaselineAgent(...)`? Resolved by ADR-003.
+- Should graph-level approval gates use LangGraph interrupts directly, host-app state, or both? Resolved by ADR-004.
+- Should finalization be deterministic formatting in v1, or a model-backed Deep Agent node? Resolved by ADR-005.
+- Should graph state be persisted through LangGraph checkpointers in the first implementation pass? Resolved by ADR-006.
 
 ## Future Extensions
 
@@ -561,4 +575,3 @@ Replace deterministic routing with a structured-output router only after unit te
 ### Evaluation Harness
 
 Add LangSmith datasets for route accuracy, debate judge quality, critic usefulness, and end-to-end task success.
-
