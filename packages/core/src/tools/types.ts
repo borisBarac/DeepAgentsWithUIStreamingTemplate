@@ -1,7 +1,5 @@
 import type { ClientTool, ServerTool, StructuredTool } from "@langchain/core/tools";
 
-import type { SpecialistRole } from "../scaffold/index.ts";
-
 export type ToolId = string;
 export type RoleId = string;
 export type SpecializedAgentTool = StructuredTool | ClientTool | ServerTool;
