@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { StateBackend, type FilesystemPermission, type SubAgent } from "deepagents";
+import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
 
@@ -24,8 +23,11 @@ describe("runtime scaffold defaults", () => {
     const scaffold = createRuntimeScaffold();
 
     expect(scaffold.architecture).toBe("supervisor-specialists");
-    expect(scaffold.memoryFilePaths).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
-    expect(scaffold.memory).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
+    expect(scaffold.memoryFilePaths).toEqual([
+      "/memory/project-facts.md",
+      "/memory/user-preferences.md",
+    ]);
+    expect(scaffold.memory).toEqual(["/memory/project-facts.md", "/memory/user-preferences.md"]);
     expect(scaffold.virtualFilesystem.reports).toBe("/reports");
     expect(scaffold.interruptOn).toEqual({
       write_file: true,

@@ -73,9 +73,41 @@ const result = await agent.invoke({
 the default loader, that is `packages/core/prompts/baseline.md`; callers cannot bypass the loader
 with an inline `systemPrompt`.
 
-The scaffold loads `/memory/AGENTS.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists, and only the default `clarifier` ships with a bundled `clarify-deeply` skill. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists, and only the default `clarifier` ships with a bundled `clarify-deeply` skill. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
 The default `clarifier` subagent includes the bundled `clarify-deeply` skill at `/skills/clarify-deeply/`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
+
+## Memory
+
+`/memory` is the durable long-term memory root, backed by `StoreBackend` through `CompositeBackend`. Short-term state (`/scratch`, `/plans`, `/reports`, `/artifacts`) stays on `StateBackend` and is not durable. The memory module (`packages/core/src/memory`) makes the memory product contract explicit and testable.
+
+V1 assumes a **single-user runtime**: each local agent or isolated server sandbox serves exactly one user and uses one stable single-user namespace.
+
+Default durable memory files:
+
+- `/memory/project-facts.md` — stable project and environment facts.
+- `/memory/user-preferences.md` — explicit preferences the user asked to remember.
+
+The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the seed helpers ship wording that defines what belongs in each file.
+
+Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edit_file`) — there is no hidden side channel. In v1, writes to the writable single-user memory files are auto-approved (see `createSingleUserMemoryPolicy`), while other sensitive tool interrupts (`write_file`, `edit_file`, `execute`) stay enabled. `resolveMemoryInterrupts(...)` is an explicit passthrough so memory auto-approval never silently disables interrupt safety.
+
+```ts
+import {
+  createDefaultMemorySeedFiles,
+  createSingleUserMemoryNamespace,
+  createSingleUserMemoryPolicy,
+  reviewMemoryContent,
+} from "@deep-agent-template/core";
+
+const seedFiles = createDefaultMemorySeedFiles();
+const namespace = createSingleUserMemoryNamespace();
+const policy = createSingleUserMemoryPolicy();
+
+reviewMemoryContent("OPENAI_API_KEY=sk-...").allowed; // false
+```
+
+StateGraph orchestration nodes must not auto-write durable `/memory`; durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
 
 ## Prompts
 
