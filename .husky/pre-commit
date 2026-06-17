@@ -1,0 +1,2 @@
+bunx biome format --write --staged --no-errors-on-unmatched
+git diff --cached --name-only -z | xargs -0 git add --
