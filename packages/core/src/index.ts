@@ -77,6 +77,25 @@ export {
   type LangSmithTracingOptions,
 } from "./observability/index.ts";
 export {
+  adaptDeepAgent,
+  type CreateOrchestratedDeepAgentGraphOptions,
+  composeFinalAnswer,
+  createOrchestratedDeepAgentGraph,
+  type OrchestratedDeepAgent,
+  type OrchestratedDeepAgentError,
+  type OrchestratedDeepAgentErrorCategory,
+  type OrchestratedDeepAgentGraph,
+  type OrchestratedDeepAgentInvokeInput,
+  type OrchestratedDeepAgentInvokeOutput,
+  type OrchestratedDeepAgentMessage,
+  type OrchestratedDeepAgentRole,
+  type OrchestratedDeepAgentRoute,
+  type OrchestratedDeepAgentRoutingOptions,
+  type OrchestratedDeepAgentState,
+  selectWorkRoute,
+  toStructuredError,
+} from "./orchestration.ts";
+export {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
   DEFAULT_ANALYST_SYSTEM_PROMPT,
