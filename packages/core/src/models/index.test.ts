@@ -5,7 +5,7 @@ import {
   DEFAULT_DEEPSEEK_MODEL,
   DEFAULT_MODEL_ID,
   resolveModelIdentifier,
-} from "./models";
+} from "./index.ts";
 
 describe("resolveModelIdentifier", () => {
   it("uses OpenRouter DeepSeek V4 by default", () => {

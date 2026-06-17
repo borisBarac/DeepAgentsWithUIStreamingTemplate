@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { createBaselineAgent, createBasicAgent } from "./agent";
-import type { PromptLoader } from "./prompts";
+import { createBaselineAgent, createBasicAgent } from "./index.ts";
+import type { PromptLoader } from "../prompts/index.ts";
 
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "custom baseline prompt",

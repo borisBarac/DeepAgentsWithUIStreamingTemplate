@@ -12,9 +12,9 @@ import {
   type ClarificationConfig,
   clarificationResultSchema,
   createClarificationConfig,
-} from "./clarification";
-import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "./prompts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "./skills";
+} from "../clarification/index.ts";
+import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "../prompts/index.ts";
+import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 
 export const DEFAULT_SCRATCH_ROOT = "/scratch";
 export const DEFAULT_PLANS_ROOT = "/plans";
@@ -64,12 +64,32 @@ export type DeepAgentBlueprint = {
   virtualFilesystem: VirtualFilesystemLayout;
   memoryFilePaths: readonly string[];
   interruptOn: NonNullable<CreateDeepAgentParams["interruptOn"]>;
-  permissions: FilesystemPermission[];
-  subagents: SubAgent[];
+  permissions: NonNullable<CreateDeepAgentParams["permissions"]>;
+  subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
   clarification: {
     config: ClarificationConfig;
     requiredSubagent: "clarifier";
   };
+};
+
+export type RuntimeScaffold = DeepAgentBlueprint & {
+  backend: CreateDeepAgentParams["backend"];
+  memory: CreateDeepAgentParams["memory"];
+  systemPrompt: string;
+};
+
+export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentsOptions & {
+  backend?: CreateDeepAgentParams["backend"];
+  backendOptions?: CreateCompositeBackendOptions;
+  clarificationOptions?: Partial<ClarificationConfig>;
+  interruptOn?: CreateDeepAgentParams["interruptOn"];
+  memory?: CreateDeepAgentParams["memory"];
+  memoryFilePaths?: readonly string[];
+  permissions?: CreateDeepAgentParams["permissions"];
+  permissionOptions?: CreateDefaultPermissionsOptions;
+  promptLoader?: PromptLoader;
+  subagents?: CreateDeepAgentParams["subagents"];
+  systemPrompt?: string;
 };
 
 const DEFAULT_WRITABLE_ROOTS = [
@@ -104,7 +124,7 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
   };
 }
 
-export function createDefaultInterrupts(): NonNullable<CreateDeepAgentParams["interruptOn"]> {
+function createDefaultInterrupts(): NonNullable<CreateDeepAgentParams["interruptOn"]> {
   return {
     write_file: true,
     edit_file: true,
@@ -112,7 +132,7 @@ export function createDefaultInterrupts(): NonNullable<CreateDeepAgentParams["in
   };
 }
 
-export function createDefaultPermissions(
+function createDefaultPermissions(
   options: CreateDefaultPermissionsOptions = {},
 ): FilesystemPermission[] {
   const readableRoots = [
@@ -161,7 +181,7 @@ export function createDefaultPermissions(
   return permissions;
 }
 
-export function createDefaultSubagents(
+function createDefaultSubagents(
   options: CreateDefaultSubagentsOptions = {},
   clarificationOptions: Partial<ClarificationConfig> = {},
   promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
@@ -224,7 +244,7 @@ export function createDefaultSubagents(
   return [clarifier, researcher, analyst, critic];
 }
 
-export function createVirtualFilesystemLayout(): VirtualFilesystemLayout {
+function createVirtualFilesystemLayout(): VirtualFilesystemLayout {
   return {
     scratch: DEFAULT_SCRATCH_ROOT,
     plans: DEFAULT_PLANS_ROOT,
@@ -235,7 +255,7 @@ export function createVirtualFilesystemLayout(): VirtualFilesystemLayout {
   };
 }
 
-export function createDefaultCompositeBackend(
+function createDefaultCompositeBackend(
   options: CreateCompositeBackendOptions = {},
 ): CompositeBackend {
   const defaultBackend = options.defaultBackend ?? new StateBackend();
@@ -250,25 +270,21 @@ export function createDefaultCompositeBackend(
   });
 }
 
-export type CreateSupervisorBlueprintOptions = CreateDefaultSubagentsOptions & {
-  clarification?: Partial<ClarificationConfig>;
-  permissions?: CreateDefaultPermissionsOptions;
-  memoryFilePaths?: readonly string[];
-  promptLoader?: PromptLoader;
-};
-
-export function createSupervisorBlueprint(
-  options: CreateSupervisorBlueprintOptions = {},
-): DeepAgentBlueprint {
-  const clarification = createClarificationConfig(options.clarification);
+export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}): RuntimeScaffold {
+  const promptLoader = options.promptLoader ?? DEFAULT_PROMPT_LOADER;
+  const clarification = createClarificationConfig(options.clarificationOptions);
+  const memoryFilePaths = options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS;
 
   return {
     architecture: "supervisor-specialists",
     virtualFilesystem: createVirtualFilesystemLayout(),
-    memoryFilePaths: options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS,
-    interruptOn: createDefaultInterrupts(),
-    permissions: createDefaultPermissions(options.permissions),
-    subagents: createDefaultSubagents(options, clarification, options.promptLoader),
+    memoryFilePaths,
+    backend: options.backend ?? createDefaultCompositeBackend(options.backendOptions),
+    interruptOn: options.interruptOn ?? createDefaultInterrupts(),
+    memory: options.memory ?? [...memoryFilePaths],
+    permissions: options.permissions ?? createDefaultPermissions(options.permissionOptions),
+    subagents: options.subagents ?? createDefaultSubagents(options, clarification, promptLoader),
+    systemPrompt: options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification),
     clarification: {
       config: clarification,
       requiredSubagent: "clarifier",

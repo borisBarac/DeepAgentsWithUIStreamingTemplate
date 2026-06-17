@@ -4,9 +4,10 @@ import {
   MAX_SKILL_DESCRIPTION_LENGTH,
   MAX_SKILL_NAME_LENGTH,
   parseSkillMetadata,
+  type SubAgent,
 } from "deepagents";
 
-import { createDefaultSubagents } from "./scaffold";
+import { createRuntimeScaffold } from "../scaffold/index.ts";
 import {
   CLARIFY_DEEPLY_SKILL_CONTENT,
   CLARIFY_DEEPLY_SKILL_DESCRIPTION,
@@ -14,7 +15,11 @@ import {
   CLARIFY_DEEPLY_SKILL_NAME,
   CLARIFY_DEEPLY_SKILL_PATH,
   createDefaultSkillFiles,
-} from "./skills";
+} from "./index.ts";
+
+function asDefaultSubagents(subagents: unknown): SubAgent[] {
+  return subagents as SubAgent[];
+}
 
 describe("bundled skills", () => {
   it("keeps clarify-deeply metadata within skill spec limits", () => {
@@ -51,7 +56,9 @@ describe("bundled skills", () => {
   });
 
   it("attaches clarify-deeply to the clarifier by default", () => {
-    const [clarifier, researcher, analyst, critic] = createDefaultSubagents();
+    const [clarifier, researcher, analyst, critic] = asDefaultSubagents(
+      createRuntimeScaffold().subagents,
+    );
 
     expect(clarifier?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
     expect(researcher?.skills).toEqual([]);

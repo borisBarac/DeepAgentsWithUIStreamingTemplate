@@ -10,7 +10,7 @@ import {
   recordClarificationAnswers,
   resolveClarificationGate,
   selectUserFacingQuestions,
-} from "./clarification";
+} from "./index.ts";
 
 describe("clarification defaults", () => {
   it("enables mandatory clarification preflight by default", () => {
@@ -43,7 +43,7 @@ describe("clarification result schema", () => {
   });
 
   it("produces a value assignable to the ClarificationResult domain type", () => {
-    const parsed: import("./clarification").ClarificationResult =
+    const parsed: import("./index.ts").ClarificationResult =
       clarificationResultSchema.parse(validResult);
 
     expect(parsed.readyToProceed).toBe(false);

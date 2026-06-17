@@ -1,19 +1,19 @@
 import { describe, expect, it } from "bun:test";
 
-import * as agent from "./agent";
-import * as clarification from "./clarification";
+import * as agent from "./agent/index.ts";
+import * as clarification from "./clarification/index.ts";
+import * as guardrails from "./guardrails/index.ts";
 import * as index from "./index";
-import * as models from "./models";
-import * as observability from "./observability";
-import * as prompts from "./prompts";
-import * as scaffold from "./scaffold";
-import * as skills from "./skills";
-import * as tools from "./tools";
+import * as models from "./models/index.ts";
+import * as observability from "./observability/index.ts";
+import * as prompts from "./prompts/index.ts";
+import * as scaffold from "./scaffold/index.ts";
+import * as skills from "./skills/index.ts";
+import * as tools from "./tools/index.ts";
 
 describe("index barrel exports", () => {
   it("re-exports agent helpers from the agent module", () => {
     expect(index.createBasicAgent).toBe(agent.createBasicAgent);
-    expect(index.createSupervisorBlueprint).toBe(agent.createSupervisorBlueprint);
     expect(index.DEFAULT_AGENT_NAME).toBe(agent.DEFAULT_AGENT_NAME);
     expect(index.DEFAULT_SYSTEM_PROMPT).toBe(agent.DEFAULT_SYSTEM_PROMPT);
   });
@@ -42,6 +42,11 @@ describe("index barrel exports", () => {
     );
   });
 
+  it("re-exports the guardrail decision interface from the guardrails module", () => {
+    expect(index.createGuardrailDecision).toBe(guardrails.createGuardrailDecision);
+    expect(index.DEFAULT_GUARDRAIL_POLICY_LOADER).toBe(guardrails.DEFAULT_GUARDRAIL_POLICY_LOADER);
+  });
+
   it("re-exports prompt constants from the prompts module", () => {
     expect(index.DEFAULT_ANALYST_SYSTEM_PROMPT).toBe(prompts.DEFAULT_ANALYST_SYSTEM_PROMPT);
     expect(index.DEFAULT_BASELINE_SYSTEM_PROMPT).toBe(prompts.DEFAULT_BASELINE_SYSTEM_PROMPT);
@@ -53,12 +58,8 @@ describe("index barrel exports", () => {
     expect(index.createSupervisorSystemPrompt).toBe(prompts.createSupervisorSystemPrompt);
   });
 
-  it("re-exports scaffold helpers from the scaffold module", () => {
-    expect(index.createDefaultInterrupts).toBe(scaffold.createDefaultInterrupts);
-    expect(index.createDefaultPermissions).toBe(scaffold.createDefaultPermissions);
-    expect(index.createDefaultSubagents).toBe(scaffold.createDefaultSubagents);
-    expect(index.createSupervisorBlueprint).toBe(scaffold.createSupervisorBlueprint);
-    expect(index.createVirtualFilesystemLayout).toBe(scaffold.createVirtualFilesystemLayout);
+  it("re-exports the runtime scaffold interface from the scaffold module", () => {
+    expect(index.createRuntimeScaffold).toBe(scaffold.createRuntimeScaffold);
     expect(index.DEFAULT_ARTIFACTS_ROOT).toBe(scaffold.DEFAULT_ARTIFACTS_ROOT);
     expect(index.DEFAULT_MEMORY_FILE_PATHS).toBe(scaffold.DEFAULT_MEMORY_FILE_PATHS);
     expect(index.DEFAULT_MEMORY_ROOT).toBe(scaffold.DEFAULT_MEMORY_ROOT);

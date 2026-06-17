@@ -2,13 +2,13 @@ import { describe, expect, it } from "bun:test";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
-import type { SpecialistRole } from "./scaffold";
+import type { SpecialistRole } from "../scaffold/index.ts";
 import {
   createDefaultSpecialistRoleToolsets,
   createSpecializedToolStore,
   resolveSpecializedTools,
   resolveSpecializedToolsForRoles,
-} from "./tools";
+} from "./index.ts";
 
 describe("specialized tool store", () => {
   const searchTool = tool(async ({ query }: { query: string }) => `search:${query}`, {

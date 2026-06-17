@@ -5,10 +5,9 @@ export {
   createBaselineAgent,
   createBasicAgent,
   createScaffoldedAgent,
-  createSupervisorBlueprint,
   DEFAULT_AGENT_NAME,
   DEFAULT_SYSTEM_PROMPT,
-} from "./agent";
+} from "./agent/index.ts";
 export {
   type ArchivedClarificationState,
   applyClarificationResult,
@@ -38,22 +37,20 @@ export {
   recordClarificationAnswers,
   resolveClarificationGate,
   selectUserFacingQuestions,
-} from "./clarification";
+} from "./clarification/index.ts";
 export {
-  type CreateDefaultGuardrailsOptions,
-  type CreateSafetyGuardrailOptions,
-  type CreateTaskScopeGuardrailOptions,
-  contentSafetyGuardrail,
-  createDefaultGuardrails,
-  createSafetyGuardrail,
-  createTaskScopeGuardrail,
+  type CreateGuardrailDecisionOptions,
+  createGuardrailDecision,
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   DEFAULT_GUARDRAIL_REFUSAL,
   DEFAULT_OPENAI_MODERATION_MODEL,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
   type DeepAgentMiddleware,
+  type GuardrailDecisionRuntime,
   type GuardrailPolicyLoader,
+  type GuardrailSafetyOptions,
+  type GuardrailTaskScopeOptions,
   MarkdownGuardrailPolicyLoader,
   type OpenAIContentSafetyClient,
   type StructuredTaskScopeModel,
@@ -61,7 +58,7 @@ export {
   type TaskScopeDecision,
   type TaskScopePolicyBundle,
   taskScopeDecisionSchema,
-} from "./guardrails";
+} from "./guardrails/index.ts";
 export {
   type CreateChatModelOptions,
   createChatModel,
@@ -73,12 +70,12 @@ export {
   type ResolvedModelIdentifier,
   resolveModelIdentifier,
   type SupportedModelProvider,
-} from "./models";
+} from "./models/index.ts";
 export {
   configureLangSmithTracing,
   type LangSmithTracingConfig,
   type LangSmithTracingOptions,
-} from "./observability";
+} from "./observability/index.ts";
 export {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
@@ -91,17 +88,13 @@ export {
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
   MarkdownPromptLoader,
   type PromptLoader,
-} from "./prompts";
+} from "./prompts/index.ts";
 export {
   type CreateCompositeBackendOptions,
   type CreateDefaultPermissionsOptions,
   type CreateDefaultSubagentsOptions,
-  type CreateSupervisorBlueprintOptions,
-  createDefaultCompositeBackend,
-  createDefaultInterrupts,
-  createDefaultPermissions,
-  createDefaultSubagents,
-  createVirtualFilesystemLayout,
+  type CreateRuntimeScaffoldOptions,
+  createRuntimeScaffold,
   DEFAULT_ARTIFACTS_ROOT,
   DEFAULT_MEMORY_FILE_PATHS,
   DEFAULT_MEMORY_ROOT,
@@ -110,9 +103,10 @@ export {
   DEFAULT_SCRATCH_ROOT,
   DEFAULT_SKILLS_ROOT,
   type DeepAgentBlueprint,
+  type RuntimeScaffold,
   type SpecialistRole,
   type VirtualFilesystemLayout,
-} from "./scaffold";
+} from "./scaffold/index.ts";
 export {
   CLARIFY_DEEPLY_SKILL_CONTENT,
   CLARIFY_DEEPLY_SKILL_DESCRIPTION,
@@ -120,7 +114,7 @@ export {
   CLARIFY_DEEPLY_SKILL_NAME,
   CLARIFY_DEEPLY_SKILL_PATH,
   createDefaultSkillFiles,
-} from "./skills";
+} from "./skills/index.ts";
 export {
   type CreateSpecializedToolStoreOptions,
   createDefaultSpecialistRoleToolsets,
@@ -135,4 +129,4 @@ export {
   type SpecializedToolRiskLevel,
   type SpecializedToolStore,
   type ToolId,
-} from "./tools";
+} from "./tools/index.ts";

@@ -14,7 +14,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 - Safe-by-default interrupt rules for `write_file`, `edit_file`, and `execute`
 - A fixed persistent memory store mounted at `/memory`
 - A constrained virtual filesystem layout for `/scratch`, `/plans`, `/reports`, `/artifacts`, `/memory`, and `/skills`
-- Inspectable blueprint helpers so the next implementation pass can extend the defaults instead of replacing them blindly
+- An inspectable runtime scaffold so the next implementation pass can extend the defaults instead of replacing them blindly
 - Markdown-backed default prompts with a typed `PromptLoader` extension point
 
 ## Environment
@@ -51,15 +51,14 @@ openrouter:deepseek/deepseek-v4-pro
 import {
   createBasicAgent,
   createDefaultSkillFiles,
-  createDefaultCompositeBackend,
-  createSupervisorBlueprint,
+  createRuntimeScaffold,
 } from "@deep-agent-template/core";
 
-const blueprint = createSupervisorBlueprint();
+const runtime = createRuntimeScaffold();
 
 const agent = createBasicAgent({
-  backend: createDefaultCompositeBackend(),
-  skills: [blueprint.virtualFilesystem.skills],
+  backend: runtime.backend,
+  skills: [runtime.virtualFilesystem.skills],
 });
 
 const result = await agent.invoke({
@@ -111,6 +110,20 @@ Task-scope policy is controlled by markdown files under `packages/core/guardrail
 - `taskScope.disallowedTasks.md`
 
 The default runtime safety decision uses OpenAI moderation; provide `OPENAI_API_KEY` for live invocations.
+
+Use `createGuardrailDecision` when building a custom runtime. It resolves policy overrides, enabled guardrails, and the final middleware order:
+
+```ts
+const guardrailDecision = createGuardrailDecision({
+  taskScopeModel: model,
+  middleware: callerMiddleware,
+});
+
+createDeepAgent({
+  model,
+  middleware: guardrailDecision.middleware,
+});
+```
 
 Disable the default guardrails when building a custom runtime:
 
@@ -189,11 +202,11 @@ const gate = resolveClarificationGate({
 });
 ```
 
-You can override or disable the default clarification behavior through the scaffolded factory and blueprint helpers:
+You can override or disable the default clarification behavior through the scaffolded factory and runtime scaffold:
 
 ```ts
-const blueprint = createSupervisorBlueprint({
-  clarification: {
+const runtime = createRuntimeScaffold({
+  clarificationOptions: {
     maxRounds: 6,
     questionsPerRound: 2,
   },

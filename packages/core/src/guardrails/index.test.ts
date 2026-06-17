@@ -1,18 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
-import { createBasicAgent } from "./agent";
+import { createBasicAgent } from "../agent/index.ts";
 import {
-  contentSafetyGuardrail,
-  createDefaultGuardrails,
-  createSafetyGuardrail,
-  createTaskScopeGuardrail,
+  createGuardrailDecision,
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
   MarkdownGuardrailPolicyLoader,
   type OpenAIContentSafetyClient,
   type TaskScopeClassifier,
-} from "./guardrails";
+} from "./index.ts";
 
 type HookableMiddleware = {
   name: string;
@@ -59,9 +56,13 @@ describe("guardrail policies", () => {
   });
 });
 
-describe("createSafetyGuardrail", () => {
+describe("createGuardrailDecision", () => {
   it("blocks flagged moderation results before the agent runs", async () => {
-    const middleware = asHookable(createSafetyGuardrail({ openai: createFakeOpenAI(true) }));
+    const decision = createGuardrailDecision({
+      safety: { openai: createFakeOpenAI(true) },
+      taskScope: false,
+    });
+    const middleware = asHookable(decision.middleware[0]);
 
     const result = await middleware.beforeAgent.hook({
       messages: [{ role: "user", content: "unsafe request" }],
@@ -71,7 +72,11 @@ describe("createSafetyGuardrail", () => {
   });
 
   it("allows unflagged moderation results", async () => {
-    const middleware = asHookable(createSafetyGuardrail({ openai: createFakeOpenAI(false) }));
+    const decision = createGuardrailDecision({
+      safety: { openai: createFakeOpenAI(false) },
+      taskScope: false,
+    });
+    const middleware = asHookable(decision.middleware[0]);
 
     const result = await middleware.beforeAgent.hook({
       messages: [{ role: "user", content: "summarize this file" }],
@@ -79,9 +84,7 @@ describe("createSafetyGuardrail", () => {
 
     expect(result).toBeUndefined();
   });
-});
 
-describe("createTaskScopeGuardrail", () => {
   it("blocks out-of-scope requests using the structured classifier", async () => {
     const classifier: TaskScopeClassifier = {
       invoke: async () => ({
@@ -91,7 +94,11 @@ describe("createTaskScopeGuardrail", () => {
         reason: "The request is unrelated to this project.",
       }),
     };
-    const middleware = asHookable(createTaskScopeGuardrail({ classifier }));
+    const decision = createGuardrailDecision({
+      safety: false,
+      taskScope: { classifier },
+    });
+    const middleware = asHookable(decision.middleware[0]);
 
     const result = await middleware.beforeAgent.hook({
       messages: [{ role: "user", content: "book me a flight" }],
@@ -109,7 +116,11 @@ describe("createTaskScopeGuardrail", () => {
         reason: "The request targets this repository.",
       }),
     };
-    const middleware = asHookable(createTaskScopeGuardrail({ classifier }));
+    const decision = createGuardrailDecision({
+      safety: false,
+      taskScope: { classifier },
+    });
+    const middleware = asHookable(decision.middleware[0]);
 
     const result = await middleware.beforeAgent.hook({
       messages: [{ role: "user", content: "add guardrail tests" }],
@@ -117,10 +128,7 @@ describe("createTaskScopeGuardrail", () => {
 
     expect(result).toBeUndefined();
   });
-});
-
-describe("createDefaultGuardrails", () => {
-  it("creates safety and task-scope middleware in order", () => {
+  it("creates safety and task-scope middleware before caller middleware", () => {
     const classifier: TaskScopeClassifier = {
       invoke: async () => ({
         inScope: true,
@@ -129,32 +137,58 @@ describe("createDefaultGuardrails", () => {
         reason: "ok",
       }),
     };
+    const callerMiddleware = { name: "CallerMiddleware" };
 
-    const middleware = createDefaultGuardrails({
+    const decision = createGuardrailDecision({
       safety: {
         openai: createFakeOpenAI(false),
       },
       taskScope: { classifier },
+      middleware: [callerMiddleware],
     });
 
-    expect(middleware.map((item) => item.name)).toEqual([
+    expect(decision.middleware.map((item) => item.name)).toEqual([
       DEFAULT_SAFETY_GUARDRAIL_NAME,
       DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
+      "CallerMiddleware",
     ]);
   });
 
-  it("can be disabled", () => {
-    expect(createDefaultGuardrails({ enabled: false })).toEqual([]);
+  it("can disable guardrails while preserving caller middleware", () => {
+    const callerMiddleware = { name: "CallerMiddleware" };
+    const decision = createGuardrailDecision({
+      enabled: false,
+      middleware: [callerMiddleware],
+    });
+
+    expect(decision.enabled).toEqual({ safety: false, taskScope: false });
+    expect(decision.middleware).toEqual([callerMiddleware]);
   });
 
-  it("can be created directly without a task-scope model", () => {
-    const middleware = createDefaultGuardrails({
+  it("can be created without a task-scope model", () => {
+    const decision = createGuardrailDecision({
       safety: {
         openai: createFakeOpenAI(false),
       },
     });
 
-    expect(middleware.map((item) => item.name)).toEqual([DEFAULT_SAFETY_GUARDRAIL_NAME]);
+    expect(decision.enabled).toEqual({ safety: true, taskScope: false });
+    expect(decision.middleware.map((item) => item.name)).toEqual([DEFAULT_SAFETY_GUARDRAIL_NAME]);
+  });
+
+  it("returns resolved task-scope policies", () => {
+    const decision = createGuardrailDecision({
+      enabled: false,
+      taskScope: {
+        policies: {
+          allowedTasks: "Only repository tasks.",
+        },
+      },
+    });
+
+    expect(decision.policies.allowedTasks).toBe("Only repository tasks.");
+    expect(decision.policies.requiredContext).toContain("Required Context");
+    expect(decision.policies.disallowedTasks).toContain("Disallowed Tasks");
   });
 });
 
@@ -193,17 +227,5 @@ describe("agent guardrail integration", () => {
 
     expect(names).not.toContain(DEFAULT_SAFETY_GUARDRAIL_NAME);
     expect(names).not.toContain(DEFAULT_TASK_SCOPE_GUARDRAIL_NAME);
-  });
-});
-
-describe("contentSafetyGuardrail", () => {
-  it("uses the OpenAI moderation client directly", async () => {
-    const middleware = asHookable(contentSafetyGuardrail(createFakeOpenAI(true)));
-
-    const result = await middleware.beforeAgent.hook({
-      messages: [{ role: "user", content: "unsafe request" }],
-    });
-
-    expect(JSON.stringify(result)).toContain("unsafe content");
   });
 });

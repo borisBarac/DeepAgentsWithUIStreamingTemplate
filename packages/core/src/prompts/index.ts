@@ -1,15 +1,15 @@
-import analystPromptText from "../prompts/analyst.md" with { type: "text" };
-import baselinePromptText from "../prompts/baseline.md" with { type: "text" };
-import clarifierPromptText from "../prompts/clarifier.md" with { type: "text" };
-import criticPromptText from "../prompts/critic.md" with { type: "text" };
-import researcherPromptText from "../prompts/researcher.md" with { type: "text" };
-import supervisorPromptText from "../prompts/supervisor.md" with { type: "text" };
+import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
+import baselinePromptText from "../../prompts/baseline.md" with { type: "text" };
+import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
+import criticPromptText from "../../prompts/critic.md" with { type: "text" };
+import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
+import supervisorPromptText from "../../prompts/supervisor.md" with { type: "text" };
 import {
   type ClarificationConfig,
   createClarificationConfig,
   DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
-} from "./clarification";
+} from "../clarification/index.ts";
 
 export interface PromptLoader {
   getBaselinePrompt(): string;

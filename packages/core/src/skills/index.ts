@@ -1,6 +1,6 @@
 import { type FileData, MAX_SKILL_DESCRIPTION_LENGTH, MAX_SKILL_NAME_LENGTH } from "deepagents";
 
-import clarifyDeeplySkillText from "../skills/clarify-deeply/SKILL.md" with { type: "text" };
+import clarifyDeeplySkillText from "../../skills/clarify-deeply/SKILL.md" with { type: "text" };
 
 export const CLARIFY_DEEPLY_SKILL_NAME = "clarify-deeply";
 export const CLARIFY_DEEPLY_SKILL_DIR = "/skills/clarify-deeply/";

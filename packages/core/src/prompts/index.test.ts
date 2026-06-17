@@ -7,7 +7,7 @@ import {
   DEFAULT_PROMPT_LOADER,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
   MarkdownPromptLoader,
-} from "./prompts";
+} from "./index.ts";
 
 describe("prompt defaults", () => {
   it("exports the default clarifier system prompt", () => {

@@ -3,9 +3,9 @@ import { AIMessage, createMiddleware } from "langchain";
 import OpenAI from "openai";
 import { z } from "zod";
 
-import allowedTasksText from "../guardrails/taskScope.allowedTasks.md" with { type: "text" };
-import disallowedTasksText from "../guardrails/taskScope.disallowedTasks.md" with { type: "text" };
-import requiredContextText from "../guardrails/taskScope.requiredContext.md" with { type: "text" };
+import allowedTasksText from "../../guardrails/taskScope.allowedTasks.md" with { type: "text" };
+import disallowedTasksText from "../../guardrails/taskScope.disallowedTasks.md" with { type: "text" };
+import requiredContextText from "../../guardrails/taskScope.requiredContext.md" with { type: "text" };
 
 export const DEFAULT_SAFETY_GUARDRAIL_NAME = "OpenAIContentSafetyGuardrail";
 export const DEFAULT_TASK_SCOPE_GUARDRAIL_NAME = "TaskScopeGuardrailMiddleware";
@@ -62,23 +62,34 @@ export type StructuredTaskScopeModel = {
 
 export type OpenAIContentSafetyClient = Pick<OpenAI, "moderations">;
 
-export type CreateSafetyGuardrailOptions = {
+export type GuardrailSafetyOptions = {
   model?: string;
   openai?: OpenAIContentSafetyClient;
 };
 
-export type CreateTaskScopeGuardrailOptions = {
+export type GuardrailTaskScopeOptions = {
   classifier?: TaskScopeClassifier;
   model?: StructuredTaskScopeModel;
   policies?: Partial<TaskScopePolicyBundle>;
   refusalMessage?: string;
 };
 
-export type CreateDefaultGuardrailsOptions = {
+export type CreateGuardrailDecisionOptions = {
   enabled?: boolean;
+  middleware?: CreateDeepAgentParams["middleware"];
   policyLoader?: GuardrailPolicyLoader;
-  safety?: false | CreateSafetyGuardrailOptions;
-  taskScope?: false | CreateTaskScopeGuardrailOptions;
+  safety?: false | GuardrailSafetyOptions;
+  taskScopeModel?: StructuredTaskScopeModel;
+  taskScope?: false | GuardrailTaskScopeOptions;
+};
+
+export type GuardrailDecisionRuntime = {
+  enabled: {
+    safety: boolean;
+    taskScope: boolean;
+  };
+  middleware: DeepAgentMiddleware[];
+  policies: TaskScopePolicyBundle;
 };
 
 type MessageLike = {
@@ -153,9 +164,9 @@ function refusal(reason: string): AIMessage {
   );
 }
 
-export const contentSafetyGuardrail = (
+const contentSafetyGuardrail = (
   openai?: OpenAIContentSafetyClient,
-  options: Pick<CreateSafetyGuardrailOptions, "model"> = {},
+  options: Pick<GuardrailSafetyOptions, "model"> = {},
 ): DeepAgentMiddleware =>
   createMiddleware({
     name: DEFAULT_SAFETY_GUARDRAIL_NAME,
@@ -186,9 +197,7 @@ export const contentSafetyGuardrail = (
     },
   }) as DeepAgentMiddleware;
 
-export function createSafetyGuardrail(
-  options: CreateSafetyGuardrailOptions = {},
-): DeepAgentMiddleware {
+function createSafetyGuardrail(options: GuardrailSafetyOptions = {}): DeepAgentMiddleware {
   return contentSafetyGuardrail(options.openai, {
     model: options.model,
   });
@@ -214,9 +223,7 @@ function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle)
   ].join("\n");
 }
 
-export function createTaskScopeGuardrail(
-  options: CreateTaskScopeGuardrailOptions = {},
-): DeepAgentMiddleware {
+function createTaskScopeGuardrail(options: GuardrailTaskScopeOptions = {}): DeepAgentMiddleware {
   const classifier =
     options.classifier ??
     options.model?.withStructuredOutput(taskScopeDecisionSchema, {
@@ -274,40 +281,58 @@ export function createTaskScopeGuardrail(
   }) as DeepAgentMiddleware;
 }
 
-export function createDefaultGuardrails(
-  options: CreateDefaultGuardrailsOptions & { taskScopeModel?: StructuredTaskScopeModel } = {},
-): DeepAgentMiddleware[] {
+export function createGuardrailDecision(
+  options: CreateGuardrailDecisionOptions = {},
+): GuardrailDecisionRuntime {
+  const policyLoader = options.policyLoader ?? DEFAULT_GUARDRAIL_POLICY_LOADER;
+  const taskScopeOptions = options.taskScope === false ? undefined : options.taskScope;
+  const policies = {
+    requiredContext:
+      taskScopeOptions?.policies?.requiredContext ?? policyLoader.getRequiredContextPolicy(),
+    allowedTasks: taskScopeOptions?.policies?.allowedTasks ?? policyLoader.getAllowedTasksPolicy(),
+    disallowedTasks:
+      taskScopeOptions?.policies?.disallowedTasks ?? policyLoader.getDisallowedTasksPolicy(),
+  };
+
   if (options.enabled === false) {
-    return [];
+    return {
+      enabled: {
+        safety: false,
+        taskScope: false,
+      },
+      middleware: [...(options.middleware ?? [])],
+      policies,
+    };
   }
 
-  const policyLoader = options.policyLoader ?? DEFAULT_GUARDRAIL_POLICY_LOADER;
   const guardrails: DeepAgentMiddleware[] = [];
+  const safetyEnabled = options.safety !== false;
 
   if (options.safety !== false) {
     guardrails.push(createSafetyGuardrail(options.safety));
   }
 
-  const taskScopeOptions = options.taskScope === false ? undefined : options.taskScope;
   const taskScopeModel = taskScopeOptions?.model ?? options.taskScopeModel;
   const taskScopeClassifier = taskScopeOptions?.classifier;
+  const taskScopeEnabled =
+    options.taskScope !== false && Boolean(taskScopeClassifier || taskScopeModel);
 
-  if (options.taskScope !== false && (taskScopeClassifier || taskScopeModel)) {
+  if (taskScopeEnabled) {
     guardrails.push(
       createTaskScopeGuardrail({
         ...taskScopeOptions,
         model: taskScopeModel,
-        policies: {
-          requiredContext:
-            taskScopeOptions?.policies?.requiredContext ?? policyLoader.getRequiredContextPolicy(),
-          allowedTasks:
-            taskScopeOptions?.policies?.allowedTasks ?? policyLoader.getAllowedTasksPolicy(),
-          disallowedTasks:
-            taskScopeOptions?.policies?.disallowedTasks ?? policyLoader.getDisallowedTasksPolicy(),
-        },
+        policies,
       }),
     );
   }
 
-  return guardrails;
+  return {
+    enabled: {
+      safety: safetyEnabled,
+      taskScope: taskScopeEnabled,
+    },
+    middleware: [...guardrails, ...(options.middleware ?? [])],
+    policies,
+  };
 }

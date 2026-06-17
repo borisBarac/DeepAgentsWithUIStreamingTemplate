@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { configureLangSmithTracing } from "./observability";
+import { configureLangSmithTracing } from "./index.ts";
 
 const langSmithEnvKeys = [
   "LANGSMITH_API_KEY",
