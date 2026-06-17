@@ -1,13 +1,18 @@
-import type { ClarificationResult, ClarificationState, ClarificationStatus } from "./types.ts";
+import type {
+  ClarificationAnsweredInformation,
+  ClarificationResult,
+  ClarificationState,
+  ClarificationStatus,
+} from "./types.ts";
 
 function dedupeMissingInformation(items: readonly string[]): string[] {
   return [...new Set(items)];
 }
 
 function mergeAnsweredInformation(
-  existing: ClarificationState["answeredInformation"],
-  next: ClarificationState["answeredInformation"],
-): ClarificationState["answeredInformation"] {
+  existing: readonly ClarificationAnsweredInformation[],
+  next: readonly ClarificationAnsweredInformation[],
+): readonly ClarificationAnsweredInformation[] {
   const answeredByKey = new Map(existing.map((item) => [item.key, item]));
 
   for (const item of next) {
