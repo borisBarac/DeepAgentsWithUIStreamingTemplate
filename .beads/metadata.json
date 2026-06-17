@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "DeepAgentTemplate",
+  "project_id": "b880a26a-7aca-4e80-b248-3fc775a8f3b0"
+}
