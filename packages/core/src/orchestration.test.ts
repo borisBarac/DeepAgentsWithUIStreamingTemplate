@@ -1,0 +1,369 @@
+import { describe, expect, it } from "bun:test";
+
+import { createClarificationState } from "./clarification/index.ts";
+import {
+  type CreateOrchestratedDeepAgentGraphOptions,
+  composeFinalAnswer,
+  createOrchestratedDeepAgentGraph,
+  type OrchestratedDeepAgent,
+  type OrchestratedDeepAgentInvokeInput,
+  type OrchestratedDeepAgentMessage,
+  type OrchestratedDeepAgentRoute,
+  type OrchestratedDeepAgentState,
+  selectWorkRoute,
+  toStructuredError,
+} from "./orchestration.ts";
+
+function createMockAgent(response: string): {
+  agent: OrchestratedDeepAgent;
+  calls: OrchestratedDeepAgentInvokeInput[];
+} {
+  const calls: OrchestratedDeepAgentInvokeInput[] = [];
+  const agent: OrchestratedDeepAgent = {
+    invoke: async (input) => {
+      calls.push(input);
+      return {
+        messages: [...input.messages, { role: "assistant", content: response }],
+      };
+    },
+  };
+  return { agent, calls };
+}
+
+function createFailingAgent(error: unknown): {
+  agent: OrchestratedDeepAgent;
+  calls: OrchestratedDeepAgentInvokeInput[];
+} {
+  const calls: OrchestratedDeepAgentInvokeInput[] = [];
+  const agent: OrchestratedDeepAgent = {
+    invoke: async (input) => {
+      calls.push(input);
+      throw error;
+    },
+  };
+  return { agent, calls };
+}
+
+const NO_CLARIFICATION = {
+  clarification: { enabled: false },
+} satisfies CreateOrchestratedDeepAgentGraphOptions;
+
+function invokeInput(
+  task: string,
+  overrides: Partial<OrchestratedDeepAgentState> = {},
+): OrchestratedDeepAgentState {
+  return {
+    task,
+    messages: [],
+    next: "final",
+    errors: [],
+    ...overrides,
+  };
+}
+
+describe("selectWorkRoute", () => {
+  it("routes research keyword tasks to research", () => {
+    expect(selectWorkRoute("Research Redis streams and summarize options", {})).toBe("research");
+  });
+
+  it("routes coding keyword tasks to code", () => {
+    expect(selectWorkRoute("Implement a Node.js consumer and deploy it", {})).toBe("code");
+  });
+
+  it("routes debate tasks to debate only when debate is enabled", () => {
+    expect(selectWorkRoute("Debate tabs versus spaces", { enableDebate: true })).toBe("debate");
+    expect(selectWorkRoute("Debate tabs versus spaces", { enableDebate: false })).not.toBe(
+      "debate",
+    );
+  });
+
+  it("routes to final when no work stages are enabled", () => {
+    expect(selectWorkRoute("thanks", { enableResearch: false, enableCoding: false })).toBe("final");
+  });
+
+  it("falls back to research when enabled but no keyword matches", () => {
+    expect(selectWorkRoute("thanks", { enableResearch: true, enableCoding: false })).toBe(
+      "research",
+    );
+  });
+});
+
+describe("composeFinalAnswer", () => {
+  it("composes stage outputs into sections", () => {
+    const answer = composeFinalAnswer({
+      task: "original task",
+      messages: [],
+      next: "end",
+      errors: [],
+      researchResult: "found a thing",
+      codeResult: "wrote a module",
+      criticResult: "looks safe",
+    });
+
+    expect(answer).toContain("## Research\nfound a thing");
+    expect(answer).toContain("## Implementation\nwrote a module");
+    expect(answer).toContain("## Critique\nlooks safe");
+  });
+
+  it("flags required failures as blocked", () => {
+    const answer = composeFinalAnswer({
+      task: "original task",
+      messages: [],
+      next: "end",
+      errors: [
+        { node: "critic", category: "model", message: "boom", retryCount: 1, required: true },
+      ],
+    });
+
+    expect(answer).toContain("## Blocked");
+    expect(answer).toContain("[model] critic: boom");
+  });
+
+  it("falls back to the task when no stage produced output", () => {
+    const answer = composeFinalAnswer({
+      task: "just the task",
+      messages: [],
+      next: "end",
+      errors: [],
+    });
+    expect(answer).toBe("just the task");
+  });
+});
+
+describe("toStructuredError", () => {
+  it("categorizes permission failures", () => {
+    const error = toStructuredError(new Error("Permission denied for execute"), "critic", {
+      required: true,
+    });
+    expect(error.category).toBe("permission");
+    expect(error.required).toBe(true);
+    expect(error.node).toBe("critic");
+  });
+
+  it("categorizes unknown failures", () => {
+    expect(toStructuredError("something odd", "researcher").category).toBe("unknown");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph state shape", () => {
+  it("returns a state object with the contract fields", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.task).toBe("hello");
+    expect(Array.isArray(result.errors)).toBe(true);
+    expect(result.next).toBe("end");
+    expect(typeof result.finalAnswer).toBe("string");
+    expect(result.finalAnswer).toBe("hello");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph clarification gate", () => {
+  it("skips clarification when disabled and runs the finalizer", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("summarize this"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.clarification).toBeUndefined();
+    expect(result.next).toBe("end");
+    expect(result.finalAnswer).toBe("summarize this");
+  });
+
+  it("pauses for clarification when enabled and the task is unresolved", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("open-ended task"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.next).toBe("clarify");
+    expect(result.clarification?.status).toBe("needs_clarification");
+    expect(result.finalAnswer).toBeUndefined();
+  });
+
+  it("proceeds to work when clarification is already resolved", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const resolved = {
+      ...createClarificationState("ready task"),
+      status: "ready_to_proceed" as const,
+      readyToProceed: true,
+    };
+
+    const result = (await graph.invoke(
+      invokeInput("ready task", { clarification: resolved }),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.next).toBe("end");
+    expect(result.finalAnswer).toBe("ready task");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
+  it("invokes an injected researcher and flows output to the finalizer", async () => {
+    const { agent: researcher, calls } = createMockAgent("Redis streams are append-only logs.");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false, requireCritic: false },
+      agents: { researcher },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(calls.length).toBe(1);
+    expect(result.researchResult).toBe("Redis streams are append-only logs.");
+    expect(result.finalAnswer).toContain("Redis streams are append-only logs.");
+    expect(result.next).toBe("end");
+  });
+
+  it("runs the critic after research when requireCritic is enabled", async () => {
+    const researcher = createMockAgent("research notes");
+    const critic = createMockAgent("research is sound");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false, requireCritic: true },
+      agents: { researcher: researcher.agent, critic: critic.agent },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(researcher.calls.length).toBe(1);
+    expect(critic.calls.length).toBe(1);
+    expect(result.criticResult).toBe("research is sound");
+    expect(result.finalAnswer).toContain("research notes");
+    expect(result.finalAnswer).toContain("research is sound");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph error propagation", () => {
+  it("records a structured error and still finalizes when an optional stage fails", async () => {
+    const { agent: researcher } = createFailingAgent(new Error("model rate limit 429"));
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false, requireCritic: false },
+      agents: { researcher },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.errors.length).toBe(1);
+    expect(result.errors[0]?.node).toBe("researcher");
+    expect(result.errors[0]?.category).toBe("model");
+    expect(result.next).toBe("end");
+    expect(result.finalAnswer).toContain("## Caveats");
+  });
+
+  it("records a missing-agent error and blocks when a required critic stage has no agent and no model", async () => {
+    const researcher = createMockAgent("research notes");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false, requireCritic: true },
+      agents: { researcher: researcher.agent },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    const criticError = result.errors.find((entry) => entry.node === "critic");
+    expect(criticError).toBeDefined();
+    expect(criticError?.required).toBe(true);
+    expect(criticError?.category).toBe("validation");
+    expect(result.next).toBe("blocked");
+    expect(result.finalAnswer).toBeUndefined();
+  });
+
+  it("routes a code task through the coder node", async () => {
+    const coder = createMockAgent("implementation plan");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: true, requireCritic: false },
+      agents: { coder: coder.agent },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Implement a consumer"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(coder.calls.length).toBe(1);
+    expect(result.codeResult).toBe("implementation plan");
+    expect(result.finalAnswer).toContain("implementation plan");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph routing", () => {
+  it("routes a debate task to the judge node when debate is enabled", async () => {
+    const judge = createMockAgent("winning synthesis");
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: {
+        enableResearch: false,
+        enableCoding: false,
+        enableDebate: true,
+        requireCritic: false,
+      },
+      agents: { judge: judge.agent },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Debate tabs versus spaces"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(judge.calls.length).toBe(1);
+    expect(result.judgeResult).toBe("winning synthesis");
+    expect(result.finalAnswer).toContain("winning synthesis");
+  });
+
+  it("produces every public route value as a reachable destination", () => {
+    const routes: OrchestratedDeepAgentRoute[] = [
+      "clarify",
+      "research",
+      "code",
+      "debate",
+      "critic",
+      "judge",
+      "final",
+      "blocked",
+      "end",
+    ];
+    for (const route of routes) {
+      expect(typeof route).toBe("string");
+    }
+    expect(routes.length).toBe(9);
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph message passthrough", () => {
+  it("passes prior messages through the graph state", async () => {
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+    });
+
+    const messages: OrchestratedDeepAgentMessage[] = [{ role: "user", content: "hi" }];
+    const result = (await graph.invoke(
+      invokeInput("hi", { messages }),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.messages).toEqual(messages);
+  });
+});
