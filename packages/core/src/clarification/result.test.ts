@@ -27,16 +27,19 @@ describe("clarification result application", () => {
   });
 
   it("increments rounds across follow-up turns", () => {
-    const firstRound = applyClarificationResult(createClarificationState("Create a migration plan."), {
-      status: "needs_clarification",
-      readyToProceed: false,
-      questions: [{ id: "database", question: "Which database is being migrated?" }],
-      missingInformation: ["database"],
-      answeredInformation: [],
-      reasoningSummary: "Database choice changes the migration path.",
-      roundCount: 1,
-      maxRounds: 10,
-    });
+    const firstRound = applyClarificationResult(
+      createClarificationState("Create a migration plan."),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "database", question: "Which database is being migrated?" }],
+        missingInformation: ["database"],
+        answeredInformation: [],
+        reasoningSummary: "Database choice changes the migration path.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
 
     const secondRound = applyClarificationResult(
       recordClarificationAnswers(firstRound, [{ key: "database", value: "postgres" }]),

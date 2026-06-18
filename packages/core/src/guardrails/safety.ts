@@ -1,11 +1,11 @@
 import { AIMessage, createMiddleware } from "langchain";
 import OpenAI from "openai";
 
-import { getLatestHumanMessageText, type AgentStateLike } from "./state.ts";
-import {
-  type DeepAgentMiddleware,
-  type GuardrailSafetyOptions,
-  type OpenAIContentSafetyClient,
+import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
+import type {
+  DeepAgentMiddleware,
+  GuardrailSafetyOptions,
+  OpenAIContentSafetyClient,
 } from "./types.ts";
 
 export const DEFAULT_SAFETY_GUARDRAIL_NAME = "OpenAIContentSafetyGuardrail";

@@ -2,8 +2,8 @@ import { AIMessage, createMiddleware } from "langchain";
 import { z } from "zod";
 
 import { DEFAULT_GUARDRAIL_POLICY_LOADER, type TaskScopePolicyBundle } from "./policies.ts";
-import { getLatestHumanMessageText, type AgentStateLike } from "./state.ts";
-import { type DeepAgentMiddleware, type GuardrailTaskScopeOptions } from "./types.ts";
+import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
+import type { DeepAgentMiddleware, GuardrailTaskScopeOptions } from "./types.ts";
 
 export const DEFAULT_TASK_SCOPE_GUARDRAIL_NAME = "TaskScopeGuardrailMiddleware";
 export const DEFAULT_GUARDRAIL_REFUSAL =
@@ -43,7 +43,9 @@ function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle)
   ].join("\n");
 }
 
-export function createTaskScopeGuardrail(options: GuardrailTaskScopeOptions = {}): DeepAgentMiddleware {
+export function createTaskScopeGuardrail(
+  options: GuardrailTaskScopeOptions = {},
+): DeepAgentMiddleware {
   const classifier =
     options.classifier ??
     options.model?.withStructuredOutput(taskScopeDecisionSchema, {

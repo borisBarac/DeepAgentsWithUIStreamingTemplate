@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
-
+import { resolveClarificationGate } from "./decision.ts";
 import { applyClarificationResult } from "./result.ts";
 import { createClarificationState } from "./state.ts";
-import { resolveClarificationGate } from "./decision.ts";
 
 describe("clarification orchestration", () => {
   it("sends every new user request into clarification first", () => {

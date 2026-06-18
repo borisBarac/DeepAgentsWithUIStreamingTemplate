@@ -1,3 +1,4 @@
+import { createClarificationConfig } from "./config.ts";
 import type {
   ArchivedClarificationState,
   ClarificationAnsweredInformation,
@@ -5,7 +6,6 @@ import type {
   ClarificationResult,
   ClarificationState,
 } from "./types.ts";
-import { createClarificationConfig } from "./config.ts";
 
 export function createClarificationState(
   originalRequest: string,

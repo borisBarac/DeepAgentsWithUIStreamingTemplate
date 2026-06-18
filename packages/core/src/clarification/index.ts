@@ -1,15 +1,14 @@
 export {
+  createClarificationConfig,
+  getDefaultClarificationConfig,
+} from "./config.ts";
+export { resolveClarificationGate } from "./decision.ts";
+export {
   DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_MODE,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
 } from "./defaults.ts";
-export {
-  getDefaultClarificationConfig,
-  createClarificationConfig,
-} from "./config.ts";
-export {
-  applyClarificationResult,
-} from "./result.ts";
+export { applyClarificationResult } from "./result.ts";
 export {
   archiveClarificationState,
   clearClarificationState,
@@ -17,9 +16,6 @@ export {
   recordClarificationAnswers,
   selectUserFacingQuestions,
 } from "./state.ts";
-export {
-  resolveClarificationGate,
-} from "./decision.ts";
 export {
   type ArchivedClarificationState,
   type ClarificationAnsweredInformation,

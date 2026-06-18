@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { CompositeBackend, StateBackend, StoreBackend } from "deepagents";
-
-import { DEFAULT_MEMORY_ROOT } from "./constants.ts";
 import { createDefaultCompositeBackend } from "./backend.ts";
+import { DEFAULT_MEMORY_ROOT } from "./constants.ts";
 
 describe("composite backend defaults", () => {
   it("wires state and memory backends together", () => {

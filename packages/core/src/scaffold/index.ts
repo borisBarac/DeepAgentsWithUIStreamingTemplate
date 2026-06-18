@@ -1,3 +1,4 @@
+export { createDefaultCompositeBackend } from "./backend.ts";
 export {
   DEFAULT_ARTIFACTS_ROOT,
   DEFAULT_MEMORY_FILE_PATHS,
@@ -7,18 +8,17 @@ export {
   DEFAULT_SCRATCH_ROOT,
   DEFAULT_SKILLS_ROOT,
 } from "./constants.ts";
-export {
-  type CreateCompositeBackendOptions,
-  type CreateDefaultPermissionsOptions,
-  type CreateDefaultSubagentsOptions,
-  type CreateRuntimeScaffoldOptions,
-  type DeepAgentBlueprint,
-  type RuntimeScaffold,
-  type SpecialistRole,
-  type VirtualFilesystemLayout,
-} from "./types.ts";
-export { createDefaultCompositeBackend } from "./backend.ts";
-export { createDefaultPermissions } from "./permissions.ts";
-export { createDefaultSubagents } from "./subagents.ts";
 export { createVirtualFilesystemLayout } from "./filesystem.ts";
+export { createDefaultPermissions } from "./permissions.ts";
 export { createRuntimeScaffold } from "./runtime.ts";
+export { createDefaultSubagents } from "./subagents.ts";
+export type {
+  CreateCompositeBackendOptions,
+  CreateDefaultPermissionsOptions,
+  CreateDefaultSubagentsOptions,
+  CreateRuntimeScaffoldOptions,
+  DeepAgentBlueprint,
+  RuntimeScaffold,
+  SpecialistRole,
+  VirtualFilesystemLayout,
+} from "./types.ts";

@@ -1,6 +1,10 @@
 import allowedTasksText from "../../guardrails/taskScope.allowedTasks.md" with { type: "text" };
-import disallowedTasksText from "../../guardrails/taskScope.disallowedTasks.md" with { type: "text" };
-import requiredContextText from "../../guardrails/taskScope.requiredContext.md" with { type: "text" };
+import disallowedTasksText from "../../guardrails/taskScope.disallowedTasks.md" with {
+  type: "text",
+};
+import requiredContextText from "../../guardrails/taskScope.requiredContext.md" with {
+  type: "text",
+};
 
 export type TaskScopePolicyBundle = {
   requiredContext: string;
