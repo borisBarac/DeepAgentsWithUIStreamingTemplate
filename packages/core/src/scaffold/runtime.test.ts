@@ -25,8 +25,11 @@ describe("runtime scaffold defaults", () => {
     const scaffold = createRuntimeScaffold();
 
     expect(scaffold.architecture).toBe("supervisor-specialists");
-    expect(scaffold.memoryFilePaths).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
-    expect(scaffold.memory).toEqual(["/memory/AGENTS.md", "/memory/user-preferences.md"]);
+    expect(scaffold.memoryFilePaths).toEqual([
+      "/memory/project-facts.md",
+      "/memory/user-preferences.md",
+    ]);
+    expect(scaffold.memory).toEqual(["/memory/project-facts.md", "/memory/user-preferences.md"]);
     expect(scaffold.virtualFilesystem.reports).toBe("/reports");
     expect(scaffold.interruptOn).toEqual({
       write_file: true,
