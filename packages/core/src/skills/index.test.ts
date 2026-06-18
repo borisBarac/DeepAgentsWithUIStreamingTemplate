@@ -56,13 +56,13 @@ describe("bundled skills", () => {
   });
 
   it("attaches clarify-deeply to the clarifier by default", () => {
-    const [clarifier, researcher, analyst, critic] = asDefaultSubagents(
+    const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
       createRuntimeScaffold().subagents,
     );
 
     expect(clarifier?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
     expect(researcher?.skills).toEqual([]);
     expect(analyst?.skills).toEqual([]);
-    expect(critic?.skills).toEqual([]);
+    expect(reviewer?.skills).toEqual([]);
   });
 });

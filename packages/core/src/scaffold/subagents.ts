@@ -1,7 +1,16 @@
-import { type CreateDeepAgentParams, type SubAgent } from "deepagents";
+import type { CreateDeepAgentParams, SubAgent } from "deepagents";
 
-import { type ClarificationConfig, clarificationResultSchema, createClarificationConfig } from "../clarification/index.ts";
+import {
+  type ClarificationConfig,
+  clarificationResultSchema,
+  createClarificationConfig,
+} from "../clarification/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "../prompts/index.ts";
+import {
+  DEFAULT_REVIEW_AGENT_DESCRIPTION,
+  DEFAULT_REVIEW_AGENT_NAME,
+  reviewReportSchema,
+} from "../review/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { CreateDefaultSubagentsOptions } from "./types.ts";
 
@@ -78,18 +87,18 @@ export function createDefaultSubagents(
     options.analyst,
   );
 
-  const critic = mergeSubagent(
+  const reviewer = mergeSubagent(
     {
-      name: "critic",
-      description:
-        "Challenge weak reasoning, missing evidence, and risky actions before final output.",
-      systemPrompt: promptLoader.getCriticPrompt(),
+      name: DEFAULT_REVIEW_AGENT_NAME,
+      description: DEFAULT_REVIEW_AGENT_DESCRIPTION,
+      systemPrompt: promptLoader.getReviewAgentPrompt(),
+      responseFormat: reviewReportSchema,
       interruptOn: sharedInterrupts,
       tools: [],
       skills: [],
     },
-    options.critic,
+    options.reviewer,
   );
 
-  return [clarifier, researcher, analyst, critic];
+  return [clarifier, researcher, analyst, reviewer];
 }

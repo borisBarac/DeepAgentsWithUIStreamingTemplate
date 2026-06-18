@@ -5,6 +5,7 @@ import {
   createSupervisorSystemPrompt,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
+  DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
   MarkdownPromptLoader,
 } from "./index.ts";
@@ -55,6 +56,19 @@ describe("prompt defaults", () => {
     expect(loader.getResearcherPrompt()).toContain("You are the researcher subagent.");
     expect(loader.getAnalystPrompt()).toContain("You are the analyst subagent.");
     expect(loader.getCriticPrompt()).toContain("You are the critic subagent.");
+    expect(loader.getReviewAgentPrompt()).toContain("You are the Review Agent.");
+  });
+
+  it("exports the default review agent prompt with the structured report contract", () => {
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
+      "status`: `approved` | `changes_required` | `blocked",
+    );
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
+      "Do not rewrite the artifact unless explicitly asked",
+    );
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
+      "tests, checks, citations, or manual validation",
+    );
   });
 
   it("uses the default markdown loader for compatibility exports", () => {
