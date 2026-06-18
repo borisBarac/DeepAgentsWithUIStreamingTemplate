@@ -34,8 +34,6 @@ export type OrchestratedDeepAgentRoute =
   | "clarify"
   | "research"
   | "code"
-  | "debate"
-  | "judge"
   | "final"
   | "blocked"
   | "end";
@@ -67,15 +65,13 @@ export type OrchestratedDeepAgentState = {
   clarification?: ClarificationState;
   researchResult?: string;
   codeResult?: string;
-  debateResult?: string;
-  judgeResult?: string;
   finalAnswer?: string;
   review?: ReviewState;
   next: OrchestratedDeepAgentRoute;
   errors: OrchestratedDeepAgentError[];
 };
 
-type OrchestratedStageResultKey = "researchResult" | "codeResult" | "debateResult" | "judgeResult";
+type OrchestratedStageResultKey = "researchResult" | "codeResult";
 //#endregion
 
 //#region Agent callable contract and adapter
@@ -88,7 +84,7 @@ export type OrchestratedDeepAgentInvokeOutput = {
   messages: OrchestratedDeepAgentMessage[];
 };
 
-export type OrchestratedDeepAgentRole = "researcher" | "coder" | "judge" | "finalizer" | "reviewer";
+export type OrchestratedDeepAgentRole = "researcher" | "coder" | "finalizer" | "reviewer";
 
 export type OrchestratedDeepAgent = {
   invoke(input: OrchestratedDeepAgentInvokeInput): Promise<OrchestratedDeepAgentInvokeOutput>;
@@ -158,15 +154,12 @@ export function adaptDeepAgent(agent: DeepAgent): OrchestratedDeepAgent {
 export type OrchestratedDeepAgentRoutingOptions = {
   enableResearch?: boolean;
   enableCoding?: boolean;
-  enableDebate?: boolean;
 };
 
 const RESEARCH_KEYWORDS =
   /\b(research|investigate|explore|find|summar|analyz|study|compare|survey|look up|gather)\b/;
 const CODING_KEYWORDS =
   /\b(code|implement|build|refactor|function|bug|fix|test|deploy|api|script|class)\b/;
-const DEBATE_KEYWORDS =
-  /\b(debate|argue|argument|pros and cons|proceedings|versus|vs\.?|contrasting positions)\b/;
 
 export function selectWorkRoute(
   task: string,
@@ -174,12 +167,8 @@ export function selectWorkRoute(
 ): OrchestratedDeepAgentRoute {
   const enableResearch = routing.enableResearch ?? true;
   const enableCoding = routing.enableCoding ?? true;
-  const enableDebate = routing.enableDebate ?? false;
   const lowered = task.toLowerCase();
 
-  if (enableDebate && DEBATE_KEYWORDS.test(lowered)) {
-    return "debate";
-  }
   if (enableCoding && CODING_KEYWORDS.test(lowered)) {
     return "code";
   }
@@ -252,8 +241,6 @@ export function composeFinalAnswer(state: OrchestratedDeepAgentState): string {
   const stageSections: Array<{ key: OrchestratedStageResultKey; heading: string }> = [
     { key: "researchResult", heading: "Research" },
     { key: "codeResult", heading: "Implementation" },
-    { key: "debateResult", heading: "Debate" },
-    { key: "judgeResult", heading: "Judgment" },
   ];
 
   if (answers.length > 0) {
@@ -318,14 +305,6 @@ const OrchestratedStateAnnotation = Annotation.Root({
     reducer: (_current, next) => next,
   }),
   codeResult: Annotation<string | undefined>({
-    default: () => undefined,
-    reducer: (_current, next) => next,
-  }),
-  debateResult: Annotation<string | undefined>({
-    default: () => undefined,
-    reducer: (_current, next) => next,
-  }),
-  judgeResult: Annotation<string | undefined>({
     default: () => undefined,
     reducer: (_current, next) => next,
   }),
@@ -456,21 +435,8 @@ function buildStageMessages(
     OrchestratedDeepAgentRole,
     Array<{ content?: string; label: string }>
   > = {
-    researcher: [
-      { content: state.codeResult, label: "Prior implementation notes" },
-      { content: state.debateResult, label: "Competing positions" },
-      { content: state.judgeResult, label: "Prior judgment" },
-    ],
-    coder: [
-      { content: state.researchResult, label: "Prior research" },
-      { content: state.debateResult, label: "Competing positions" },
-      { content: state.judgeResult, label: "Prior judgment" },
-    ],
-    judge: [
-      { content: state.researchResult, label: "Prior research" },
-      { content: state.codeResult, label: "Prior implementation notes" },
-      { content: state.debateResult, label: "Competing positions" },
-    ],
+    researcher: [{ content: state.codeResult, label: "Prior implementation notes" }],
+    coder: [{ content: state.researchResult, label: "Prior research" }],
     finalizer: [],
     reviewer: [],
   };
@@ -550,9 +516,6 @@ function nextNodeName(
       return "research";
     case "code":
       return "code";
-    case "debate":
-    case "judge":
-      return "judge";
     case "final":
       return "finalizer";
     default:
@@ -648,19 +611,6 @@ function createCodeNode(ctx: NodeContext) {
   });
 }
 
-function createJudgeNode(ctx: NodeContext) {
-  return createStageNode(ctx, {
-    role: "judge",
-    instruction:
-      "Adjudicate the competing positions with a rubric and produce a grounded synthesis.",
-    required: false,
-    successRoute: "final",
-    assignOutput: (update, output) => {
-      update.judgeResult = output;
-    },
-  });
-}
-
 //#region Review finalization gate
 
 function buildReviewContextPacket(
@@ -687,12 +637,6 @@ function buildReviewContextPacket(
       role: "system",
       content: `Implementation notes:\n${state.codeResult}`,
     });
-  }
-  if (state.debateResult) {
-    messages.push({ role: "system", content: `Debate output:\n${state.debateResult}` });
-  }
-  if (state.judgeResult) {
-    messages.push({ role: "system", content: `Judgment:\n${state.judgeResult}` });
   }
   const errors = state.errors ?? [];
   if (errors.length > 0) {
@@ -913,14 +857,12 @@ export function createOrchestratedDeepAgentGraph(
     .addNode("clarify", createClarifyNode(ctx))
     .addNode("research", createResearchNode(ctx))
     .addNode("code", createCodeNode(ctx))
-    .addNode("judge", createJudgeNode(ctx))
     .addNode("finalizer", createFinalizerNode(ctx))
     .addEdge(START, "route_intake")
     .addConditionalEdges("route_intake", (state) => routeToNextNode(state, "clarify"))
     .addConditionalEdges("clarify", (state) => routeToNextNode(state, END))
     .addConditionalEdges("research", (state) => routeToNextNode(state, END))
     .addConditionalEdges("code", (state) => routeToNextNode(state, END))
-    .addConditionalEdges("judge", (state) => routeToNextNode(state, END))
     .addEdge("finalizer", END);
 
   return builder.compile();

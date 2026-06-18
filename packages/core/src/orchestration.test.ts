@@ -100,11 +100,19 @@ describe("selectWorkRoute", () => {
     expect(selectWorkRoute("Implement a Node.js consumer and deploy it", {})).toBe("code");
   });
 
-  it("routes debate tasks to debate only when debate is enabled", () => {
-    expect(selectWorkRoute("Debate tabs versus spaces", { enableDebate: true })).toBe("debate");
-    expect(selectWorkRoute("Debate tabs versus spaces", { enableDebate: false })).not.toBe(
-      "debate",
-    );
+  it("routes comparison-style tasks through the normal research flow", () => {
+    expect(
+      selectWorkRoute("Debate tabs versus spaces", { enableResearch: true, enableCoding: false }),
+    ).toBe("research");
+  });
+
+  it("falls back to final when both work stages are disabled", () => {
+    expect(
+      selectWorkRoute("Debate tabs versus spaces", {
+        enableResearch: false,
+        enableCoding: false,
+      }),
+    ).toBe("final");
   });
 
   it("routes to final when no work stages are enabled", () => {
@@ -355,12 +363,6 @@ describe("createOrchestratedDeepAgentGraph model runtime roles", () => {
       agents: {},
     },
     {
-      role: "judge",
-      task: "Debate tabs versus spaces",
-      routing: { enableResearch: false, enableCoding: false, enableDebate: true },
-      agents: {},
-    },
-    {
       role: "finalizer",
       task: "hello",
       routing: { enableResearch: false, enableCoding: false },
@@ -474,65 +476,11 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
 });
 
 describe("createOrchestratedDeepAgentGraph routing", () => {
-  it("routes a debate task to the judge node when debate is enabled", async () => {
-    const judge = createMockAgent("winning synthesis");
-    const reviewer = createReviewAgent(APPROVED_REVIEW);
-    const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
-      routing: {
-        enableResearch: false,
-        enableCoding: false,
-        enableDebate: true,
-      },
-      agents: { judge: judge.agent, reviewer: reviewer.agent },
-    });
-
-    const result = (await graph.invoke(
-      invokeInput("Debate tabs versus spaces"),
-    )) as OrchestratedDeepAgentState;
-
-    expect(judge.calls.length).toBe(1);
-    expect(result.judgeResult).toBe("winning synthesis");
-    expect(result.finalAnswer).toContain("winning synthesis");
-  });
-
-  it("supplies accumulated evidence and debate output to the judge", async () => {
-    const judge = createMockAgent("winning synthesis");
-    const reviewer = createReviewAgent(APPROVED_REVIEW);
-    const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
-      routing: {
-        enableResearch: false,
-        enableCoding: false,
-        enableDebate: true,
-      },
-      agents: { judge: judge.agent, reviewer: reviewer.agent },
-    });
-
-    await graph.invoke(
-      invokeInput("Debate tabs versus spaces", {
-        researchResult: "Survey evidence",
-        codeResult: "Formatter constraints",
-        debateResult: "Position A versus position B",
-      }),
-    );
-
-    expect(judge.calls[0]?.messages).toEqual(
-      expect.arrayContaining([
-        { role: "system", content: "Prior research:\nSurvey evidence" },
-        { role: "system", content: "Prior implementation notes:\nFormatter constraints" },
-        { role: "system", content: "Competing positions:\nPosition A versus position B" },
-      ]),
-    );
-  });
-
   it("produces every public route value as a reachable destination", () => {
     const routes: OrchestratedDeepAgentRoute[] = [
       "clarify",
       "research",
       "code",
-      "debate",
-      "judge",
       "final",
       "blocked",
       "end",
@@ -540,7 +488,7 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
     for (const route of routes) {
       expect(typeof route).toBe("string");
     }
-    expect(routes.length).toBe(8);
+    expect(routes.length).toBe(6);
   });
 });
 
@@ -661,8 +609,6 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
         clarification,
         researchResult: "research",
         codeResult: "implementation",
-        debateResult: "debate",
-        judgeResult: "judgment",
         errors: [
           {
             node: "researcher",
@@ -684,8 +630,8 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
     expect(finalizerInput).toContain("## Clarifications\n- audience: operators");
     expect(finalizerInput).toContain("## Research\nresearch");
     expect(finalizerInput).toContain("## Implementation\nimplementation");
-    expect(finalizerInput).toContain("## Debate\ndebate");
-    expect(finalizerInput).toContain("## Judgment\njudgment");
+    expect(finalizerInput).not.toContain("Debate");
+    expect(finalizerInput).not.toContain("Judgment");
     expect(finalizerInput).toContain("## Caveats\n- [tool] researcher: source unavailable");
   });
 
@@ -745,8 +691,6 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
         clarification,
         researchResult: "research",
         codeResult: "implementation",
-        debateResult: "debate",
-        judgeResult: "judgment",
         errors: [
           {
             node: "coder",
@@ -770,8 +714,8 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
     expect(reviewInput).toContain("Clarifications provided:\n- format: brief");
     expect(reviewInput).toContain("Research performed:\nresearch");
     expect(reviewInput).toContain("Implementation notes:\nimplementation");
-    expect(reviewInput).toContain("Debate output:\ndebate");
-    expect(reviewInput).toContain("Judgment:\njudgment");
+    expect(reviewInput).not.toContain("Debate output");
+    expect(reviewInput).not.toContain("Judgment");
     expect(reviewInput).toContain("Known limitations:\n- [validation] coder: example omitted");
   });
 

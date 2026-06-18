@@ -28,19 +28,19 @@ Status: accepted
 
 ### Context
 
-The PRD proposes `createOrchestratedDeepAgentGraph(...)` and optionally `createDebateDeepAgentGraph(...)`. A debate-specific factory is useful, but it may widen v1 before the base graph contract is proven.
+The PRD proposes `createOrchestratedDeepAgentGraph(...)` as the primary graph factory. Earlier drafts also considered a debate-specific factory, but that would widen v1 before the base graph contract is proven.
 
 ### Decision To Make
 
-Choose whether v1 ships a generic graph factory only, a generic factory plus a debate factory, or only a debate-specific workflow.
+Choose whether v1 ships a generic graph factory only or a broader family of workflow-specific factories.
 
 ### Decision
 
-Ship `createOrchestratedDeepAgentGraph(...)` first. Treat `createDebateDeepAgentGraph(...)` as deferred until the generic state contract, node wrapper, routing, and test harness are stable.
+Ship `createOrchestratedDeepAgentGraph(...)` first. Treat any workflow-specific factory variants as deferred until the generic state contract, node wrapper, routing, and test harness are stable.
 
 ### Consequences
 
-The first implementation has a smaller API surface. Debate support should still be documented as a product shape, but not accepted as part of the first factory contract.
+The first implementation has a smaller API surface and keeps the orchestration contract focused on the supported productive stages.
 
 ## ADR-003: Coding Specialist Boundary
 
@@ -200,7 +200,7 @@ Provide a shared internal Deep Agent node wrapper. Node-specific logic should su
 
 ### Consequences
 
-Common behavior such as tracing metadata, retry accounting, error capture, and state updates stays consistent across research, code, critic, judge, and finalizer nodes.
+Common behavior such as tracing metadata, retry accounting, error capture, and state updates stays consistent across research, code, and finalizer nodes.
 
 ## ADR-011: Memory Writes From Graph Nodes
 
@@ -241,4 +241,3 @@ The initial clarification gate uses existing deterministic clarification helpers
 ### Consequences
 
 The graph can enforce "do not proceed before clarification" without depending on prompt behavior. Question generation can still benefit from the existing clarifier role.
-

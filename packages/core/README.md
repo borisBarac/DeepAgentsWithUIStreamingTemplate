@@ -87,7 +87,7 @@ modelRuntime.getModelForRole("researcher");
 ```
 
 Supported roles are `baseline`, `supervisor`, `clarifier`, `researcher`, `analyst`, `reviewer`,
-`coder`, `judge`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
+`coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
 Models are constructed on first lookup and cached by profile.
 
 Generic OpenAI-compatible chat-completion endpoints use the same runtime:
@@ -387,14 +387,14 @@ The store is static and explicit by design. It does not inherit tools across rol
 
 ## Orchestration with StateGraph
 
-`createBasicAgent(...)` remains the default entrypoint for autonomous work. Use `createOrchestratedDeepAgentGraph(...)` only when an application needs explicit stages, deterministic routing, inspectable state snapshots, or multi-stage debate/judging flows.
+`createBasicAgent(...)` remains the default entrypoint for autonomous work. Use `createOrchestratedDeepAgentGraph(...)` only when an application needs explicit stages, deterministic routing, inspectable state snapshots, or review-gated multi-stage workflows.
 
 ### When to use each
 
 | Pattern | Use when |
 | --- | --- |
 | Deep Agent only (`createBasicAgent`) | Ordinary autonomous research, coding, analysis, and tool-heavy work. The supervisor and its subagents own planning and delegation. |
-| StateGraph + Deep Agents (`createOrchestratedDeepAgentGraph`) | You need deterministic stage order, testable routing, approval boundaries, retries around a single stage, or a debate-style sequence. |
+| StateGraph + Deep Agents (`createOrchestratedDeepAgentGraph`) | You need deterministic stage order, testable routing, approval boundaries, retries around a single stage, or explicit review gating. |
 
 The graph is an **optional outer controller**. Each model-backed stage invokes a Deep Agent (or a custom callable). The graph owns routing, state, errors, and finalization; the agents own planning, filesystem use, and tool calls inside a stage.
 
@@ -433,14 +433,14 @@ console.log(result.finalAnswer);
 
 ### Graph state and routing
 
-The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`, `debateResult`, `judgeResult`), `finalAnswer`, review state, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `debate`, `judge`, `final`, `blocked`, and `end`.
+The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`), `finalAnswer`, review state, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `final`, `blocked`, and `end`.
 
 Model-backed stages consume role-specific graph context. Each stage receives relevant prior outputs, answered clarifications, known errors, and the host-managed conversation in `messages`; the reviewer receives the complete accumulated evidence packet. Stage-internal responses are stored in their dedicated result fields and are not appended to `messages`, so the host remains responsible for conversation history.
 
 The default flow is:
 
 ```text
-START -> route_intake -> clarify (when required) -> research/code/debate -> finalizer -> review -> END
+START -> route_intake -> clarify (when required) -> research/code -> finalizer -> review -> END
 ```
 
 Routing is deterministic in v1 (see `selectWorkRoute`) and unit-testable without live models. The default finalizer composes stage outputs deterministically; inject an `agents.finalizer` callable only when you want model-backed synthesis at the delivery boundary.

@@ -31,7 +31,6 @@ export const MODEL_ROLES = [
   "analyst",
   "reviewer",
   "coder",
-  "judge",
   "finalizer",
 ] as const;
 

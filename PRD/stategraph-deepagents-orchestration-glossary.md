@@ -22,11 +22,11 @@ The StateGraph layer that decides which stage runs next and whether execution sh
 
 ### Agent Node
 
-A graph node that invokes a Deep Agent and writes the stage result back into graph state. Examples include `research`, `code`, `judge`, and model-backed `finalizer`.
+A graph node that invokes a Deep Agent and writes the stage result back into graph state. Examples include `research`, `code`, and the model-backed `finalizer`.
 
 ### Deterministic Node
 
-A graph node implemented in TypeScript logic without a model call. Examples include `route_intake`, `route_work`, approval checks, and the default finalizer.
+A graph node implemented in TypeScript logic without a model call. Examples include `route_intake`, clarification gating, approval checks, and the default finalizer.
 
 ### Graph Stage
 
@@ -34,7 +34,7 @@ A named workflow step owned by the outer graph. A stage may be deterministic or 
 
 ### Route
 
-The graph state's selected next stage. The PRD's route values include `clarify`, `research`, `code`, `debate`, `judge`, `final`, `blocked`, and `end`.
+The graph state's selected next stage. The PRD's route values include `clarify`, `research`, `code`, `final`, `blocked`, and `end`.
 
 ### Routing Policy
 
@@ -46,11 +46,7 @@ The intake decision that determines whether the user must answer questions befor
 
 ### Work Branch
 
-A productive stage selected after intake, such as research, coding, debate, or direct finalization.
-
-### Judge Stage
-
-An optional graph stage for debate-style workflows. It adjudicates competing arguments with a rubric and produces a grounded synthesis or winner.
+A productive stage selected after intake, such as research, coding, or direct finalization.
 
 ### Finalizer
 
@@ -70,7 +66,7 @@ The typed state object passed between graph nodes. It includes the task, message
 
 ### Stage Output
 
-The result produced by a graph stage and stored in graph state, such as `researchResult`, `codeResult`, `debateResult`, `judgeResult`, or `finalAnswer`.
+The result produced by a graph stage and stored in graph state, such as `researchResult`, `codeResult`, or `finalAnswer`.
 
 ### Structured Error
 
@@ -99,10 +95,6 @@ The Deep Agents filesystem conventions reused by graph nodes: `/scratch`, `/plan
 ### Durable Memory
 
 Long-term memory stored under `/memory` through the configured store backend. Graph nodes should not write durable memory automatically.
-
-### Debate Workflow
-
-A specialized orchestration shape where separate argument generators, a fact checker, judge, finalizer, and reviewer run under graph-controlled turn order and role boundaries.
 
 ### Over-Nesting
 

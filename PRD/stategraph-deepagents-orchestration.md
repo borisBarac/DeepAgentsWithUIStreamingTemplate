@@ -4,6 +4,8 @@
 
 Add an explicit LangGraph `StateGraph` orchestration layer around this repository's Deep Agents runtime for workflows that need deterministic routing, staged execution, approvals, retries, and inspectable state transitions.
 
+The supported implementation is now narrower than the original proposal in this document: the active orchestration contract covers clarification, research, coding, finalization, and review. Any debate/judge material called out below is historical context only and is not part of the supported contract.
+
 The current system already exposes a strong default Deep Agents scaffold through `packages/core`:
 
 - `createBaselineAgent(...)` for a thinner single-agent harness.
@@ -45,7 +47,7 @@ That is a good default for autonomous work, but some product flows need stronger
 - Explicit route decisions that should be tested outside prompt behavior.
 - Human approval gates before continuing to later stages.
 - Retry or fallback policy around one stage without rerunning the entire task.
-- Separate finalization after research, coding, review, or debate.
+- Separate finalization after research, coding, or review.
 - State snapshots that application code can inspect independently of the agent transcript.
 
 Without an outer graph, these flows have to be encoded in prompts, middleware, or application-specific glue. That makes behavior harder to test and harder to reason about.
@@ -56,7 +58,7 @@ Without an outer graph, these flows have to be encoded in prompts, middleware, o
 - Keep the existing Deep Agents scaffold as the default runtime for ordinary autonomous tasks.
 - Provide a TypeScript-first design that fits this repo's Bun workspace and `packages/core` exports.
 - Reuse existing factories, prompts, guardrails, memory, permissions, and specialist roles.
-- Support deterministic routing between specialist stages such as clarification, research, coding, judging, finalization, and review.
+- Support deterministic routing between specialist stages such as clarification, research, coding, finalization, and review.
 - Preserve Deep Agents strengths inside graph nodes: planning, filesystem use, subagents, context management, and memory.
 - Make the graph state explicit, typed, and testable.
 
@@ -80,7 +82,7 @@ Default for autonomous research, coding, analysis, and general tool-heavy work.
 
 Pattern B: StateGraph + Deep Agents as nodes
 Use when the application needs explicit stages, deterministic routing, approvals, retries,
-state snapshots, or multi-agent debate/judging workflows.
+state snapshots, or review-gated workflows.
 ```
 
 For this repo, Pattern B should be additive. Add a new orchestration module rather than changing `createBasicAgent(...)` semantics.
@@ -138,7 +140,6 @@ User / API
       -> clarification_node
       -> research_node
       -> coding_node
-      -> judge_node
       -> finalizer_node
       -> review gate
   -> final response
@@ -157,8 +158,7 @@ The first graph should support this workflow:
 START
   -> route_intake
   -> clarify, when required
-  -> route_work
-  -> research, code, debate, or final
+  -> research, code, or final
   -> finalizer
   -> review gate
   -> END
@@ -172,7 +172,6 @@ This maps naturally to the current specialist roles:
 | `clarify` | existing clarification helpers or `clarifier` Deep Agent node | `clarification.ts`, `clarifier` prompt |
 | `research` | Deep Agent node | `researcher` role and tools |
 | `code` | Deep Agent node or future coding specialist | `createBaselineAgent` with coding prompt |
-| `judge` | Deep Agent node for debate-style workflows | new role, optional v1 |
 | `finalizer` | deterministic formatter or Deep Agent node | new prompt or baseline agent |
 | review gate | structured `reviewer` invocation | existing review contract |
 
@@ -201,20 +200,18 @@ Proposed options:
 ```ts
 export type CreateOrchestratedDeepAgentGraphOptions = {
   agents?: {
-    clarifier?: DeepAgent;
     researcher?: DeepAgent;
     coder?: DeepAgent;
-    judge?: DeepAgent;
     finalizer?: DeepAgent;
     reviewer?: DeepAgent;
   };
   routing?: {
     enableResearch?: boolean;
     enableCoding?: boolean;
-    enableDebate?: boolean;
   };
+  clarification?: Partial<ClarificationConfig>;
   guardrails?: false | CreateDefaultGuardrailsOptions;
-  backendOptions?: CreateCompositeBackendOptions;
+  review?: Partial<ReviewConfig>;
   promptLoader?: PromptLoader;
 };
 ```
@@ -226,8 +223,6 @@ export type OrchestratedDeepAgentRoute =
   | "clarify"
   | "research"
   | "code"
-  | "debate"
-  | "judge"
   | "final"
   | "blocked"
   | "end";
@@ -246,8 +241,6 @@ export type OrchestratedDeepAgentState = {
   clarification?: ClarificationState;
   researchResult?: string;
   codeResult?: string;
-  debateResult?: string;
-  judgeResult?: string;
   finalAnswer?: string;
   review?: ReviewState;
   next: OrchestratedDeepAgentRoute;
@@ -280,7 +273,7 @@ This stage should not perform research, coding, or final synthesis.
 
 ### `route_work`
 
-Chooses one or more work branches based on the task and configuration.
+Chooses the next work branch based on the task and configuration.
 
 Initial routing can be simple deterministic keyword and metadata routing. Later versions can add a structured router model, but v1 should stay testable and predictable.
 
@@ -305,17 +298,6 @@ Expected output:
 - changed-file plan when applicable
 - risks and test recommendations
 
-### `judge`
-
-Optional for debate-style workflows.
-
-Expected output:
-
-- winning argument or synthesis
-- confidence level
-- rejected alternatives
-- rationale grounded in available evidence and competing arguments
-
 ### `finalizer`
 
 Produces the final user-facing response from state.
@@ -324,7 +306,11 @@ For v1, prefer deterministic formatting when possible. Use a Deep Agent finalize
 
 Every finalized candidate is submitted to the structured reviewer. Approval delivers the candidate; required changes enter the bounded revision loop; blocked or unapproved results are delivered only with explicit caveats.
 
-## 6. Multi-Agent Debate Product Shape
+## Historical Debate Appendix
+
+The following section preserves the earlier debate-oriented proposal for reference only. It is not part of the supported implementation contract above and should not be treated as current API guidance.
+
+### Multi-Agent Debate Product Shape
 
 For the user's debate-style system, use `StateGraph` as the outer controller and Deep Agents for specialized nodes:
 
@@ -353,7 +339,7 @@ Recommended role mapping:
 
 Do not implement debate by letting one Deep Agent recursively spawn unconstrained subagents. The outer graph should own debate turn order, role separation, and judge criteria.
 
-## 7. Memory And Filesystem Policy
+## 6. Memory And Filesystem Policy
 
 Graph nodes should share the same virtual filesystem conventions as the current scaffold:
 
@@ -372,13 +358,12 @@ Recommended graph-specific paths:
 /scratch/orchestration-state.md
 /scratch/research-result.md
 /scratch/code-result.md
-/scratch/judge-result.md
 /reports/final.md
 ```
 
 Durable `/memory` writes should remain rare, deliberate, and interrupt-visible.
 
-## 8. Safety And Approvals
+## 7. Safety And Approvals
 
 Keep the existing default interrupts:
 
@@ -403,7 +388,7 @@ The v1 graph should expose state at each approval point so a host app can inspec
 - errors
 - pending next stage
 
-## 9. Error Handling
+## 8. Error Handling
 
 Each node should return a typed error into `state.errors` rather than throwing whenever recovery is possible.
 
@@ -415,7 +400,7 @@ Minimum v1 behavior:
 
 Do not silently skip required clarification, safety, or approval gates.
 
-## 10. Observability
+## 9. Observability
 
 The graph should preserve current LangSmith support through `configureLangSmithTracing(...)`.
 
@@ -451,7 +436,6 @@ packages/core/src/orchestration.ts
 Exports:
 
 - `createOrchestratedDeepAgentGraph`
-- `createDebateDeepAgentGraph`, if debate is included in v1
 - `OrchestratedDeepAgentState`
 - `OrchestratedDeepAgentRoute`
 - `CreateOrchestratedDeepAgentGraphOptions`
@@ -471,7 +455,6 @@ to export the new orchestration API.
 Add optional prompt loader methods only if needed:
 
 - `getCoderPrompt()`
-- `getJudgePrompt()`
 - `getFinalizerPrompt()`
 
 Do not add these until graph nodes require model-backed behavior for those roles.
@@ -480,7 +463,7 @@ Do not add these until graph nodes require model-backed behavior for those roles
 
 Add focused tests:
 
-- route selection for research, coding, debate, and final-only tasks
+- route selection for research, coding, comparison-style prompts, and final-only tasks
 - clarification gate behavior
 - graph state shape
 - failed-node error propagation
@@ -532,14 +515,13 @@ console.log(result.finalAnswer);
 - The design introduces a separate graph factory for explicit outer orchestration.
 - The graph state includes task, messages, stage outputs, route, final answer, and errors.
 - The PRD explains when to use graph nodes versus Deep Agents subagents.
-- The PRD covers debate-style systems with `argument_generator`, `fact_checker`, `judge`, `finalizer`, and review stages.
+- The active contract covers clarification, research, coding, finalization, and review only.
 - The PRD reuses existing guardrails, clarification, memory, permissions, prompt loader, and observability concepts.
 - The PRD identifies `@langchain/langgraph` as a required new dependency.
 - The PRD includes implementation deliverables and test requirements.
 
 ## Open Questions
 
-- Should v1 include a generic orchestrated graph only, or also a debate-specific graph factory? Resolved by ADR-002.
 - Should coding be a first-class specialist role in the default scaffold, or only a graph-level node backed by `createBaselineAgent(...)`? Resolved by ADR-003.
 - Should graph-level approval gates use LangGraph interrupts directly, host-app state, or both? Resolved by ADR-004.
 - Should finalization be deterministic formatting in v1, or a model-backed Deep Agent node? Resolved by ADR-005.
@@ -561,4 +543,4 @@ Replace deterministic routing with a structured-output router only after unit te
 
 ### Evaluation Harness
 
-Add LangSmith datasets for route accuracy, debate judge quality, review effectiveness, and end-to-end task success.
+Add LangSmith datasets for route accuracy, review effectiveness, and end-to-end task success.
