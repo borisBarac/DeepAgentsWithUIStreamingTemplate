@@ -8,7 +8,7 @@ The current system already exposes a strong default Deep Agents scaffold through
 
 - `createBaselineAgent(...)` for a thinner single-agent harness.
 - `createScaffoldedAgent(...)` and `createBasicAgent(...)` for the supervisor-specialist default.
-- Default specialists: `clarifier`, `researcher`, `analyst`, and `critic`.
+- Default specialists: `clarifier`, `researcher`, `analyst`, and `review-agent`.
 - Guardrails, clarification intake, filesystem permissions, interrupts, and `/memory` backend routing.
 
 This PRD does not replace that scaffold. It defines when and how to add a higher-level `StateGraph` controller above it.
@@ -56,7 +56,7 @@ Without an outer graph, these flows have to be encoded in prompts, middleware, o
 - Keep the existing Deep Agents scaffold as the default runtime for ordinary autonomous tasks.
 - Provide a TypeScript-first design that fits this repo's Bun workspace and `packages/core` exports.
 - Reuse existing factories, prompts, guardrails, memory, permissions, and specialist roles.
-- Support deterministic routing between specialist stages such as clarification, research, coding, critique, judging, and finalization.
+- Support deterministic routing between specialist stages such as clarification, research, coding, judging, finalization, and review.
 - Preserve Deep Agents strengths inside graph nodes: planning, filesystem use, subagents, context management, and memory.
 - Make the graph state explicit, typed, and testable.
 
@@ -107,7 +107,7 @@ The scaffolded agent currently uses:
 
 ```text
 architecture: supervisor-specialists
-specialists: clarifier, researcher, analyst, critic
+specialists: clarifier, researcher, analyst, review-agent
 state-backed roots: /scratch, /plans, /reports, /artifacts, /skills
 store-backed root: /memory
 interrupts: write_file, edit_file, execute
@@ -138,9 +138,9 @@ User / API
       -> clarification_node
       -> research_node
       -> coding_node
-      -> critic_node
       -> judge_node
       -> finalizer_node
+      -> review gate
   -> final response
 ```
 
@@ -159,8 +159,8 @@ START
   -> clarify, when required
   -> route_work
   -> research, code, debate, or final
-  -> critic, when verification is required
   -> finalizer
+  -> review gate
   -> END
 ```
 
@@ -172,9 +172,9 @@ This maps naturally to the current specialist roles:
 | `clarify` | existing clarification helpers or `clarifier` Deep Agent node | `clarification.ts`, `clarifier` prompt |
 | `research` | Deep Agent node | `researcher` role and tools |
 | `code` | Deep Agent node or future coding specialist | `createBaselineAgent` with coding prompt |
-| `critic` | Deep Agent node | `critic` role |
 | `judge` | Deep Agent node for debate-style workflows | new role, optional v1 |
 | `finalizer` | deterministic formatter or Deep Agent node | new prompt or baseline agent |
+| review gate | structured `reviewer` invocation | existing review contract |
 
 ## 3. Agent Boundary Rules
 
@@ -204,15 +204,14 @@ export type CreateOrchestratedDeepAgentGraphOptions = {
     clarifier?: DeepAgent;
     researcher?: DeepAgent;
     coder?: DeepAgent;
-    critic?: DeepAgent;
     judge?: DeepAgent;
     finalizer?: DeepAgent;
+    reviewer?: DeepAgent;
   };
   routing?: {
     enableResearch?: boolean;
     enableCoding?: boolean;
     enableDebate?: boolean;
-    requireCritic?: boolean;
   };
   guardrails?: false | CreateDefaultGuardrailsOptions;
   backendOptions?: CreateCompositeBackendOptions;
@@ -228,7 +227,6 @@ export type OrchestratedDeepAgentRoute =
   | "research"
   | "code"
   | "debate"
-  | "critic"
   | "judge"
   | "final"
   | "blocked"
@@ -249,9 +247,9 @@ export type OrchestratedDeepAgentState = {
   researchResult?: string;
   codeResult?: string;
   debateResult?: string;
-  criticResult?: string;
   judgeResult?: string;
   finalAnswer?: string;
+  review?: ReviewState;
   next: OrchestratedDeepAgentRoute;
   errors: OrchestratedDeepAgentError[];
 };
@@ -307,17 +305,6 @@ Expected output:
 - changed-file plan when applicable
 - risks and test recommendations
 
-### `critic`
-
-Invokes a Deep Agent configured as a critic.
-
-Expected output:
-
-- correctness risks
-- missing evidence
-- unsafe assumptions
-- required revisions before finalization
-
 ### `judge`
 
 Optional for debate-style workflows.
@@ -327,13 +314,15 @@ Expected output:
 - winning argument or synthesis
 - confidence level
 - rejected alternatives
-- rationale grounded in research and critic output
+- rationale grounded in available evidence and competing arguments
 
 ### `finalizer`
 
 Produces the final user-facing response from state.
 
 For v1, prefer deterministic formatting when possible. Use a Deep Agent finalizer only when synthesis quality materially benefits from model judgment.
+
+Every finalized candidate is submitted to the structured reviewer. Approval delivers the candidate; required changes enter the bounded revision loop; blocked or unapproved results are delivered only with explicit caveats.
 
 ## 6. Multi-Agent Debate Product Shape
 
@@ -345,9 +334,9 @@ START
   -> argument_generator_a
   -> argument_generator_b
   -> fact_checker
-  -> critic
   -> judge
   -> finalizer
+  -> review gate
   -> END
 ```
 
@@ -358,9 +347,9 @@ Recommended role mapping:
 | `argument_generator_a` | Deep Agent node | constrained to one position |
 | `argument_generator_b` | Deep Agent node | constrained to opposing position |
 | `fact_checker` | Deep Agent node | source-backed only |
-| `critic` | Deep Agent node | attacks unsupported claims |
 | `judge` | Deep Agent node | adjudicates with rubric |
 | `finalizer` | deterministic or Deep Agent | emits concise answer |
+| review gate | structured reviewer | approves delivery or requires revisions |
 
 Do not implement debate by letting one Deep Agent recursively spawn unconstrained subagents. The outer graph should own debate turn order, role separation, and judge criteria.
 
@@ -383,7 +372,6 @@ Recommended graph-specific paths:
 /scratch/orchestration-state.md
 /scratch/research-result.md
 /scratch/code-result.md
-/scratch/critic-result.md
 /scratch/judge-result.md
 /reports/final.md
 ```
@@ -422,7 +410,7 @@ Each node should return a typed error into `state.errors` rather than throwing w
 Minimum v1 behavior:
 
 - one retry for transient model/tool failures
-- route to `critic` or `finalizer` with caveats when optional stages fail
+- route to `finalizer` with caveats when optional stages fail
 - stop with a clear blocked state when required stages fail
 
 Do not silently skip required clarification, safety, or approval gates.
@@ -519,7 +507,6 @@ const graph = createOrchestratedDeepAgentGraph({
   routing: {
     enableResearch: true,
     enableCoding: true,
-    requireCritic: true,
   },
 });
 
@@ -545,7 +532,7 @@ console.log(result.finalAnswer);
 - The design introduces a separate graph factory for explicit outer orchestration.
 - The graph state includes task, messages, stage outputs, route, final answer, and errors.
 - The PRD explains when to use graph nodes versus Deep Agents subagents.
-- The PRD covers debate-style systems with `argument_generator`, `fact_checker`, `critic`, `judge`, and `finalizer` stages.
+- The PRD covers debate-style systems with `argument_generator`, `fact_checker`, `judge`, `finalizer`, and review stages.
 - The PRD reuses existing guardrails, clarification, memory, permissions, prompt loader, and observability concepts.
 - The PRD identifies `@langchain/langgraph` as a required new dependency.
 - The PRD includes implementation deliverables and test requirements.
@@ -574,4 +561,4 @@ Replace deterministic routing with a structured-output router only after unit te
 
 ### Evaluation Harness
 
-Add LangSmith datasets for route accuracy, debate judge quality, critic usefulness, and end-to-end task success.
+Add LangSmith datasets for route accuracy, debate judge quality, review effectiveness, and end-to-end task success.

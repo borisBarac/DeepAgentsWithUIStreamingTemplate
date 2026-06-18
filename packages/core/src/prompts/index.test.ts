@@ -55,7 +55,6 @@ describe("prompt defaults", () => {
     expect(loader.getBaselinePrompt()).toContain("helpful general-purpose deep agent");
     expect(loader.getResearcherPrompt()).toContain("You are the researcher subagent.");
     expect(loader.getAnalystPrompt()).toContain("You are the analyst subagent.");
-    expect(loader.getCriticPrompt()).toContain("You are the critic subagent.");
     expect(loader.getReviewAgentPrompt()).toContain("You are the Review Agent.");
   });
 

@@ -22,7 +22,7 @@ The StateGraph layer that decides which stage runs next and whether execution sh
 
 ### Agent Node
 
-A graph node that invokes a Deep Agent and writes the stage result back into graph state. Examples include `research`, `code`, `critic`, `judge`, and model-backed `finalizer`.
+A graph node that invokes a Deep Agent and writes the stage result back into graph state. Examples include `research`, `code`, `judge`, and model-backed `finalizer`.
 
 ### Deterministic Node
 
@@ -34,7 +34,7 @@ A named workflow step owned by the outer graph. A stage may be deterministic or 
 
 ### Route
 
-The graph state's selected next stage. The PRD's route values include `clarify`, `research`, `code`, `debate`, `critic`, `judge`, `final`, and `end`.
+The graph state's selected next stage. The PRD's route values include `clarify`, `research`, `code`, `debate`, `judge`, `final`, `blocked`, and `end`.
 
 ### Routing Policy
 
@@ -47,10 +47,6 @@ The intake decision that determines whether the user must answer questions befor
 ### Work Branch
 
 A productive stage selected after intake, such as research, coding, debate, or direct finalization.
-
-### Critic Stage
-
-The graph stage that inspects prior outputs for correctness risks, missing evidence, unsafe assumptions, and required revisions before finalization.
 
 ### Judge Stage
 
@@ -74,7 +70,7 @@ The typed state object passed between graph nodes. It includes the task, message
 
 ### Stage Output
 
-The result produced by a graph stage and stored in graph state, such as `researchResult`, `codeResult`, `criticResult`, `judgeResult`, or `finalAnswer`.
+The result produced by a graph stage and stored in graph state, such as `researchResult`, `codeResult`, `debateResult`, `judgeResult`, or `finalAnswer`.
 
 ### Structured Error
 
@@ -106,9 +102,8 @@ Long-term memory stored under `/memory` through the configured store backend. Gr
 
 ### Debate Workflow
 
-A specialized orchestration shape where separate argument generators, a fact checker, critic, judge, and finalizer run under graph-controlled turn order and role boundaries.
+A specialized orchestration shape where separate argument generators, a fact checker, judge, finalizer, and reviewer run under graph-controlled turn order and role boundaries.
 
 ### Over-Nesting
 
 The failure mode where every Deep Agents subagent is also promoted to a top-level graph node. The graph should own business stages and approval boundaries; Deep Agents subagents should handle context isolation inside one stage.
-

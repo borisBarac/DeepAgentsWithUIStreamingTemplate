@@ -126,12 +126,10 @@ describe("composeFinalAnswer", () => {
       errors: [],
       researchResult: "found a thing",
       codeResult: "wrote a module",
-      criticResult: "looks safe",
     });
 
     expect(answer).toContain("## Research\nfound a thing");
     expect(answer).toContain("## Implementation\nwrote a module");
-    expect(answer).toContain("## Critique\nlooks safe");
   });
 
   it("flags required failures as blocked", () => {
@@ -140,12 +138,12 @@ describe("composeFinalAnswer", () => {
       messages: [],
       next: "end",
       errors: [
-        { node: "critic", category: "model", message: "boom", retryCount: 1, required: true },
+        { node: "reviewer", category: "model", message: "boom", retryCount: 1, required: true },
       ],
     });
 
     expect(answer).toContain("## Blocked");
-    expect(answer).toContain("[model] critic: boom");
+    expect(answer).toContain("[model] reviewer: boom");
   });
 
   it("falls back to the task when no stage produced output", () => {
@@ -161,12 +159,12 @@ describe("composeFinalAnswer", () => {
 
 describe("toStructuredError", () => {
   it("categorizes permission failures", () => {
-    const error = toStructuredError(new Error("Permission denied for execute"), "critic", {
+    const error = toStructuredError(new Error("Permission denied for execute"), "reviewer", {
       required: true,
     });
     expect(error.category).toBe("permission");
     expect(error.required).toBe(true);
-    expect(error.node).toBe("critic");
+    expect(error.node).toBe("reviewer");
   });
 
   it("categorizes unknown failures", () => {
@@ -254,7 +252,7 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
-      routing: { enableResearch: true, enableCoding: false, requireCritic: false },
+      routing: { enableResearch: true, enableCoding: false },
       agents: { researcher, reviewer: reviewer.agent },
     });
 
@@ -267,27 +265,6 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
     expect(result.finalAnswer).toContain("Redis streams are append-only logs.");
     expect(result.next).toBe("end");
   });
-
-  it("runs the critic after research when requireCritic is enabled", async () => {
-    const researcher = createMockAgent("research notes");
-    const critic = createMockAgent("research is sound");
-    const reviewer = createReviewAgent(APPROVED_REVIEW);
-    const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
-      routing: { enableResearch: true, enableCoding: false, requireCritic: true },
-      agents: { researcher: researcher.agent, critic: critic.agent, reviewer: reviewer.agent },
-    });
-
-    const result = (await graph.invoke(
-      invokeInput("Research Redis streams"),
-    )) as OrchestratedDeepAgentState;
-
-    expect(researcher.calls.length).toBe(1);
-    expect(critic.calls.length).toBe(1);
-    expect(result.criticResult).toBe("research is sound");
-    expect(result.finalAnswer).toContain("research notes");
-    expect(result.finalAnswer).toContain("research is sound");
-  });
 });
 
 describe("createOrchestratedDeepAgentGraph error propagation", () => {
@@ -296,7 +273,7 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
-      routing: { enableResearch: true, enableCoding: false, requireCritic: false },
+      routing: { enableResearch: true, enableCoding: false },
       agents: { researcher, reviewer: reviewer.agent },
     });
 
@@ -311,32 +288,12 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     expect(result.finalAnswer).toContain("## Caveats");
   });
 
-  it("records a missing-agent error and blocks when a required critic stage has no agent and no model", async () => {
-    const researcher = createMockAgent("research notes");
-    const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
-      routing: { enableResearch: true, enableCoding: false, requireCritic: true },
-      agents: { researcher: researcher.agent },
-    });
-
-    const result = (await graph.invoke(
-      invokeInput("Research Redis streams"),
-    )) as OrchestratedDeepAgentState;
-
-    const criticError = result.errors.find((entry) => entry.node === "critic");
-    expect(criticError).toBeDefined();
-    expect(criticError?.required).toBe(true);
-    expect(criticError?.category).toBe("validation");
-    expect(result.next).toBe("blocked");
-    expect(result.finalAnswer).toBeUndefined();
-  });
-
   it("routes a code task through the coder node", async () => {
     const coder = createMockAgent("implementation plan");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
       ...NO_CLARIFICATION,
-      routing: { enableResearch: false, enableCoding: true, requireCritic: false },
+      routing: { enableResearch: false, enableCoding: true },
       agents: { coder: coder.agent, reviewer: reviewer.agent },
     });
 
@@ -360,7 +317,6 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
         enableResearch: false,
         enableCoding: false,
         enableDebate: true,
-        requireCritic: false,
       },
       agents: { judge: judge.agent, reviewer: reviewer.agent },
     });
@@ -380,7 +336,6 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
       "research",
       "code",
       "debate",
-      "critic",
       "judge",
       "final",
       "blocked",
@@ -389,7 +344,7 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
     for (const route of routes) {
       expect(typeof route).toBe("string");
     }
-    expect(routes.length).toBe(9);
+    expect(routes.length).toBe(8);
   });
 });
 

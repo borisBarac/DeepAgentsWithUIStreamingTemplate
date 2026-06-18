@@ -7,7 +7,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 ## What is scaffolded
 
 - A supervisor-first agent factory: `createScaffoldedAgent` and `createBasicAgent`
-- Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `critic`
+- Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `review-agent`
 - A mandatory clarification-first intake gate for new supervisor-path requests
 - Two default preflight guardrails: `safety` and `taskScope`
 - A specialized tool store for building explicit role-based tool bundles
@@ -124,7 +124,7 @@ const promptLoader: PromptLoader = {
   getClarifierPrompt: (config) => `Clarifier prompt with ${config.questionsPerRound} questions`,
   getResearcherPrompt: () => "Researcher prompt",
   getAnalystPrompt: () => "Analyst prompt",
-  getCriticPrompt: () => "Critic prompt",
+  getReviewAgentPrompt: () => "Review prompt",
 };
 
 const agent = createBasicAgent({ promptLoader });
@@ -294,7 +294,7 @@ const store = createSpecializedToolStore({
 });
 
 const researcherTools = store.resolveRoleTools("researcher");
-const criticNeedsInterrupts = store.roleHasRestrictedTools("critic");
+const reviewerNeedsInterrupts = store.roleHasRestrictedTools("reviewer");
 ```
 
 The store is static and explicit by design. It does not inherit tools across roles or auto-compose bundles from tags. Its role metadata is descriptive, so later scaffold work can align specialist prompts, safety controls, and evaluation fixtures without changing the registry API.
@@ -325,7 +325,6 @@ const graph = createOrchestratedDeepAgentGraph({
   routing: {
     enableResearch: true,
     enableCoding: true,
-    requireCritic: true,
   },
   // Provide a model to auto-build stage agents from the bundled prompts, or
   // inject callables built with createBaselineAgent + adaptDeepAgent:
@@ -348,23 +347,23 @@ console.log(result.finalAnswer);
 
 ### Graph state and routing
 
-The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`, `criticResult`, `judgeResult`), `finalAnswer`, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `debate`, `critic`, `judge`, `final`, `blocked`, and `end`.
+The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`, `debateResult`, `judgeResult`), `finalAnswer`, review state, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `debate`, `judge`, `final`, `blocked`, and `end`.
 
 The default flow is:
 
 ```text
-START -> route_intake -> clarify (when required) -> research/code/debate -> critic (when required) -> finalizer -> END
+START -> route_intake -> clarify (when required) -> research/code/debate -> finalizer -> review -> END
 ```
 
 Routing is deterministic in v1 (see `selectWorkRoute`) and unit-testable without live models. The default finalizer composes stage outputs deterministically; inject an `agents.finalizer` callable only when you want model-backed synthesis at the delivery boundary.
 
 ### Approval and pause points
 
-The clarification gate pauses the graph (route `clarify`) and exposes `clarification.openQuestions` for the host application to answer. Re-invoke the graph with a `ready_to_proceed` clarification state to resume. Failed required stages route to `blocked`; failed optional stages route to the finalizer with the failure recorded in `errors`.
+The clarification gate pauses the graph (route `clarify`) and exposes `clarification.openQuestions` for the host application to answer. Re-invoke the graph with a `ready_to_proceed` clarification state to resume. Failed optional work stages route to the finalizer with the failure recorded in `errors`; final delivery is always evaluated by the reviewer and is caveated if review cannot approve it.
 
 ### Avoid over-nesting
 
-Prefer graph nodes for **business stages and approval boundaries**. Keep context-isolated work as Deep Agents subagents inside one stage. Do not promote every subagent to a top-level graph node. See `PRD/stategraph-deepagents-orchestration.md` for the full design, including the debate product shape (`argument_generator`, `fact_checker`, `critic`, `judge`, `finalizer`).
+Prefer graph nodes for **business stages and approval boundaries**. Keep context-isolated work as Deep Agents subagents inside one stage. Do not promote every subagent to a top-level graph node.
 
 ## Recommended next implementation steps
 

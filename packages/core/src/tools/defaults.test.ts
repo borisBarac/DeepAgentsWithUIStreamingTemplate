@@ -21,9 +21,9 @@ describe("default specialist role toolsets", () => {
         purpose: "Computation, extraction, transformation, and file-based analysis.",
       },
       {
-        role: "critic",
+        role: "reviewer",
         toolIds: [],
-        purpose: "Grounding, citation checks, and policy or quality verification.",
+        purpose: "Final quality review, approval decisions, and required-change verification.",
       },
     ]);
   });

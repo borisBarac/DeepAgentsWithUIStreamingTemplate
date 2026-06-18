@@ -6,7 +6,7 @@ const DEFAULT_SPECIALIST_ROLE_PURPOSES: Record<SpecialistRole, string> = {
   clarifier: "Structured intake, requirement checks, and preflight readiness gating.",
   researcher: "Evidence gathering, retrieval, search, and source collection.",
   analyst: "Computation, extraction, transformation, and file-based analysis.",
-  critic: "Grounding, citation checks, and policy or quality verification.",
+  reviewer: "Final quality review, approval decisions, and required-change verification.",
 };
 
 function freezeRoleToolsets<TRole extends SpecialistRole>(
@@ -40,9 +40,9 @@ export function createDefaultSpecialistRoleToolsets(): readonly SpecializedRoleT
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.analyst,
     },
     {
-      role: "critic",
+      role: "reviewer",
       toolIds: [],
-      purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.critic,
+      purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.reviewer,
     },
   ]);
 }

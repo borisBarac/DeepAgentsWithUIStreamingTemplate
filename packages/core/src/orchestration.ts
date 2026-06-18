@@ -32,7 +32,6 @@ export type OrchestratedDeepAgentRoute =
   | "research"
   | "code"
   | "debate"
-  | "critic"
   | "judge"
   | "final"
   | "blocked"
@@ -66,7 +65,6 @@ export type OrchestratedDeepAgentState = {
   researchResult?: string;
   codeResult?: string;
   debateResult?: string;
-  criticResult?: string;
   judgeResult?: string;
   finalAnswer?: string;
   review?: ReviewState;
@@ -74,12 +72,7 @@ export type OrchestratedDeepAgentState = {
   errors: OrchestratedDeepAgentError[];
 };
 
-type OrchestratedStageResultKey =
-  | "researchResult"
-  | "codeResult"
-  | "debateResult"
-  | "criticResult"
-  | "judgeResult";
+type OrchestratedStageResultKey = "researchResult" | "codeResult" | "debateResult" | "judgeResult";
 //#endregion
 
 //#region Agent callable contract and adapter
@@ -92,13 +85,7 @@ export type OrchestratedDeepAgentInvokeOutput = {
   messages: OrchestratedDeepAgentMessage[];
 };
 
-export type OrchestratedDeepAgentRole =
-  | "researcher"
-  | "coder"
-  | "critic"
-  | "judge"
-  | "finalizer"
-  | "reviewer";
+export type OrchestratedDeepAgentRole = "researcher" | "coder" | "judge" | "finalizer" | "reviewer";
 
 export type OrchestratedDeepAgent = {
   invoke(input: OrchestratedDeepAgentInvokeInput): Promise<OrchestratedDeepAgentInvokeOutput>;
@@ -169,7 +156,6 @@ export type OrchestratedDeepAgentRoutingOptions = {
   enableResearch?: boolean;
   enableCoding?: boolean;
   enableDebate?: boolean;
-  requireCritic?: boolean;
 };
 
 const RESEARCH_KEYWORDS =
@@ -264,7 +250,6 @@ export function composeFinalAnswer(state: OrchestratedDeepAgentState): string {
     { key: "researchResult", heading: "Research" },
     { key: "codeResult", heading: "Implementation" },
     { key: "debateResult", heading: "Debate" },
-    { key: "criticResult", heading: "Critique" },
     { key: "judgeResult", heading: "Judgment" },
   ];
 
@@ -333,10 +318,6 @@ const OrchestratedStateAnnotation = Annotation.Root({
     reducer: (_current, next) => next,
   }),
   debateResult: Annotation<string | undefined>({
-    default: () => undefined,
-    reducer: (_current, next) => next,
-  }),
-  criticResult: Annotation<string | undefined>({
     default: () => undefined,
     reducer: (_current, next) => next,
   }),
@@ -411,8 +392,6 @@ function rolePromptForRole(role: OrchestratedDeepAgentRole, promptLoader: Prompt
   switch (role) {
     case "researcher":
       return promptLoader.getResearcherPrompt();
-    case "critic":
-      return promptLoader.getCriticPrompt();
     case "reviewer":
       return promptLoader.getReviewAgentPrompt();
     default:
@@ -428,7 +407,6 @@ function rolePromptLoader(role: OrchestratedDeepAgentRole, base: PromptLoader): 
     getClarifierPrompt: base.getClarifierPrompt.bind(base),
     getResearcherPrompt: base.getResearcherPrompt.bind(base),
     getAnalystPrompt: base.getAnalystPrompt.bind(base),
-    getCriticPrompt: base.getCriticPrompt.bind(base),
     getReviewAgentPrompt: base.getReviewAgentPrompt.bind(base),
   };
 }
@@ -449,7 +427,6 @@ function buildStageMessages(
     },
     { content: state.researchResult, label: "Prior research" },
     { content: state.codeResult, label: "Prior implementation notes" },
-    { content: state.criticResult, label: "Prior critique" },
   ];
 
   for (const context of priorStageContext) {
@@ -506,9 +483,6 @@ async function runStageAgent(
   }
 }
 
-function routeAfterPrimaryStage(requireCritic: boolean | undefined): OrchestratedDeepAgentRoute {
-  return requireCritic ? "critic" : "final";
-}
 //#endregion
 
 //#region Routing between nodes
@@ -531,8 +505,6 @@ function nextNodeName(
     case "debate":
     case "judge":
       return "judge";
-    case "critic":
-      return "critic";
     case "final":
       return "finalizer";
     default:
@@ -609,7 +581,7 @@ function createResearchNode(ctx: NodeContext) {
     role: "researcher",
     instruction: "Produce concise findings with source notes and unresolved questions.",
     required: false,
-    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
+    successRoute: "final",
     assignOutput: (update, output) => {
       update.researchResult = output;
     },
@@ -621,22 +593,9 @@ function createCodeNode(ctx: NodeContext) {
     role: "coder",
     instruction: "Produce implementation guidance, a changed-file plan, and risks.",
     required: false,
-    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
-    assignOutput: (update, output) => {
-      update.codeResult = output;
-    },
-  });
-}
-
-function createCriticNode(ctx: NodeContext) {
-  return createStageNode(ctx, {
-    role: "critic",
-    instruction:
-      "Identify correctness risks, missing evidence, unsafe assumptions, and required revisions.",
-    required: ctx.routing.requireCritic ?? false,
     successRoute: "final",
     assignOutput: (update, output) => {
-      update.criticResult = output;
+      update.codeResult = output;
     },
   });
 }
@@ -647,7 +606,7 @@ function createJudgeNode(ctx: NodeContext) {
     instruction:
       "Adjudicate the competing positions with a rubric and produce a grounded synthesis.",
     required: false,
-    successRoute: routeAfterPrimaryStage(ctx.routing.requireCritic),
+    successRoute: "final",
     assignOutput: (update, output) => {
       update.judgeResult = output;
     },
@@ -672,10 +631,6 @@ function buildReviewContextPacket(
       content: `Implementation notes:\n${state.codeResult}`,
     });
   }
-  if (state.criticResult) {
-    messages.push({ role: "system", content: `Prior critique:\n${state.criticResult}` });
-  }
-
   const errors = state.errors ?? [];
   if (errors.length > 0) {
     messages.push({
@@ -890,7 +845,6 @@ export function createOrchestratedDeepAgentGraph(
     .addNode("clarify", createClarifyNode(ctx))
     .addNode("research", createResearchNode(ctx))
     .addNode("code", createCodeNode(ctx))
-    .addNode("critic", createCriticNode(ctx))
     .addNode("judge", createJudgeNode(ctx))
     .addNode("finalizer", createFinalizerNode(ctx))
     .addEdge(START, "route_intake")
@@ -898,7 +852,6 @@ export function createOrchestratedDeepAgentGraph(
     .addConditionalEdges("clarify", (state) => routeToNextNode(state, END))
     .addConditionalEdges("research", (state) => routeToNextNode(state, END))
     .addConditionalEdges("code", (state) => routeToNextNode(state, END))
-    .addConditionalEdges("critic", (state) => routeToNextNode(state, END))
     .addConditionalEdges("judge", (state) => routeToNextNode(state, END))
     .addEdge("finalizer", END);
 

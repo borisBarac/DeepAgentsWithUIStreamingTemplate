@@ -13,7 +13,6 @@ const testPromptLoader: PromptLoader = {
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
-  getCriticPrompt: () => "custom critic prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 

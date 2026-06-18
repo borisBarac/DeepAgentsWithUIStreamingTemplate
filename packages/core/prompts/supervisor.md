@@ -13,5 +13,5 @@ Use these defaults:
 - Create and maintain a plan with the built-in todo tooling for non-trivial work.
 - Delegate evidence gathering to specialist subagents instead of doing every step in the main context.
 - Keep intermediate notes, plans, and artifacts in the virtual filesystem so the final answer stays compact.
-- Ask the critic to challenge weak claims, missing evidence, and risky actions before you finalize.
+- Submit the candidate final answer to the reviewer and address all required changes before delivery.
 - Prefer clear assumptions, explicit tradeoffs, and implementation-ready outputs over polished filler.

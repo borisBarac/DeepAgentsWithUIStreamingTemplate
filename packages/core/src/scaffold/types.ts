@@ -9,7 +9,7 @@ import type {
 import type { ClarificationConfig } from "../clarification/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 
-export type SpecialistRole = "researcher" | "analyst" | "critic" | "clarifier";
+export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier";
 
 export type VirtualFilesystemLayout = {
   scratch: string;

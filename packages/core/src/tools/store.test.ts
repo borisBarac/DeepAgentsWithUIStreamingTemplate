@@ -54,13 +54,13 @@ describe("specialized tool store", () => {
         {
           id: "retrieve",
           tool: retrieveTool,
-          specialists: ["researcher", "critic"],
+          specialists: ["researcher", "reviewer"],
           evidenceMode: "citation",
         },
         {
           id: "verify",
           tool: verifyTool,
-          specialists: ["critic"],
+          specialists: ["reviewer"],
           evidenceMode: "citation",
         },
       ],
@@ -70,7 +70,7 @@ describe("specialized tool store", () => {
           toolIds: ["search", "retrieve"],
         },
         {
-          role: "critic",
+          role: "reviewer",
           toolIds: ["retrieve", "verify"],
         },
       ],
@@ -80,7 +80,7 @@ describe("specialized tool store", () => {
       resolveSpecializedTools(store, "researcher").map((resolvedTool) => resolvedTool.name),
     ).toEqual(["search_sources", "retrieve_document"]);
     expect(
-      resolveSpecializedToolsForRoles(store, ["researcher", "critic"]).map(
+      resolveSpecializedToolsForRoles(store, ["researcher", "reviewer"]).map(
         (resolvedTool) => resolvedTool.name,
       ),
     ).toEqual(["search_sources", "retrieve_document", "verify_grounding"]);
@@ -148,7 +148,7 @@ describe("specialized tool store", () => {
 
     expect(store.roleHasRestrictedTools("researcher")).toBeFalse();
     expect(store.roleHasRestrictedTools("analyst")).toBeTrue();
-    expect(store.roleHasRestrictedTools("critic")).toBeFalse();
+    expect(store.roleHasRestrictedTools("reviewer")).toBeFalse();
     expect(store.roleHasRestrictedTools("clarifier")).toBeFalse();
   });
 
@@ -204,11 +204,11 @@ describe("specialized tool store", () => {
         ],
         roles: [
           {
-            role: "critic",
+            role: "reviewer",
             toolIds: ["verify"],
           },
         ],
       }),
-    ).toThrow('Specialized role "critic" references unknown tool id "verify".');
+    ).toThrow('Specialized role "reviewer" references unknown tool id "verify".');
   });
 });
