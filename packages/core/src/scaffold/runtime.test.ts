@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
+import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
@@ -136,5 +137,27 @@ describe("runtime scaffold defaults", () => {
     }).subagents as SubAgent[];
 
     expect(clarifier?.responseFormat).toBe(customSchema);
+  });
+
+  it("threads model runtime assignments into default subagents", () => {
+    const modelRuntime = createModelRuntime({
+      connections: {
+        openrouter: { provider: "openrouter", apiKey: "test-key" },
+      },
+      models: {
+        primary: { connection: "openrouter", model: "primary-model" },
+        fast: { connection: "openrouter", model: "fast-model" },
+      },
+      assignments: {
+        default: "primary",
+        clarifier: "fast",
+      },
+    });
+    const [clarifier, researcher] = createRuntimeScaffold({
+      modelRuntime,
+    }).subagents as SubAgent[];
+
+    expect((clarifier?.model as { model?: string }).model).toBe("fast-model");
+    expect((researcher?.model as { model?: string }).model).toBe("primary-model");
   });
 });

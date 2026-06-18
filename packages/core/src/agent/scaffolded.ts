@@ -1,7 +1,7 @@
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
-import { createChatModel } from "../models/index.ts";
+import { assertCompatibleModelOptions, createChatModel } from "../models/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
@@ -18,6 +18,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     memory,
     middleware,
     model,
+    modelRuntime,
     openRouter,
     permissions,
     permissionOptions,
@@ -29,12 +30,14 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     ...agentOptions
   } = options;
 
+  assertCompatibleModelOptions({ model, modelRuntime, openRouter });
   const scaffold = createRuntimeScaffold({
     backend,
     backendOptions,
     clarificationOptions,
     interruptOn,
     memory,
+    modelRuntime,
     permissions,
     permissionOptions,
     promptLoader,
@@ -44,7 +47,9 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
   });
 
   configureLangSmithTracing(langSmith);
-  const chatModel = createChatModel({ model, openRouter });
+  const chatModel = modelRuntime
+    ? modelRuntime.getModelForRole("supervisor")
+    : createChatModel({ model, openRouter });
   const guardrailDecision = createGuardrailDecision(
     guardrails === false
       ? { enabled: false, middleware }

@@ -45,6 +45,92 @@ The default model is OpenRouter DeepSeek V4 Pro:
 openrouter:deepseek/deepseek-v4-pro
 ```
 
+## Centralized model configuration
+
+Use `createModelRuntime(...)` when an application needs named provider connections, reusable model
+profiles, or different models by agent role. Core does not load `.env` files; pass keys from the
+application or leave them undefined to use the provider SDK's environment-variable conventions.
+
+```ts
+import { createModelRuntime, createScaffoldedAgent } from "@deep-agent-template/core";
+
+const modelRuntime = createModelRuntime({
+  connections: {
+    openrouter: {
+      provider: "openrouter",
+      apiKey: process.env.OPENROUTER_API_KEY,
+    },
+  },
+  models: {
+    primary: {
+      connection: "openrouter",
+      model: "anthropic/claude-sonnet-4",
+    },
+    fast: {
+      connection: "openrouter",
+      model: "google/gemini-2.5-flash",
+      temperature: 0,
+    },
+  },
+  assignments: {
+    default: "primary",
+    clarifier: "fast",
+    researcher: "fast",
+    reviewer: "primary",
+  },
+});
+
+const agent = createScaffoldedAgent({ modelRuntime });
+
+modelRuntime.getModel("primary");
+modelRuntime.getModelForRole("researcher");
+```
+
+Supported roles are `baseline`, `supervisor`, `clarifier`, `researcher`, `analyst`, `reviewer`,
+`coder`, `judge`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
+Models are constructed on first lookup and cached by profile.
+
+Generic OpenAI-compatible chat-completion endpoints use the same runtime:
+
+```ts
+const localRuntime = createModelRuntime({
+  connections: {
+    local: {
+      provider: "openai-compatible",
+      apiKey: process.env.LOCAL_API_KEY,
+      baseURL: "http://localhost:11434/v1",
+    },
+  },
+  models: {
+    localQwen: {
+      connection: "local",
+      model: "qwen3",
+      temperature: 0,
+      maxTokens: 4096,
+    },
+  },
+  assignments: {
+    default: "localQwen",
+  },
+});
+```
+
+Explicit `subagentOverrides.<role>.model` values still win over runtime assignments. Injected
+StateGraph agents also win over generated runtime-backed agents.
+
+The legacy single-model API remains supported:
+
+```ts
+createBaselineAgent({
+  model: "openrouter:deepseek/deepseek-v4-pro",
+  openRouter: { apiKey: process.env.OPENROUTER_API_KEY },
+});
+```
+
+To migrate, move the connection and model ID into a runtime profile, assign it as `default`, and
+pass `modelRuntime` instead. Do not combine `modelRuntime` with legacy `model` or `openRouter`
+options; the factories reject ambiguous combinations.
+
 ## Usage
 
 ```ts

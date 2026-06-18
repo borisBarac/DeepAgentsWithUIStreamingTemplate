@@ -11,8 +11,11 @@ import type { CreateGuardrailDecisionOptions } from "./guardrails/types.ts";
 import type {
   CreateChatModelOptions,
   ModelIdentifier,
+  ModelRuntime,
+  ModelRuntimeOptions,
   OpenRouterModelOptions,
 } from "./models/index.ts";
+import { assertCompatibleModelOptions } from "./models/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "./prompts/index.ts";
 import {
   createReviewConfig,
@@ -286,14 +289,15 @@ export function composeFinalAnswer(state: OrchestratedDeepAgentState): string {
 
 //#region Options
 
-export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions & {
-  agents?: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
-  routing?: OrchestratedDeepAgentRoutingOptions;
-  clarification?: Partial<ClarificationConfig>;
-  guardrails?: false | CreateGuardrailDecisionOptions;
-  review?: Partial<ReviewConfig>;
-  promptLoader?: PromptLoader;
-};
+export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions &
+  ModelRuntimeOptions & {
+    agents?: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
+    routing?: OrchestratedDeepAgentRoutingOptions;
+    clarification?: Partial<ClarificationConfig>;
+    guardrails?: false | CreateGuardrailDecisionOptions;
+    review?: Partial<ReviewConfig>;
+    promptLoader?: PromptLoader;
+  };
 
 //#endregion
 
@@ -357,9 +361,20 @@ type NodeContext = {
   review: ReviewConfig;
   promptLoader: PromptLoader;
   model?: ModelIdentifier;
+  modelRuntime?: ModelRuntime;
   openRouter?: OpenRouterModelOptions;
   defaults: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
 };
+
+function modelRuntimeForRole(
+  modelRuntime: ModelRuntime,
+  role: OrchestratedDeepAgentRole,
+): ModelRuntime {
+  return {
+    getModel: (profile) => modelRuntime.getModel(profile),
+    getModelForRole: () => modelRuntime.getModelForRole(role),
+  };
+}
 
 function resolveAgent(
   ctx: NodeContext,
@@ -373,12 +388,13 @@ function resolveAgent(
   if (cached) {
     return cached;
   }
-  if (ctx.model === undefined && ctx.openRouter === undefined) {
+  if (ctx.modelRuntime === undefined && ctx.model === undefined && ctx.openRouter === undefined) {
     return undefined;
   }
   const built = adaptDeepAgent(
     createBaselineAgent({
       model: ctx.model,
+      modelRuntime: ctx.modelRuntime ? modelRuntimeForRole(ctx.modelRuntime, role) : undefined,
       openRouter: ctx.openRouter,
       guardrails: ctx.guardrails,
       promptLoader: rolePromptLoader(role, ctx.promptLoader),
@@ -701,7 +717,7 @@ async function reviseCandidate(
   candidate: string,
   report: ReviewReport,
 ): Promise<string | null> {
-  const reviser = ctx.agents.finalizer;
+  const reviser = resolveAgent(ctx, "finalizer");
   if (!reviser) return null;
 
   try {
@@ -833,9 +849,10 @@ function createFinalizerNode(ctx: NodeContext) {
     const errors: OrchestratedDeepAgentError[] = [];
 
     let candidate = draft;
-    if (ctx.agents.finalizer) {
+    const finalizer = resolveAgent(ctx, "finalizer");
+    if (finalizer) {
       try {
-        const result = await ctx.agents.finalizer.invoke({
+        const result = await finalizer.invoke({
           messages: [
             ...(state.messages ?? []),
             {
@@ -877,6 +894,7 @@ export type OrchestratedDeepAgentGraph = ReturnType<typeof createOrchestratedDee
 export function createOrchestratedDeepAgentGraph(
   options: CreateOrchestratedDeepAgentGraphOptions = {},
 ) {
+  assertCompatibleModelOptions(options);
   const ctx: NodeContext = {
     agents: options.agents ?? {},
     routing: options.routing ?? {},
@@ -885,6 +903,7 @@ export function createOrchestratedDeepAgentGraph(
     review: createReviewConfig(options.review),
     promptLoader: options.promptLoader ?? DEFAULT_PROMPT_LOADER,
     model: options.model,
+    modelRuntime: options.modelRuntime,
     openRouter: options.openRouter,
     defaults: {},
   };

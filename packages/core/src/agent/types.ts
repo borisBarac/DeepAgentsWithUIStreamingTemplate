@@ -1,7 +1,7 @@
 import type { CreateDeepAgentParams } from "deepagents";
 
 import type { CreateGuardrailDecisionOptions } from "../guardrails/index.ts";
-import type { CreateChatModelOptions } from "../models/index.ts";
+import type { CreateChatModelOptions, ModelRuntimeOptions } from "../models/index.ts";
 import type { LangSmithTracingOptions } from "../observability/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { CreateRuntimeScaffoldOptions } from "../scaffold/index.ts";
@@ -23,7 +23,8 @@ type DeepAgentScaffoldOptions = Pick<
 >;
 
 export type CreateBaselineAgentOptions = DeepAgentScaffoldOptions &
-  CreateChatModelOptions & {
+  CreateChatModelOptions &
+  ModelRuntimeOptions & {
     guardrails?: false | CreateGuardrailDecisionOptions;
     name?: string;
     promptLoader?: PromptLoader;

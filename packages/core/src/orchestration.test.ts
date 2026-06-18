@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { createClarificationState } from "./clarification/index.ts";
+import { createModelRuntime } from "./models/index.ts";
 import {
   type CreateOrchestratedDeepAgentGraphOptions,
   composeFinalAnswer,
@@ -293,6 +294,104 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
         { role: "system", content: "Clarifications provided:\n- runtime: Node.js" },
       ]),
     );
+  });
+
+  it("keeps injected agents ahead of runtime role resolution", async () => {
+    const researcher = createMockAgent("research complete");
+    const finalizer = createMockAgent("final answer");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const modelRuntime = createModelRuntime({
+      connections: {
+        openrouter: { provider: "openrouter", apiKey: "test-key" },
+      },
+      models: {
+        unused: { connection: "openrouter", model: "unused-model" },
+      },
+      assignments: {},
+    });
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      modelRuntime,
+      routing: { enableResearch: true, enableCoding: false },
+      agents: {
+        researcher: researcher.agent,
+        finalizer: finalizer.agent,
+        reviewer: reviewer.agent,
+      },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.finalAnswer).toBe("final answer");
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph model runtime roles", () => {
+  function runtimeWithoutRoleAssignments() {
+    return createModelRuntime({
+      connections: {
+        openrouter: { provider: "openrouter", apiKey: "test-key" },
+      },
+      models: {
+        unused: { connection: "openrouter", model: "unused-model" },
+      },
+      assignments: {},
+    });
+  }
+
+  it.each([
+    {
+      role: "researcher",
+      task: "Research Redis streams",
+      routing: { enableResearch: true, enableCoding: false },
+      agents: {},
+    },
+    {
+      role: "coder",
+      task: "Implement a consumer",
+      routing: { enableResearch: false, enableCoding: true },
+      agents: {},
+    },
+    {
+      role: "judge",
+      task: "Debate tabs versus spaces",
+      routing: { enableResearch: false, enableCoding: false, enableDebate: true },
+      agents: {},
+    },
+    {
+      role: "finalizer",
+      task: "hello",
+      routing: { enableResearch: false, enableCoding: false },
+      agents: {},
+    },
+    {
+      role: "reviewer",
+      task: "hello",
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { finalizer: createMockAgent("answer").agent },
+    },
+  ])("resolves the $role assignment for its generated stage agent", async (testCase) => {
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      modelRuntime: runtimeWithoutRoleAssignments(),
+      routing: testCase.routing,
+      agents: testCase.agents,
+    });
+
+    await expect(graph.invoke(invokeInput(testCase.task))).rejects.toThrow(
+      `No model assignment configured for role "${testCase.role}"`,
+    );
+  });
+
+  it("rejects a runtime combined with legacy graph model options", () => {
+    expect(() =>
+      createOrchestratedDeepAgentGraph({
+        modelRuntime: runtimeWithoutRoleAssignments(),
+        openRouter: { apiKey: "legacy-key" },
+      }),
+    ).toThrow("cannot be combined");
   });
 });
 

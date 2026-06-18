@@ -10,6 +10,7 @@
   "dependencies": {
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
+    "@langchain/openai": "^1.4.7",
     "@langchain/openrouter": "^0.3.0",
     "deepagents": "^1.10.2",
     "langchain": "^1.4.5",

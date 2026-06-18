@@ -7,6 +7,7 @@ import type {
 } from "deepagents";
 
 import type { ClarificationConfig } from "../clarification/index.ts";
+import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 
 export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier";
@@ -34,6 +35,7 @@ export type CreateDefaultPermissionsOptions = {
 };
 
 export type CreateDefaultSubagentsOptions = {
+  modelRuntime?: ModelRuntime;
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
   reviewer?: Partial<SubAgent>;

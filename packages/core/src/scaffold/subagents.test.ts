@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
+import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
@@ -84,5 +85,40 @@ describe("default subagents", () => {
     }) as SubAgent[];
 
     expect(reviewer?.responseFormat).toBe(customSchema);
+  });
+
+  it("assigns role models to every default specialist and preserves explicit model overrides", () => {
+    const runtime = createModelRuntime({
+      connections: {
+        openrouter: { provider: "openrouter", apiKey: "test-key" },
+      },
+      models: {
+        primary: { connection: "openrouter", model: "primary-model" },
+        fast: { connection: "openrouter", model: "fast-model" },
+      },
+      assignments: {
+        default: "primary",
+        clarifier: "fast",
+        analyst: "fast",
+      },
+    });
+    const explicitReviewerModel = runtime.getModel("fast");
+    const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
+      createDefaultSubagents({
+        modelRuntime: runtime,
+      }),
+    );
+    const [, , , overriddenReviewer] = asDefaultSubagents(
+      createDefaultSubagents({
+        modelRuntime: runtime,
+        reviewer: { model: explicitReviewerModel },
+      }),
+    );
+
+    expect(clarifier?.model).toBe(runtime.getModelForRole("clarifier"));
+    expect(researcher?.model).toBe(runtime.getModelForRole("researcher"));
+    expect(analyst?.model).toBe(runtime.getModelForRole("analyst"));
+    expect(reviewer?.model).toBe(runtime.getModelForRole("reviewer"));
+    expect(overriddenReviewer?.model).toBe(explicitReviewerModel);
   });
 });
