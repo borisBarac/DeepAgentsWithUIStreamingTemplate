@@ -5,8 +5,8 @@ function dedupeMissingInformation(items: readonly string[]): string[] {
 }
 
 function mergeAnsweredInformation(
-  existing: readonly ClarificationState["answeredInformation"],
-  next: readonly ClarificationState["answeredInformation"],
+  existing: ClarificationState["answeredInformation"],
+  next: ClarificationState["answeredInformation"],
 ): ClarificationState["answeredInformation"] {
   const answeredByKey = new Map(existing.map((item) => [item.key, item]));
 

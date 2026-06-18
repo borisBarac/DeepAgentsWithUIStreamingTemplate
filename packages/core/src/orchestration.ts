@@ -69,7 +69,6 @@ type OrchestratedStageResultKey =
   | "debateResult"
   | "criticResult"
   | "judgeResult";
-
 //#endregion
 
 //#region Agent callable contract and adapter
@@ -257,14 +256,12 @@ export function composeFinalAnswer(state: OrchestratedDeepAgentState): string {
       `## Clarifications\n${answers.map((answer) => `- ${answer.key}: ${answer.value}`).join("\n")}`,
     );
   }
-
   for (const section of stageSections) {
     const content = state[section.key];
     if (content) {
       sections.push(`## ${section.heading}\n${content}`);
     }
   }
-
   if (sections.length === 0) {
     sections.push(state.task);
   }
@@ -437,7 +434,6 @@ function buildStageMessages(
       });
     }
   }
-
   messages.push({ role: "user", content: `${instruction}\n\nTask: ${state.task}` });
   return messages;
 }
@@ -487,7 +483,6 @@ async function runStageAgent(
 function routeAfterPrimaryStage(requireCritic: boolean | undefined): OrchestratedDeepAgentRoute {
   return requireCritic ? "critic" : "final";
 }
-
 //#endregion
 
 //#region Routing between nodes
