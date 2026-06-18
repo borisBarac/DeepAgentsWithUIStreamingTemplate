@@ -413,11 +413,12 @@ function rolePromptLoader(role: OrchestratedDeepAgentRole, base: PromptLoader): 
 
 function buildStageMessages(
   state: OrchestratedGraphState,
+  role: OrchestratedDeepAgentRole,
   instruction: string,
 ): OrchestratedDeepAgentMessage[] {
   const messages: OrchestratedDeepAgentMessage[] = [];
   const answers = state.clarification?.answeredInformation ?? [];
-  const priorStageContext: Array<{ content?: string; label: string }> = [
+  const sharedContext: Array<{ content?: string; label: string }> = [
     {
       content:
         answers.length > 0
@@ -425,9 +426,39 @@ function buildStageMessages(
           : undefined,
       label: "Clarifications provided",
     },
-    { content: state.researchResult, label: "Prior research" },
-    { content: state.codeResult, label: "Prior implementation notes" },
+    {
+      content:
+        state.errors.length > 0
+          ? state.errors
+              .map((entry) => `- [${entry.category}] ${entry.node}: ${entry.message}`)
+              .join("\n")
+          : undefined,
+      label: "Known limitations",
+    },
   ];
+  const stageContextByRole: Record<
+    OrchestratedDeepAgentRole,
+    Array<{ content?: string; label: string }>
+  > = {
+    researcher: [
+      { content: state.codeResult, label: "Prior implementation notes" },
+      { content: state.debateResult, label: "Competing positions" },
+      { content: state.judgeResult, label: "Prior judgment" },
+    ],
+    coder: [
+      { content: state.researchResult, label: "Prior research" },
+      { content: state.debateResult, label: "Competing positions" },
+      { content: state.judgeResult, label: "Prior judgment" },
+    ],
+    judge: [
+      { content: state.researchResult, label: "Prior research" },
+      { content: state.codeResult, label: "Prior implementation notes" },
+      { content: state.debateResult, label: "Competing positions" },
+    ],
+    finalizer: [],
+    reviewer: [],
+  };
+  const priorStageContext = [...sharedContext, ...stageContextByRole[role]];
 
   for (const context of priorStageContext) {
     if (context.content) {
@@ -437,6 +468,7 @@ function buildStageMessages(
       });
     }
   }
+  messages.push(...(state.messages ?? []));
   messages.push({ role: "user", content: `${instruction}\n\nTask: ${state.task}` });
   return messages;
 }
@@ -470,7 +502,7 @@ async function runStageAgent(
     };
   }
   try {
-    const result = await agent.invoke({ messages: buildStageMessages(state, instruction) });
+    const result = await agent.invoke({ messages: buildStageMessages(state, role, instruction) });
     return {
       output: extractStageOutput(result.messages),
       next: options.successRoute,
@@ -622,6 +654,15 @@ function buildReviewContextPacket(
   const messages: OrchestratedDeepAgentMessage[] = [];
   messages.push({ role: "system", content: `Original user request:\n${state.task}` });
 
+  const answers = state.clarification?.answeredInformation ?? [];
+  if (answers.length > 0) {
+    messages.push({
+      role: "system",
+      content: `Clarifications provided:\n${answers
+        .map((answer) => `- ${answer.key}: ${answer.value}`)
+        .join("\n")}`,
+    });
+  }
   if (state.researchResult) {
     messages.push({ role: "system", content: `Research performed:\n${state.researchResult}` });
   }
@@ -630,6 +671,12 @@ function buildReviewContextPacket(
       role: "system",
       content: `Implementation notes:\n${state.codeResult}`,
     });
+  }
+  if (state.debateResult) {
+    messages.push({ role: "system", content: `Debate output:\n${state.debateResult}` });
+  }
+  if (state.judgeResult) {
+    messages.push({ role: "system", content: `Judgment:\n${state.judgeResult}` });
   }
   const errors = state.errors ?? [];
   if (errors.length > 0) {
@@ -641,6 +688,7 @@ function buildReviewContextPacket(
     });
   }
 
+  messages.push(...(state.messages ?? []));
   messages.push({
     role: "user",
     content: `Review the following candidate final answer. Return the structured review report only.\n\nCandidate:\n${candidate}`,
@@ -789,6 +837,7 @@ function createFinalizerNode(ctx: NodeContext) {
       try {
         const result = await ctx.agents.finalizer.invoke({
           messages: [
+            ...(state.messages ?? []),
             {
               role: "user",
               content: `Turn the following orchestration output into the final user-facing response:\n\n${draft}`,

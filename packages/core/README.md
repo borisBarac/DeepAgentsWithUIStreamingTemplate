@@ -349,6 +349,8 @@ console.log(result.finalAnswer);
 
 The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`, `debateResult`, `judgeResult`), `finalAnswer`, review state, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `debate`, `judge`, `final`, `blocked`, and `end`.
 
+Model-backed stages consume role-specific graph context. Each stage receives relevant prior outputs, answered clarifications, known errors, and the host-managed conversation in `messages`; the reviewer receives the complete accumulated evidence packet. Stage-internal responses are stored in their dedicated result fields and are not appended to `messages`, so the host remains responsible for conversation history.
+
 The default flow is:
 
 ```text

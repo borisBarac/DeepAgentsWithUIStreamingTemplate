@@ -265,6 +265,35 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
     expect(result.finalAnswer).toContain("Redis streams are append-only logs.");
     expect(result.next).toBe("end");
   });
+
+  it("supplies conversation history and answered clarifications to the researcher", async () => {
+    const researcher = createMockAgent("research complete");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const clarification = {
+      ...createClarificationState("Research Redis streams"),
+      answeredInformation: [{ key: "runtime", value: "Node.js" }],
+      status: "ready_to_proceed" as const,
+      readyToProceed: true,
+    };
+    const messages: OrchestratedDeepAgentMessage[] = [
+      { role: "user", content: "We deploy on Kubernetes." },
+      { role: "assistant", content: "Understood." },
+    ];
+    const graph = createOrchestratedDeepAgentGraph({
+      routing: { enableResearch: true, enableCoding: false },
+      agents: { researcher: researcher.agent, reviewer: reviewer.agent },
+    });
+
+    await graph.invoke(invokeInput("Research Redis streams", { clarification, messages }));
+
+    expect(researcher.calls[0]?.messages).toEqual(
+      expect.arrayContaining([
+        { role: "user", content: "We deploy on Kubernetes." },
+        { role: "assistant", content: "Understood." },
+        { role: "system", content: "Clarifications provided:\n- runtime: Node.js" },
+      ]),
+    );
+  });
 });
 
 describe("createOrchestratedDeepAgentGraph error propagation", () => {
@@ -305,6 +334,44 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     expect(result.codeResult).toBe("implementation plan");
     expect(result.finalAnswer).toContain("implementation plan");
   });
+
+  it("supplies prior research and known errors to the coder", async () => {
+    const coder = createMockAgent("implementation plan");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: true },
+      agents: { coder: coder.agent, reviewer: reviewer.agent },
+    });
+
+    await graph.invoke(
+      invokeInput("Implement a consumer", {
+        researchResult: "Redis streams require consumer groups.",
+        errors: [
+          {
+            node: "researcher",
+            category: "tool",
+            message: "One source timed out",
+            retryCount: 1,
+            required: false,
+          },
+        ],
+      }),
+    );
+
+    expect(coder.calls[0]?.messages).toEqual(
+      expect.arrayContaining([
+        {
+          role: "system",
+          content: "Prior research:\nRedis streams require consumer groups.",
+        },
+        {
+          role: "system",
+          content: "Known limitations:\n- [tool] researcher: One source timed out",
+        },
+      ]),
+    );
+  });
 });
 
 describe("createOrchestratedDeepAgentGraph routing", () => {
@@ -328,6 +395,36 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
     expect(judge.calls.length).toBe(1);
     expect(result.judgeResult).toBe("winning synthesis");
     expect(result.finalAnswer).toContain("winning synthesis");
+  });
+
+  it("supplies accumulated evidence and debate output to the judge", async () => {
+    const judge = createMockAgent("winning synthesis");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: {
+        enableResearch: false,
+        enableCoding: false,
+        enableDebate: true,
+      },
+      agents: { judge: judge.agent, reviewer: reviewer.agent },
+    });
+
+    await graph.invoke(
+      invokeInput("Debate tabs versus spaces", {
+        researchResult: "Survey evidence",
+        codeResult: "Formatter constraints",
+        debateResult: "Position A versus position B",
+      }),
+    );
+
+    expect(judge.calls[0]?.messages).toEqual(
+      expect.arrayContaining([
+        { role: "system", content: "Prior research:\nSurvey evidence" },
+        { role: "system", content: "Prior implementation notes:\nFormatter constraints" },
+        { role: "system", content: "Competing positions:\nPosition A versus position B" },
+      ]),
+    );
   });
 
   it("produces every public route value as a reachable destination", () => {
@@ -362,6 +459,65 @@ describe("createOrchestratedDeepAgentGraph message passthrough", () => {
 
     expect(result.messages).toEqual(messages);
   });
+
+  it("preserves host conversation without appending stage-internal messages", async () => {
+    const researcher = createMockAgent("research result");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false },
+      agents: { researcher: researcher.agent, reviewer: reviewer.agent },
+    });
+    const messages: OrchestratedDeepAgentMessage[] = [
+      { role: "user", content: "Use our existing architecture." },
+      { role: "assistant", content: "I will preserve the current architecture." },
+    ];
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams", { messages }),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.messages).toEqual(messages);
+    expect(result.messages).not.toContainEqual({
+      role: "assistant",
+      content: "research result",
+    });
+  });
+});
+
+describe("createOrchestratedDeepAgentGraph state reducers", () => {
+  it("retains existing errors when a stage records another failure", async () => {
+    const researcher = createFailingAgent(new Error("model rate limit 429"));
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: true, enableCoding: false },
+      agents: { researcher: researcher.agent, reviewer: reviewer.agent },
+    });
+    const existingError = {
+      node: "intake",
+      category: "validation" as const,
+      message: "metadata incomplete",
+      retryCount: 0,
+      required: false,
+    };
+
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams", { errors: [existingError] }),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        existingError,
+        expect.objectContaining({
+          node: "researcher",
+          category: "model",
+          message: "model rate limit 429",
+        }),
+      ]),
+    );
+    expect(result.errors).toHaveLength(2);
+  });
 });
 
 const CHANGES_REQUIRED_REVIEW: ReviewReport = {
@@ -385,6 +541,55 @@ const BLOCKED_REVIEW: ReviewReport = {
 };
 
 describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
+  it("supplies conversation history and the complete state draft to an injected finalizer", async () => {
+    const finalizer = createMockAgent("refined answer");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const clarification = {
+      ...createClarificationState("draft"),
+      answeredInformation: [{ key: "audience", value: "operators" }],
+      status: "ready_to_proceed" as const,
+      readyToProceed: true,
+    };
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { finalizer: finalizer.agent, reviewer: reviewer.agent },
+    });
+
+    await graph.invoke(
+      invokeInput("draft", {
+        messages: [{ role: "user", content: "Keep it concise." }],
+        clarification,
+        researchResult: "research",
+        codeResult: "implementation",
+        debateResult: "debate",
+        judgeResult: "judgment",
+        errors: [
+          {
+            node: "researcher",
+            category: "tool",
+            message: "source unavailable",
+            retryCount: 0,
+            required: false,
+          },
+        ],
+      }),
+    );
+
+    expect(finalizer.calls[0]?.messages).toEqual(
+      expect.arrayContaining([{ role: "user", content: "Keep it concise." }]),
+    );
+    const finalizerInput = finalizer.calls[0]?.messages
+      .map((message) => message.content)
+      .join("\n");
+    expect(finalizerInput).toContain("## Clarifications\n- audience: operators");
+    expect(finalizerInput).toContain("## Research\nresearch");
+    expect(finalizerInput).toContain("## Implementation\nimplementation");
+    expect(finalizerInput).toContain("## Debate\ndebate");
+    expect(finalizerInput).toContain("## Judgment\njudgment");
+    expect(finalizerInput).toContain("## Caveats\n- [tool] researcher: source unavailable");
+  });
+
   it("finalizes the candidate unchanged when review approves", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
@@ -416,6 +621,59 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
     const reviewInput = reviewer.calls[0]?.messages.map((m) => m.content).join("\n") ?? "";
     expect(reviewInput).toContain("Original user request:\nsummarize the report");
     expect(reviewInput).toContain("Candidate:\nsummarize the report");
+  });
+
+  it("supplies the complete accumulated state to the reviewer", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const clarification = {
+      ...createClarificationState("summarize the report"),
+      answeredInformation: [{ key: "format", value: "brief" }],
+      status: "ready_to_proceed" as const,
+      readyToProceed: true,
+    };
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    await graph.invoke(
+      invokeInput("summarize the report", {
+        messages: [
+          { role: "user", content: "Focus on operational risk." },
+          { role: "assistant", content: "I will prioritize operational risk." },
+        ],
+        clarification,
+        researchResult: "research",
+        codeResult: "implementation",
+        debateResult: "debate",
+        judgeResult: "judgment",
+        errors: [
+          {
+            node: "coder",
+            category: "validation",
+            message: "example omitted",
+            retryCount: 0,
+            required: false,
+          },
+        ],
+      }),
+    );
+
+    const reviewMessages = reviewer.calls[0]?.messages ?? [];
+    expect(reviewMessages).toEqual(
+      expect.arrayContaining([
+        { role: "user", content: "Focus on operational risk." },
+        { role: "assistant", content: "I will prioritize operational risk." },
+      ]),
+    );
+    const reviewInput = reviewMessages.map((message) => message.content).join("\n");
+    expect(reviewInput).toContain("Clarifications provided:\n- format: brief");
+    expect(reviewInput).toContain("Research performed:\nresearch");
+    expect(reviewInput).toContain("Implementation notes:\nimplementation");
+    expect(reviewInput).toContain("Debate output:\ndebate");
+    expect(reviewInput).toContain("Judgment:\njudgment");
+    expect(reviewInput).toContain("Known limitations:\n- [validation] coder: example omitted");
   });
 
   it("finalizes with explicit caveats when review is blocked", async () => {
