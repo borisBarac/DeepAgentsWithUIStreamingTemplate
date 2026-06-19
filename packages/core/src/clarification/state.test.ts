@@ -10,7 +10,7 @@ import {
 } from "./state.ts";
 
 describe("user-facing question selection", () => {
-  it("returns the exact question texts when clarification is needed", () => {
+  it("returns the full question objects when clarification is needed", () => {
     const questions = selectUserFacingQuestions({
       status: "needs_clarification",
       readyToProceed: false,
@@ -25,7 +25,10 @@ describe("user-facing question selection", () => {
       maxRounds: 10,
     });
 
-    expect(questions).toEqual(["Which platform ships first?", "What deadline should we hit?"]);
+    expect(questions).toEqual([
+      { id: "platform", question: "Which platform ships first?", context: "affects sequencing" },
+      { id: "deadline", question: "What deadline should we hit?" },
+    ]);
   });
 
   it("returns no questions once the request is ready to proceed", () => {
@@ -43,7 +46,7 @@ describe("user-facing question selection", () => {
     expect(questions).toEqual([]);
   });
 
-  it("keeps returning plain question text when structured options are present", () => {
+  it("returns full question objects including structured options", () => {
     const questions = selectUserFacingQuestions({
       status: "needs_clarification",
       readyToProceed: false,
@@ -64,7 +67,16 @@ describe("user-facing question selection", () => {
       maxRounds: 10,
     });
 
-    expect(questions).toEqual(["Which platform ships first?"]);
+    expect(questions).toEqual([
+      {
+        id: "platform",
+        question: "Which platform ships first?",
+        options: [
+          { label: "Web", description: "Ship the browser experience first." },
+          { label: "Mobile", description: "Ship native mobile applications first." },
+        ],
+      },
+    ]);
   });
 });
 

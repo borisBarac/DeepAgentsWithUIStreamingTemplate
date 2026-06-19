@@ -60,5 +60,7 @@ fi
 
 log "Bootstrap complete."
 log "Next step: add your local secrets before running live agent flows."
-log "Required for live usage: OPENROUTER_API_KEY and OPENAI_API_KEY."
+log "Live usage options:"
+log "  - OpenAI-compatible endpoint: set LLM_BASE_URL and LLM_API_KEY"
+log "  - Or OpenRouter: set LLM_API_KEY (without LLM_BASE_URL)"
 log "Optional tracing: set LANGSMITH_API_KEY and LANGSMITH_TRACING=true."

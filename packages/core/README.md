@@ -22,7 +22,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 Required for live agent calls:
 
 ```sh
-OPENROUTER_API_KEY=...
+LLM_API_KEY=...
 ```
 
 Required when the default safety guardrail is enabled:
@@ -95,7 +95,7 @@ const modelRuntime = createModelRuntime({
   connections: {
     openrouter: {
       provider: "openrouter",
-      apiKey: process.env.OPENROUTER_API_KEY,
+      apiKey: process.env.LLM_API_KEY,
     },
   },
   models: {
@@ -160,7 +160,7 @@ The legacy single-model API remains supported:
 ```ts
 createBaselineAgent({
   model: "openrouter:deepseek/deepseek-v4-pro",
-  openRouter: { apiKey: process.env.OPENROUTER_API_KEY },
+  openRouter: { apiKey: process.env.LLM_API_KEY },
 });
 ```
 
@@ -478,7 +478,7 @@ const graph = createOrchestratedDeepAgentGraph({
   // inject callables built with createBaselineAgent + adaptDeepAgent:
   agents: {
     researcher: adaptDeepAgent(
-      createBaselineAgent({ openRouter: { apiKey: process.env.OPENROUTER_API_KEY } }),
+      createBaselineAgent({ openRouter: { apiKey: process.env.LLM_API_KEY } }),
     ),
   },
 });
