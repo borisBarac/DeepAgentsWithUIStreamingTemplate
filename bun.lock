@@ -18,6 +18,9 @@
       "bin": {
         "deep-agent-template": "./src/index.ts",
       },
+      "dependencies": {
+        "@deep-agent-template/core": "workspace:*",
+      },
     },
     "packages/core": {
       "name": "@deep-agent-template/core",
