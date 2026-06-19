@@ -1,4 +1,4 @@
-import type { CreateDeepAgentParams, SubAgent } from "deepagents";
+import type { SubAgent } from "deepagents";
 
 import {
   type ClarificationConfig,
@@ -11,7 +11,6 @@ import {
   DEFAULT_REVIEW_AGENT_NAME,
   reviewReportSchema,
 } from "../review/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { CreateDefaultSubagentsOptions } from "./types.ts";
 
 function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
@@ -32,20 +31,11 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
   };
 }
 
-function createDefaultInterrupts(): NonNullable<CreateDeepAgentParams["interruptOn"]> {
-  return {
-    write_file: true,
-    edit_file: true,
-    execute: true,
-  };
-}
-
 export function createDefaultSubagents(
   options: CreateDefaultSubagentsOptions = {},
   clarificationOptions: Partial<ClarificationConfig> = {},
   promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
 ): SubAgent[] {
-  const sharedInterrupts = createDefaultInterrupts();
   const clarification = createClarificationConfig(clarificationOptions);
 
   const clarifier = mergeSubagent(
@@ -55,10 +45,9 @@ export function createDefaultSubagents(
         "Gate new requests, ask only the missing high-value questions, and return structured readiness decisions.",
       systemPrompt: promptLoader.getClarifierPrompt(clarification),
       responseFormat: clarificationResultSchema,
-      interruptOn: sharedInterrupts,
       model: options.modelRuntime?.getModelForRole("clarifier"),
       tools: [],
-      skills: [CLARIFY_DEEPLY_SKILL_DIR],
+      skills: [],
     },
     options.clarifier,
   );
@@ -68,7 +57,6 @@ export function createDefaultSubagents(
       name: "researcher",
       description: "Gather evidence, collect source-backed notes, and isolate research context.",
       systemPrompt: promptLoader.getResearcherPrompt(),
-      interruptOn: sharedInterrupts,
       model: options.modelRuntime?.getModelForRole("researcher"),
       tools: [],
       skills: [],
@@ -82,7 +70,6 @@ export function createDefaultSubagents(
       description:
         "Turn findings into structured tradeoffs, plans, and implementation-ready analysis.",
       systemPrompt: promptLoader.getAnalystPrompt(),
-      interruptOn: sharedInterrupts,
       model: options.modelRuntime?.getModelForRole("analyst"),
       tools: [],
       skills: [],
@@ -96,7 +83,6 @@ export function createDefaultSubagents(
       description: DEFAULT_REVIEW_AGENT_DESCRIPTION,
       systemPrompt: promptLoader.getReviewAgentPrompt(),
       responseFormat: reviewReportSchema,
-      interruptOn: sharedInterrupts,
       model: options.modelRuntime?.getModelForRole("reviewer"),
       tools: [],
       skills: [],

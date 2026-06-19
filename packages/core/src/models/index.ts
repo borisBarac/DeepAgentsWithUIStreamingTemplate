@@ -1,6 +1,6 @@
 import { ChatOpenAI, type ChatOpenAIFields } from "@langchain/openai";
 
-export const DEFAULT_MODEL_ID = "deepseek-v4-flash" as const;
+export const DEFAULT_MODEL_ID = "deepseek-v4-pro" as const;
 
 export const MODEL_ROLES = [
   "baseline",

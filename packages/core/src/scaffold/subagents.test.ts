@@ -5,7 +5,6 @@ import { clarificationResultSchema } from "../clarification/index.ts";
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import { createDefaultSubagents } from "./subagents.ts";
 
 const testPromptLoader: PromptLoader = {
@@ -32,12 +31,8 @@ describe("default subagents", () => {
       "review-agent",
     ]);
     expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([
-      [CLARIFY_DEEPLY_SKILL_DIR],
-      [],
-      [],
-      [],
-    ]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], [], []]);
+    expect(subagents.every((subagent) => subagent.interruptOn === undefined)).toBe(true);
   });
 
   it("uses a custom prompt loader for default subagent prompts", () => {

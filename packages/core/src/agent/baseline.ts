@@ -1,3 +1,4 @@
+import { InMemoryStore } from "@langchain/langgraph";
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
@@ -13,6 +14,7 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions = {}): D
     middleware,
     modelRuntime,
     promptLoader = DEFAULT_PROMPT_LOADER,
+    store = new InMemoryStore(),
     ...agentOptions
   } = options;
 
@@ -33,6 +35,7 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions = {}): D
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
     ...agentOptions,
+    store,
     systemPrompt: promptLoader.getBaselinePrompt(),
     middleware: guardrailDecision.middleware,
     model: chatModel,

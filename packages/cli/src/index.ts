@@ -114,6 +114,9 @@ const defaultDependencies: CliDependencies = {
         default: {
           connection: "default",
           model: model ?? DEFAULT_MODEL_ID,
+          providerOptions: {
+            modelKwargs: { thinking: { type: "disabled" } },
+          },
         },
       },
       assignments: { default: "default" },

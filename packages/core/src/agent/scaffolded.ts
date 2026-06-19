@@ -1,3 +1,4 @@
+import { InMemoryStore } from "@langchain/langgraph";
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
@@ -24,6 +25,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     subagentOverrides,
     systemPrompt,
     clarificationOptions,
+    store = new InMemoryStore(),
     ...agentOptions
   } = options;
 
@@ -58,6 +60,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
 
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
+    store,
     systemPrompt: scaffold.systemPrompt,
     backend: scaffold.backend,
     interruptOn: scaffold.interruptOn,
