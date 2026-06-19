@@ -347,6 +347,11 @@ The clarifier returns a structured readiness payload with:
 - `roundCount`
 - `maxRounds`
 
+Each question may optionally include 2-4 structured `options`. An option has a user-facing `label`,
+a one-sentence `description`, and an optional `recommended` marker. At most one option may be
+recommended. When the clarifier cannot generate useful choices, it omits `options` and asks the
+question directly. Hosts should still allow free-text answers when options are present.
+
 The default clarification policy is:
 
 - `enabled: true`

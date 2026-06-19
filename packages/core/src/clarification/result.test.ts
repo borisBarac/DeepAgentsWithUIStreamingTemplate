@@ -62,6 +62,47 @@ describe("clarification result application", () => {
     ]);
   });
 
+  it("preserves question options in clarification state", () => {
+    const state = applyClarificationResult(createClarificationState("Choose a deployment model."), {
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [
+        {
+          id: "deployment",
+          question: "Which deployment model should we use?",
+          options: [
+            {
+              label: "Managed",
+              description: "Use a hosted service with lower operational overhead.",
+              recommended: true,
+            },
+            {
+              label: "Self-hosted",
+              description: "Operate the service within existing infrastructure.",
+            },
+          ],
+        },
+      ],
+      missingInformation: ["deployment"],
+      answeredInformation: [],
+      reasoningSummary: "The deployment model changes the implementation path.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(state.openQuestions[0]?.options).toEqual([
+      {
+        label: "Managed",
+        description: "Use a hosted service with lower operational overhead.",
+        recommended: true,
+      },
+      {
+        label: "Self-hosted",
+        description: "Operate the service within existing infrastructure.",
+      },
+    ]);
+  });
+
   it("returns a blocked clarification state when the round cap is reached unresolved", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 2 }),

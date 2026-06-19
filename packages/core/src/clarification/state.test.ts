@@ -42,6 +42,30 @@ describe("user-facing question selection", () => {
 
     expect(questions).toEqual([]);
   });
+
+  it("keeps returning plain question text when structured options are present", () => {
+    const questions = selectUserFacingQuestions({
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [
+        {
+          id: "platform",
+          question: "Which platform ships first?",
+          options: [
+            { label: "Web", description: "Ship the browser experience first." },
+            { label: "Mobile", description: "Ship native mobile applications first." },
+          ],
+        },
+      ],
+      missingInformation: ["platform"],
+      answeredInformation: [],
+      reasoningSummary: "Platform choice changes the implementation path.",
+      roundCount: 1,
+      maxRounds: 10,
+    });
+
+    expect(questions).toEqual(["Which platform ships first?"]);
+  });
 });
 
 describe("clarification state management", () => {

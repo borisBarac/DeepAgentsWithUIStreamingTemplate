@@ -41,6 +41,15 @@ describe("bundled skills", () => {
     expect(metadata?.description).toBe(CLARIFY_DEEPLY_SKILL_DESCRIPTION);
   });
 
+  it("describes bounded options and direct-question fallback", () => {
+    expect(CLARIFY_DEEPLY_SKILL_CONTENT).toContain(
+      "provide 2-4 concrete, mutually exclusive options",
+    );
+    expect(CLARIFY_DEEPLY_SKILL_CONTENT).toContain(
+      "if useful options cannot be generated, omit them and ask the question directly",
+    );
+  });
+
   it("creates invoke-ready skill files for the state backend", () => {
     const issuedAt = new Date("2026-06-15T00:00:00.000Z");
     const files = createDefaultSkillFiles(issuedAt);
