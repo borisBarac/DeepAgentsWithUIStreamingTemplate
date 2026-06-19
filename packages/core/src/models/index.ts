@@ -26,6 +26,7 @@ export type CreateChatModelOptions = {
 export const MODEL_ROLES = [
   "baseline",
   "supervisor",
+  "gatekeeper",
   "clarifier",
   "researcher",
   "analyst",

@@ -201,6 +201,71 @@ describe("createOrchestratedDeepAgentGraph state shape", () => {
   });
 });
 
+describe("createOrchestratedDeepAgentGraph gatekeeper", () => {
+  it("hands an allowed task to the main deep-agent flow", async () => {
+    const researcher = createMockAgent("allowed task completed");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      gatekeeper: {
+        classifier: {
+          invoke: async () => ({
+            inScope: true,
+            missingContext: [],
+            violatedRules: [],
+            reason: "The request targets this project.",
+          }),
+        },
+      },
+      routing: { enableResearch: true, enableCoding: false },
+      agents: { researcher: researcher.agent, reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(
+      invokeInput("Research the project architecture"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.gatekeeperDecision?.inScope).toBe(true);
+    expect(researcher.calls).toHaveLength(1);
+    expect(result.finalAnswer).toContain("allowed task completed");
+  });
+
+  it("blocks an out-of-scope task before any main agent is invoked", async () => {
+    const researcher = createMockAgent("must not run");
+    const finalizer = createMockAgent("must not run");
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...NO_CLARIFICATION,
+      gatekeeper: {
+        classifier: {
+          invoke: async () => ({
+            inScope: false,
+            missingContext: [],
+            violatedRules: ["outside project scope"],
+            reason: "The request does not target this project.",
+          }),
+        },
+      },
+      routing: { enableResearch: true, enableCoding: false },
+      agents: {
+        researcher: researcher.agent,
+        finalizer: finalizer.agent,
+        reviewer: reviewer.agent,
+      },
+    });
+
+    const result = (await graph.invoke(invokeInput("Book a flight"))) as OrchestratedDeepAgentState;
+
+    expect(result.next).toBe("blocked");
+    expect(result.gatekeeperDecision?.inScope).toBe(false);
+    expect(result.finalAnswer).toContain("outside the system parameters");
+    expect(result.finalAnswer).toContain("does not target this project");
+    expect(researcher.calls).toHaveLength(0);
+    expect(finalizer.calls).toHaveLength(0);
+    expect(reviewer.calls).toHaveLength(0);
+  });
+});
+
 describe("createOrchestratedDeepAgentGraph clarification gate", () => {
   it("skips clarification when disabled and runs the finalizer", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);

@@ -7,6 +7,12 @@ import {
   type ClarificationState,
   resolveClarificationGate,
 } from "./clarification/index.ts";
+import {
+  createTaskScopeGatekeeper,
+  type TaskScopeDecision,
+  type TaskScopeGatekeeper,
+  type TaskScopeGatekeeperOptions,
+} from "./guardrails/index.ts";
 import type { CreateGuardrailDecisionOptions } from "./guardrails/types.ts";
 import type {
   CreateChatModelOptions,
@@ -15,7 +21,7 @@ import type {
   ModelRuntimeOptions,
   OpenRouterModelOptions,
 } from "./models/index.ts";
-import { assertCompatibleModelOptions } from "./models/index.ts";
+import { assertCompatibleModelOptions, createChatModel } from "./models/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "./prompts/index.ts";
 import {
   createReviewConfig,
@@ -62,6 +68,7 @@ export type OrchestratedDeepAgentMessage = {
 export type OrchestratedDeepAgentState = {
   task: string;
   messages: OrchestratedDeepAgentMessage[];
+  gatekeeperDecision?: TaskScopeDecision;
   clarification?: ClarificationState;
   researchResult?: string;
   codeResult?: string;
@@ -280,6 +287,7 @@ export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions &
   ModelRuntimeOptions & {
     agents?: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
     routing?: OrchestratedDeepAgentRoutingOptions;
+    gatekeeper?: false | TaskScopeGatekeeperOptions;
     clarification?: Partial<ClarificationConfig>;
     guardrails?: false | CreateGuardrailDecisionOptions;
     review?: Partial<ReviewConfig>;
@@ -295,6 +303,10 @@ const OrchestratedStateAnnotation = Annotation.Root({
   messages: Annotation<OrchestratedDeepAgentMessage[]>({
     default: () => [],
     reducer: (current, next) => [...(current ?? []), ...(next ?? [])],
+  }),
+  gatekeeperDecision: Annotation<TaskScopeDecision | undefined>({
+    default: () => undefined,
+    reducer: (_current, next) => next,
   }),
   clarification: Annotation<ClarificationState | undefined>({
     default: () => undefined,
@@ -335,6 +347,7 @@ type OrchestratedGraphState = typeof OrchestratedStateAnnotation.State;
 type NodeContext = {
   agents: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
   routing: OrchestratedDeepAgentRoutingOptions;
+  gatekeeper?: TaskScopeGatekeeper;
   clarification: Partial<ClarificationConfig>;
   guardrails: false | CreateGuardrailDecisionOptions;
   review: ReviewConfig;
@@ -548,6 +561,25 @@ function createIntakeNode(ctx: NodeContext) {
     return {
       clarification: gate.state ?? state.clarification,
       next: selectWorkRoute(state.task, ctx.routing),
+    };
+  };
+}
+
+function createGatekeeperNode(ctx: NodeContext) {
+  return async (state: OrchestratedGraphState): Promise<Partial<OrchestratedGraphState>> => {
+    if (!ctx.gatekeeper) {
+      return { next: "final" };
+    }
+
+    const result = await ctx.gatekeeper.check(state.task);
+    if (result.decision.inScope) {
+      return { gatekeeperDecision: result.decision, next: "final" };
+    }
+
+    return {
+      gatekeeperDecision: result.decision,
+      finalAnswer: result.blockedMessage,
+      next: "blocked",
     };
   };
 }
@@ -839,9 +871,27 @@ export function createOrchestratedDeepAgentGraph(
   options: CreateOrchestratedDeepAgentGraphOptions = {},
 ) {
   assertCompatibleModelOptions(options);
+  const gatekeeperOptions = options.gatekeeper === false ? undefined : options.gatekeeper;
+  const gatekeeperConfigured = gatekeeperOptions !== undefined;
+  const gatekeeperModel = !gatekeeperConfigured
+    ? undefined
+    : (gatekeeperOptions?.model ??
+      (options.modelRuntime
+        ? options.modelRuntime.getModelForRole("gatekeeper")
+        : options.model !== undefined || options.openRouter !== undefined
+          ? createChatModel({ model: options.model, openRouter: options.openRouter })
+          : undefined));
+  const gatekeeper =
+    !gatekeeperConfigured || (!gatekeeperOptions?.classifier && !gatekeeperModel)
+      ? undefined
+      : createTaskScopeGatekeeper({
+          ...gatekeeperOptions,
+          model: gatekeeperModel,
+        });
   const ctx: NodeContext = {
     agents: options.agents ?? {},
     routing: options.routing ?? {},
+    gatekeeper,
     clarification: options.clarification ?? {},
     guardrails: options.guardrails ?? false,
     review: createReviewConfig(options.review),
@@ -853,12 +903,14 @@ export function createOrchestratedDeepAgentGraph(
   };
 
   const builder = new StateGraph(OrchestratedStateAnnotation)
+    .addNode("gatekeeper", createGatekeeperNode(ctx))
     .addNode("route_intake", createIntakeNode(ctx))
     .addNode("clarify", createClarifyNode(ctx))
     .addNode("research", createResearchNode(ctx))
     .addNode("code", createCodeNode(ctx))
     .addNode("finalizer", createFinalizerNode(ctx))
-    .addEdge(START, "route_intake")
+    .addEdge(START, "gatekeeper")
+    .addConditionalEdges("gatekeeper", (state) => (state.next === "blocked" ? END : "route_intake"))
     .addConditionalEdges("route_intake", (state) => routeToNextNode(state, "clarify"))
     .addConditionalEdges("clarify", (state) => routeToNextNode(state, END))
     .addConditionalEdges("research", (state) => routeToNextNode(state, END))

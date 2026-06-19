@@ -86,8 +86,8 @@ modelRuntime.getModel("primary");
 modelRuntime.getModelForRole("researcher");
 ```
 
-Supported roles are `baseline`, `supervisor`, `clarifier`, `researcher`, `analyst`, `reviewer`,
-`coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
+Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
+`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
 Models are constructed on first lookup and cached by profile.
 
 Generic OpenAI-compatible chat-completion endpoints use the same runtime:
@@ -272,6 +272,26 @@ const agent = createBasicAgent({
   },
 });
 ```
+
+## Gatekeeper routing
+
+The orchestrated graph can install an explicit task-scope gatekeeper before every other node. It
+uses the same markdown-backed task-scope policies as the middleware guardrail.
+
+```ts
+const graph = createOrchestratedDeepAgentGraph({
+  modelRuntime,
+  gatekeeper: {},
+});
+```
+
+When `gatekeeper` is configured, the graph resolves the `gatekeeper` model role and classifies the
+task before clarification or delegation. In-scope tasks continue unchanged to the main deep-agent
+flow. Out-of-scope tasks end immediately with an "outside the system parameters" response; no
+researcher, coder, finalizer, or reviewer is invoked.
+
+For deterministic tests or a custom policy service, inject `gatekeeper.classifier`. Set
+`gatekeeper: false` or omit the option to preserve an ungated orchestration entry point.
 
 ## Clarification-first supervisor flow
 

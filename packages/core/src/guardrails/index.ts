@@ -1,5 +1,11 @@
 export { createGuardrailDecision } from "./decision.ts";
 export {
+  createTaskScopeGatekeeper,
+  DEFAULT_GATEKEEPER_BLOCKED_MESSAGE,
+  type TaskScopeGatekeeper,
+  type TaskScopeGatekeeperResult,
+} from "./gatekeeper.ts";
+export {
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   type GuardrailPolicyLoader,
   MarkdownGuardrailPolicyLoader,
@@ -11,9 +17,12 @@ export {
   DEFAULT_SAFETY_GUARDRAIL_NAME,
 } from "./safety.ts";
 export {
+  classifyTaskScopeRequest,
   createTaskScopeGuardrail,
+  createTaskScopePrompt,
   DEFAULT_GUARDRAIL_REFUSAL,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
+  resolveTaskScopePolicies,
   type TaskScopeDecision,
   taskScopeDecisionSchema,
 } from "./task-scope.ts";
@@ -26,4 +35,5 @@ export type {
   OpenAIContentSafetyClient,
   StructuredTaskScopeModel,
   TaskScopeClassifier,
+  TaskScopeGatekeeperOptions,
 } from "./types.ts";

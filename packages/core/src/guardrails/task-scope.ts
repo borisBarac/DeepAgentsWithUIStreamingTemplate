@@ -3,7 +3,11 @@ import { z } from "zod";
 
 import { DEFAULT_GUARDRAIL_POLICY_LOADER, type TaskScopePolicyBundle } from "./policies.ts";
 import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
-import type { DeepAgentMiddleware, GuardrailTaskScopeOptions } from "./types.ts";
+import type {
+  DeepAgentMiddleware,
+  GuardrailTaskScopeOptions,
+  TaskScopeClassifier,
+} from "./types.ts";
 
 export const DEFAULT_TASK_SCOPE_GUARDRAIL_NAME = "TaskScopeGuardrailMiddleware";
 export const DEFAULT_GUARDRAIL_REFUSAL =
@@ -23,7 +27,7 @@ const blockedUpdate = (message: string): { messages: AIMessage[]; jumpTo: "end" 
   jumpTo: "end",
 });
 
-function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle): string {
+export function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle): string {
   return [
     "Classify whether the user request is inside the agent's task scope.",
     "Use required context to decide whether the request needs clarification, but do not mark it out of scope solely because context is missing.",
@@ -43,6 +47,38 @@ function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle)
   ].join("\n");
 }
 
+export function resolveTaskScopePolicies(
+  policies: Partial<TaskScopePolicyBundle> = {},
+): TaskScopePolicyBundle {
+  return {
+    requiredContext:
+      policies.requiredContext ?? DEFAULT_GUARDRAIL_POLICY_LOADER.getRequiredContextPolicy(),
+    allowedTasks: policies.allowedTasks ?? DEFAULT_GUARDRAIL_POLICY_LOADER.getAllowedTasksPolicy(),
+    disallowedTasks:
+      policies.disallowedTasks ?? DEFAULT_GUARDRAIL_POLICY_LOADER.getDisallowedTasksPolicy(),
+  };
+}
+
+export async function classifyTaskScopeRequest(
+  request: string,
+  classifier: TaskScopeClassifier,
+  policies: TaskScopePolicyBundle,
+): Promise<TaskScopeDecision> {
+  return taskScopeDecisionSchema.parse(
+    await classifier.invoke([
+      {
+        role: "system",
+        content:
+          "You are a strict task-scope classifier. Return only the requested structured decision.",
+      },
+      {
+        role: "user",
+        content: createTaskScopePrompt(request, policies),
+      },
+    ]),
+  );
+}
+
 export function createTaskScopeGuardrail(
   options: GuardrailTaskScopeOptions = {},
 ): DeepAgentMiddleware {
@@ -56,16 +92,7 @@ export function createTaskScopeGuardrail(
     throw new Error("Task scope guardrail requires a classifier or structured-output model.");
   }
 
-  const policies = {
-    requiredContext:
-      options.policies?.requiredContext ??
-      DEFAULT_GUARDRAIL_POLICY_LOADER.getRequiredContextPolicy(),
-    allowedTasks:
-      options.policies?.allowedTasks ?? DEFAULT_GUARDRAIL_POLICY_LOADER.getAllowedTasksPolicy(),
-    disallowedTasks:
-      options.policies?.disallowedTasks ??
-      DEFAULT_GUARDRAIL_POLICY_LOADER.getDisallowedTasksPolicy(),
-  };
+  const policies = resolveTaskScopePolicies(options.policies);
   const refusalMessage = options.refusalMessage ?? DEFAULT_GUARDRAIL_REFUSAL;
 
   return createMiddleware({
@@ -79,19 +106,7 @@ export function createTaskScopeGuardrail(
           return;
         }
 
-        const decision = taskScopeDecisionSchema.parse(
-          await classifier.invoke([
-            {
-              role: "system",
-              content:
-                "You are a strict task-scope classifier. Return only the requested structured decision.",
-            },
-            {
-              role: "user",
-              content: createTaskScopePrompt(userMessage, policies),
-            },
-          ]),
-        );
+        const decision = await classifyTaskScopeRequest(userMessage, classifier, policies);
 
         if (decision.inScope) {
           return;
