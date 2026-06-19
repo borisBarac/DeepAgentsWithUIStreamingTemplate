@@ -8,6 +8,7 @@ import {
   createModelRuntime,
   createRuntimeScaffold,
   createScaffoldedAgent,
+  DEFAULT_MODEL_ID,
   type RuntimeScaffold,
 } from "@deep-agent-template/core";
 
@@ -33,7 +34,7 @@ export type OpenAICompatibleEndpoint = {
 
 type CreateAgentOptions = {
   apiKey: string;
-  baseURL?: string;
+  baseURL: string;
   model?: string;
   runtime: AgentRuntime;
   systemPrompt?: string;
@@ -45,7 +46,6 @@ type CliDependencies = {
   createLineReader?(): AsyncIterable<string>;
   print?(text: string): void;
   getOpenAICompatibleEndpoint?(): OpenAICompatibleEndpoint | undefined;
-  getLlmApiKey(): string | undefined;
 };
 
 type BaselineOptions = {
@@ -61,8 +61,6 @@ type ScaffoldOptions = {
 };
 
 const version = "0.1.0";
-
-const DEFAULT_OPENAI_COMPATIBLE_MODEL = "deepseek-chat";
 
 const helpText = `deep-agent-template
 
@@ -87,59 +85,42 @@ REPL mode:
   press Ctrl+D) to leave. Example: \`deep-agent-template scaffold\`.
 
 Options:
-  --model <model>            Model ID (accepted by both commands). With LLM_BASE_URL set
-                             this is a raw model name for the OpenAI-compatible endpoint
-                             (e.g. deepseek-chat); otherwise an OpenRouter id (e.g. openrouter:...).
+  --model <model>            Model ID (accepted by both commands). A raw model name for the
+                             OpenAI-compatible endpoint (e.g. deepseek-v4-flash). Optional;
+                             defaults to ${DEFAULT_MODEL_ID}.
   --system-prompt <text>     Override the supervisor system prompt (scaffold only).
   --system-prompt-file <path>  Read the supervisor system prompt from a file (scaffold only).
   --dump                     Print the resolved runtime scaffold as JSON and exit
                              (scaffold only; no prompt or API key required).
 
 Environment:
-  LLM_BASE_URL        Optional. When set, routes requests to this OpenAI-compatible
-                      endpoint using LLM_API_KEY (e.g. https://api.deepseek.com).
-  LLM_API_KEY         Required when LLM_BASE_URL is set.
-  LLM_API_KEY         Required. Routes to OpenRouter when LLM_BASE_URL is not set;
-                      otherwise authenticates against the OpenAI-compatible endpoint.
+  LLM_BASE_URL        Required. Your OpenAI-compatible endpoint
+                      (e.g. https://api.deepseek.com).
+  LLM_API_KEY         Required. Authenticates against the LLM_BASE_URL endpoint.
 
 Examples:
   deep-agent-template baseline "Explain this project in one sentence"
-  deep-agent-template scaffold --model openrouter:anthropic/claude-sonnet-4 "Plan a refactor"
+  deep-agent-template scaffold --model deepseek-v4-flash "Plan a refactor"
   deep-agent-template scaffold --system-prompt "You are a test agent" "Say hello"
   deep-agent-template scaffold --dump`;
 
 const defaultDependencies: CliDependencies = {
   createAgent: ({ apiKey, baseURL, model, runtime, systemPrompt }) => {
-    if (baseURL) {
-      const modelRuntime = createModelRuntime({
-        connections: {
-          default: { provider: "openai-compatible", apiKey, baseURL },
+    const modelRuntime = createModelRuntime({
+      connections: {
+        default: { apiKey, baseURL },
+      },
+      models: {
+        default: {
+          connection: "default",
+          model: model ?? DEFAULT_MODEL_ID,
         },
-        models: {
-          default: {
-            connection: "default",
-            model: model ?? DEFAULT_OPENAI_COMPATIBLE_MODEL,
-          },
-        },
-        assignments: { default: "default" },
-      });
-      return runtime === "scaffolded"
-        ? createScaffoldedAgent({ guardrails: false, modelRuntime, systemPrompt })
-        : createBaselineAgent({ guardrails: false, modelRuntime });
-    }
-
+      },
+      assignments: { default: "default" },
+    });
     return runtime === "scaffolded"
-      ? createScaffoldedAgent({
-          guardrails: false,
-          model,
-          openRouter: { apiKey },
-          systemPrompt,
-        })
-      : createBaselineAgent({
-          guardrails: false,
-          model,
-          openRouter: { apiKey },
-        });
+      ? createScaffoldedAgent({ guardrails: false, modelRuntime, systemPrompt })
+      : createBaselineAgent({ guardrails: false, modelRuntime });
   },
   createScaffold: (options) => createRuntimeScaffold(options),
   createLineReader: () =>
@@ -152,7 +133,6 @@ const defaultDependencies: CliDependencies = {
     }
     return { apiKey: process.env.LLM_API_KEY ?? "", baseURL };
   },
-  getLlmApiKey: () => process.env.LLM_API_KEY,
 };
 
 function parseBaselineOptions(args: string[]): BaselineOptions {
@@ -261,26 +241,21 @@ async function parseScaffoldOptions(args: string[]): Promise<ScaffoldOptions> {
   };
 }
 
-function resolveCredentials(dependencies: CliDependencies): { apiKey: string; baseURL?: string } {
-  const openAICompatible = dependencies.getOpenAICompatibleEndpoint?.();
+function resolveCredentials(dependencies: CliDependencies): { apiKey: string; baseURL: string } {
+  const endpoint = dependencies.getOpenAICompatibleEndpoint?.();
+  const baseURL = endpoint?.baseURL.trim() ?? "";
+  const apiKey = endpoint?.apiKey.trim() ?? "";
 
-  if (openAICompatible) {
-    const baseURL = openAICompatible.baseURL.trim();
-    const apiKey = openAICompatible.apiKey.trim();
-    if (!baseURL) {
-      throw new Error("LLM_BASE_URL must be a non-empty URL.");
-    }
-    if (!apiKey) {
-      throw new Error("LLM_API_KEY is required when LLM_BASE_URL is set.");
-    }
-    return { apiKey, baseURL };
+  if (!baseURL) {
+    throw new Error(
+      "LLM_BASE_URL is required. Set it to your OpenAI-compatible endpoint (e.g. https://api.deepseek.com).",
+    );
   }
-
-  const apiKey = dependencies.getLlmApiKey()?.trim() ?? "";
   if (!apiKey) {
     throw new Error("LLM_API_KEY is required.");
   }
-  return { apiKey };
+
+  return { apiKey, baseURL };
 }
 
 function extractTextContent(content: unknown): string | undefined {

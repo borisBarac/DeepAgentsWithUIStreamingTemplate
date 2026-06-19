@@ -66,79 +66,39 @@ const graph = createOrchestratedDeepAgentGraph({ langSmith });
 Configure tracing before invoking agents. LangChain and LangGraph then capture model, tool, agent,
 and graph runs without additional callbacks.
 
-To verify error tracing without valid LLM credentials or incurring model cost, run:
-
-```sh
-bun run smoke:langsmith
-```
-
-The smoke script uses an intentionally invalid OpenRouter key, catches the expected model error,
-and prints a unique marker that can be searched in the configured LangSmith project. It sets
-`LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
-
-The default model is OpenRouter DeepSeek V4 Pro:
-
-```ts
-openrouter:deepseek/deepseek-v4-pro
-```
+The default model id is `deepseek-v4-flash`.
 
 ## Centralized model configuration
 
-Use `createModelRuntime(...)` when an application needs named provider connections, reusable model
-profiles, or different models by agent role. Core does not load `.env` files; pass keys from the
-application or leave them undefined to use the provider SDK's environment-variable conventions.
+Models are configured exclusively through `createModelRuntime(...)`, which wires named
+OpenAI-compatible connections to reusable model profiles and assigns them by agent role. Core does
+not load `.env` files; pass keys and endpoints from the application or leave them undefined to use
+the provider SDK's environment-variable conventions.
 
 ```ts
 import { createModelRuntime, createScaffoldedAgent } from "@deep-agent-template/core";
 
 const modelRuntime = createModelRuntime({
   connections: {
-    openrouter: {
-      provider: "openrouter",
-      apiKey: process.env.LLM_API_KEY,
-    },
-  },
-  models: {
     primary: {
-      connection: "openrouter",
-      model: "anthropic/claude-sonnet-4",
+      apiKey: process.env.LLM_API_KEY,
+      baseURL: "https://api.deepseek.com",
     },
-    fast: {
-      connection: "openrouter",
-      model: "google/gemini-2.5-flash",
-      temperature: 0,
-    },
-  },
-  assignments: {
-    default: "primary",
-    clarifier: "fast",
-    researcher: "fast",
-    reviewer: "primary",
-  },
-});
-
-const agent = createScaffoldedAgent({ modelRuntime });
-
-modelRuntime.getModel("primary");
-modelRuntime.getModelForRole("researcher");
-```
-
-Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
-`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
-Models are constructed on first lookup and cached by profile.
-
-Generic OpenAI-compatible chat-completion endpoints use the same runtime:
-
-```ts
-const localRuntime = createModelRuntime({
-  connections: {
     local: {
-      provider: "openai-compatible",
       apiKey: process.env.LOCAL_API_KEY,
       baseURL: "http://localhost:11434/v1",
     },
   },
   models: {
+    default: {
+      connection: "primary",
+      model: "deepseek-v4-flash",
+    },
+    fast: {
+      connection: "primary",
+      model: "deepseek-v4-flash",
+      temperature: 0,
+    },
     localQwen: {
       connection: "local",
       model: "qwen3",
@@ -147,26 +107,25 @@ const localRuntime = createModelRuntime({
     },
   },
   assignments: {
-    default: "localQwen",
+    default: "default",
+    clarifier: "fast",
+    researcher: "fast",
+    reviewer: "default",
   },
 });
+
+const agent = createScaffoldedAgent({ modelRuntime });
+
+modelRuntime.getModel("fast");
+modelRuntime.getModelForRole("researcher");
 ```
+
+Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
+`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
+Models are constructed on first lookup and cached by profile.
 
 Explicit `subagentOverrides.<role>.model` values still win over runtime assignments. Injected
 StateGraph agents also win over generated runtime-backed agents.
-
-The legacy single-model API remains supported:
-
-```ts
-createBaselineAgent({
-  model: "openrouter:deepseek/deepseek-v4-pro",
-  openRouter: { apiKey: process.env.LLM_API_KEY },
-});
-```
-
-To migrate, move the connection and model ID into a runtime profile, assign it as `default`, and
-pass `modelRuntime` instead. Do not combine `modelRuntime` with legacy `model` or `openRouter`
-options; the factories reject ambiguous combinations.
 
 ## Usage
 
@@ -465,21 +424,34 @@ The graph is an **optional outer controller**. Each model-backed stage invokes a
 ```ts
 import {
   createOrchestratedDeepAgentGraph,
+  createModelRuntime,
   adaptDeepAgent,
   createBaselineAgent,
 } from "@deep-agent-template/core";
 
+const modelRuntime = createModelRuntime({
+  connections: {
+    default: {
+      apiKey: process.env.LLM_API_KEY ?? "",
+      baseURL: process.env.LLM_BASE_URL ?? "https://api.deepseek.com",
+    },
+  },
+  models: {
+    default: { connection: "default", model: "deepseek-v4-flash" },
+  },
+  assignments: { default: "default" },
+});
+
 const graph = createOrchestratedDeepAgentGraph({
+  modelRuntime,
   routing: {
     enableResearch: true,
     enableCoding: true,
   },
-  // Provide a model to auto-build stage agents from the bundled prompts, or
+  // Provide a modelRuntime to auto-build stage agents from the bundled prompts, or
   // inject callables built with createBaselineAgent + adaptDeepAgent:
   agents: {
-    researcher: adaptDeepAgent(
-      createBaselineAgent({ openRouter: { apiKey: process.env.LLM_API_KEY } }),
-    ),
+    researcher: adaptDeepAgent(createBaselineAgent({ modelRuntime })),
   },
 });
 

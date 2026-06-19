@@ -21,13 +21,13 @@ bun install
 From the repository root (bun runs TypeScript directly, no build step):
 
 ```sh
-LLM_API_KEY=... bun run packages/cli/src/index.ts baseline "Explain this project in one sentence"
+LLM_BASE_URL=https://api.deepseek.com LLM_API_KEY=... bun run packages/cli/src/index.ts baseline "Explain this project in one sentence"
 ```
 
 Or from within this package:
 
 ```sh
-bun run src/index.ts scaffold --model openrouter:anthropic/claude-sonnet-4 "Plan a refactor"
+bun run src/index.ts scaffold --model deepseek-v4-flash "Plan a refactor"
 ```
 
 As a workspace dependency, the `bin` entry also resolves to `node_modules/.bin/deep-agent-template`:
@@ -57,7 +57,7 @@ A command is **required**. Running with no command, or with an unrecognized comm
 | Flag | Applies to | Description |
 | --- | --- | --- |
 | `<prompt>` | `baseline`, `scaffold` | Positional. Multiple tokens are joined with spaces into a single prompt. Optional — omit it to enter the REPL. |
-| `--model <id>` | `baseline`, `scaffold` | Model id forwarded to core. With `LLM_BASE_URL` set this is a raw model name for the OpenAI-compatible endpoint (e.g. `deepseek-chat`); otherwise it must be an OpenRouter id (e.g. `openrouter:anthropic/claude-sonnet-4`). Optional. |
+| `--model <id>` | `baseline`, `scaffold` | Raw model name forwarded to the OpenAI-compatible endpoint (e.g. `deepseek-v4-flash`). Optional; defaults to `deepseek-v4-flash`. |
 | `--system-prompt <text>` | `scaffold` only | Override the supervisor system prompt with an inline string. Mutually exclusive with `--system-prompt-file`. |
 | `--system-prompt-file <path>` | `scaffold` only | Read the supervisor system prompt from a file. Mutually exclusive with `--system-prompt`. |
 | `--dump` | `scaffold` only | Print the resolved runtime scaffold as JSON and exit. Cannot be combined with a prompt. No API key required. |
@@ -83,28 +83,19 @@ deep-agent-template scaffold --system-prompt "You are a test agent"
 
 ## Environment
 
-A single key env var covers both providers:
+Two env vars are required (except for `scaffold --dump`):
 
 ```sh
-# Required in all cases except `scaffold --dump`.
-LLM_API_KEY=...
-```
-
-Routing precedence:
-
-```sh
-# OpenAI-compatible endpoint (e.g. DeepSeek). When LLM_BASE_URL is set,
-# LLM_API_KEY authenticates against that endpoint and OPENROUTER is not used.
+# Your OpenAI-compatible endpoint (e.g. DeepSeek, OpenAI, Ollama, vLLM).
 LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=...
 
-# Otherwise, LLM_API_KEY is forwarded as the OpenRouter API key.
+# Authenticates against the LLM_BASE_URL endpoint.
 LLM_API_KEY=...
 ```
 
-With `LLM_BASE_URL` set and no explicit `--model`, the model defaults to `deepseek-chat`.
+With no explicit `--model`, the model defaults to `deepseek-v4-flash`.
 
-`scaffold --dump` is the only path that does not require `LLM_API_KEY`, since it never invokes a model.
+`scaffold --dump` is the only path that requires neither env var, since it never invokes a model.
 
 ## How it wires to core
 
@@ -113,7 +104,7 @@ The default dependency factory picks an agent factory based on the command:
 - `baseline` → `createBaselineAgent({ guardrails: false, ... })`
 - `scaffold` → `createScaffoldedAgent({ guardrails: false, ... })` (forwarding `systemPrompt` when provided)
 
-When `LLM_BASE_URL` is set, it builds a `modelRuntime` with a single `openai-compatible` connection and passes that (default model `deepseek-chat`). Otherwise it passes the resolved `apiKey` via the legacy `openRouter` option along with the optional `model`. The agent's `messages` array is seeded with a single user message containing the joined prompt.
+It always builds a `modelRuntime` from `LLM_BASE_URL` + `LLM_API_KEY` with a single connection and passes that, applying the optional `--model` (default `deepseek-v4-flash`). The agent's `messages` array is seeded with a single user message containing the joined prompt.
 
 The response is reduced from the agent's `messages` by walking the list in reverse and returning the first message that yields text. Content is accepted as:
 
@@ -171,16 +162,15 @@ The entrypoint sets `process.exitCode` rather than calling `process.exit()`, so 
 import { runCli } from "@deep-agent-template/cli";
 
 const { exitCode, output } = await runCli(
-  ["scaffold", "--model", "openrouter:anthropic/claude-sonnet-4", "Hello"],
+  ["scaffold", "--model", "deepseek-v4-flash", "Hello"],
   {
-    createAgent: ({ apiKey, model, runtime, systemPrompt }) => ({
+    createAgent: ({ apiKey, baseURL, model, runtime, systemPrompt }) => ({
       async invoke({ messages }) {
         // ...call core or a test double
         return { messages: [{ content: "Hi" }] };
       },
     }),
     createScaffold: (options) => createRuntimeScaffold(options),
-    getLlmApiKey: () => process.env.LLM_API_KEY,
     getOpenAICompatibleEndpoint: () =>
       process.env.LLM_BASE_URL
         ? { apiKey: process.env.LLM_API_KEY ?? "", baseURL: process.env.LLM_BASE_URL }
@@ -196,10 +186,9 @@ The `CliDependencies` shape:
 
 | Field | Required | Purpose |
 | --- | --- | --- |
-| `createAgent(options)` | yes | Builds the agent (`runtime: "baseline" \| "scaffolded"`) and returns something with an `invoke({ messages })` method. Receives `apiKey`, optional `baseURL`, optional `model`, `runtime`, and optional `systemPrompt`. |
+| `createAgent(options)` | yes | Builds the agent (`runtime: "baseline" \| "scaffolded"`) and returns something with an `invoke({ messages })` method. Receives `apiKey`, `baseURL`, optional `model`, `runtime`, and optional `systemPrompt`. |
 | `createScaffold(options?)` | yes | Builds the `RuntimeScaffold` used by `scaffold --dump`. |
-| `getLlmApiKey()` | yes | Returns the API key used for the OpenRouter path (and as a fallback check). |
-| `getOpenAICompatibleEndpoint?` | no | Returns `{ apiKey, baseURL }` to route through an OpenAI-compatible endpoint. When set, takes precedence over the OpenRouter path. |
+| `getOpenAICompatibleEndpoint?` | yes | Returns `{ apiKey, baseURL }` for the OpenAI-compatible endpoint. Both fields are required to run an agent; `scaffold --dump` does not call it. |
 | `createLineReader?` | no | Returns an `AsyncIterable<string>` of input lines for the REPL. Defaults to a `readline` interface on stdin/stdout. |
 | `print?` | no | Sink for REPL output and prompts. Defaults to `console.log`. |
 

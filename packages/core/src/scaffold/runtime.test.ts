@@ -142,11 +142,11 @@ describe("runtime scaffold defaults", () => {
   it("threads model runtime assignments into default subagents", () => {
     const modelRuntime = createModelRuntime({
       connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
+        default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
       },
       models: {
-        primary: { connection: "openrouter", model: "primary-model" },
-        fast: { connection: "openrouter", model: "fast-model" },
+        primary: { connection: "default", model: "primary-model" },
+        fast: { connection: "default", model: "fast-model" },
       },
       assignments: {
         default: "primary",

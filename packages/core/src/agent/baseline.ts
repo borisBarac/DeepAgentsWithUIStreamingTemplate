@@ -1,7 +1,6 @@
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
-import { assertCompatibleModelOptions, createChatModel } from "../models/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { DEFAULT_AGENT_NAME } from "./constants.ts";
@@ -12,18 +11,19 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions = {}): D
     guardrails,
     langSmith,
     middleware,
-    model,
     modelRuntime,
-    openRouter,
     promptLoader = DEFAULT_PROMPT_LOADER,
     ...agentOptions
   } = options;
 
+  if (!modelRuntime) {
+    throw new Error(
+      "createBaselineAgent requires a modelRuntime. Provide one via createModelRuntime(...).",
+    );
+  }
+
   configureLangSmithTracing(langSmith);
-  assertCompatibleModelOptions({ model, modelRuntime, openRouter });
-  const chatModel = modelRuntime
-    ? modelRuntime.getModelForRole("baseline")
-    : createChatModel({ model, openRouter });
+  const chatModel = modelRuntime.getModelForRole("baseline");
   const guardrailDecision = createGuardrailDecision(
     guardrails === false
       ? { enabled: false, middleware }

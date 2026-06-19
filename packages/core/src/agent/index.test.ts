@@ -19,12 +19,12 @@ function expectSystemPromptToContain(systemPrompt: unknown, text: string): void 
 function createTestModelRuntime() {
   return createModelRuntime({
     connections: {
-      openrouter: { provider: "openrouter", apiKey: "test-key" },
+      default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
     },
     models: {
-      baseline: { connection: "openrouter", model: "baseline-model" },
-      supervisor: { connection: "openrouter", model: "supervisor-model" },
-      specialist: { connection: "openrouter", model: "specialist-model" },
+      baseline: { connection: "default", model: "baseline-model" },
+      supervisor: { connection: "default", model: "supervisor-model" },
+      specialist: { connection: "default", model: "specialist-model" },
     },
     assignments: {
       default: "specialist",
@@ -37,9 +37,8 @@ function createTestModelRuntime() {
 describe("createBasicAgent", () => {
   it("returns a scaffolded deep agent instance", () => {
     const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
     });
 
     expect(typeof agent.invoke).toBe("function");
@@ -47,9 +46,8 @@ describe("createBasicAgent", () => {
 
   it("loads the scaffold memory files by default", () => {
     const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
     });
 
     expect(agent.options.middleware?.map((middleware) => middleware.name)).toContain(
@@ -59,9 +57,8 @@ describe("createBasicAgent", () => {
 
   it("uses a custom prompt loader for the scaffolded supervisor", () => {
     const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
     });
 
@@ -70,9 +67,8 @@ describe("createBasicAgent", () => {
 
   it("lets an explicit scaffolded system prompt win over the prompt loader", () => {
     const agent = createBasicAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
       systemPrompt: "explicit supervisor prompt",
     });
@@ -89,14 +85,19 @@ describe("createBasicAgent", () => {
 
     expect((agent.options.model as { model?: string }).model).toBe("supervisor-model");
   });
+
+  it("throws when no modelRuntime is provided", () => {
+    expect(() => createBasicAgent({ guardrails: false } as never)).toThrow(
+      "requires a modelRuntime",
+    );
+  });
 });
 
 describe("createBaselineAgent", () => {
   it("uses the bundled baseline prompt by default", () => {
     const agent = createBaselineAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
     });
 
     expectSystemPromptToContain(agent.options.systemPrompt, "helpful general-purpose deep agent");
@@ -104,9 +105,8 @@ describe("createBaselineAgent", () => {
 
   it("uses a custom prompt loader for the baseline prompt", () => {
     const agent = createBaselineAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
     });
 
@@ -115,9 +115,8 @@ describe("createBaselineAgent", () => {
 
   it("does not allow untyped callers to override the baseline prompt inline", () => {
     const agent = createBaselineAgent({
-      openRouter: {
-        apiKey: "test-key",
-      },
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
       systemPrompt: "inline override",
     } as Parameters<typeof createBaselineAgent>[0]);
@@ -135,13 +134,9 @@ describe("createBaselineAgent", () => {
     expect((agent.options.model as { model?: string }).model).toBe("baseline-model");
   });
 
-  it("rejects modelRuntime combined with legacy connection options", () => {
-    expect(() =>
-      createBaselineAgent({
-        guardrails: false,
-        modelRuntime: createTestModelRuntime(),
-        openRouter: { apiKey: "legacy-key" },
-      }),
-    ).toThrow("cannot be combined");
+  it("throws when no modelRuntime is provided", () => {
+    expect(() => createBaselineAgent({ guardrails: false } as never)).toThrow(
+      "requires a modelRuntime",
+    );
   });
 });

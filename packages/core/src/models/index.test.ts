@@ -1,51 +1,9 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  assertCompatibleModelOptions,
-  createChatModel,
-  createModelRuntime,
-  DEFAULT_DEEPSEEK_MODEL,
-  DEFAULT_MODEL_ID,
-  resolveModelIdentifier,
-} from "./index.ts";
-
-describe("resolveModelIdentifier", () => {
-  it("uses OpenRouter DeepSeek V4 by default", () => {
-    expect(resolveModelIdentifier()).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
-  });
-
-  it("parses provider-prefixed model identifiers", () => {
-    expect(resolveModelIdentifier(DEFAULT_MODEL_ID)).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
-  });
-
-  it("rejects unsupported providers", () => {
-    expect(() => resolveModelIdentifier("openai:gpt-4o-mini")).toThrow(
-      "Unsupported model identifier",
-    );
-  });
-});
-
-describe("createChatModel", () => {
-  it("creates an OpenRouter chat model", () => {
-    const model = createChatModel({
-      openRouter: {
-        apiKey: "test-key",
-      },
-    });
-
-    expect(model.model).toBe(DEFAULT_DEEPSEEK_MODEL);
-    expect(model._llmType()).toBe("openrouter");
-  });
-});
+import { createModelRuntime } from "./index.ts";
 
 describe("createModelRuntime", () => {
-  it("constructs OpenRouter profiles lazily and caches them by profile", () => {
+  it("constructs profiles lazily and caches them by profile", () => {
     let optionReads = 0;
     const providerOptions = Object.defineProperty({}, "topP", {
       enumerable: true,
@@ -56,15 +14,15 @@ describe("createModelRuntime", () => {
     });
     const runtime = createModelRuntime({
       connections: {
-        openrouter: {
-          provider: "openrouter",
+        default: {
           apiKey: "test-key",
+          baseURL: "https://api.openai.com/v1",
         },
       },
       models: {
         primary: {
-          connection: "openrouter",
-          model: "anthropic/claude-sonnet-4",
+          connection: "default",
+          model: "gpt-4o-mini",
           providerOptions,
         },
       },
@@ -81,15 +39,14 @@ describe("createModelRuntime", () => {
     expect(optionReads).toBe(1);
     expect(first).toBe(second);
     expect(getModel("primary")).toBe(first);
-    expect(first.model).toBe("anthropic/claude-sonnet-4");
-    expect(first._llmType()).toBe("openrouter");
+    expect(first.model).toBe("gpt-4o-mini");
+    expect(first._llmType()).toBe("openai");
   });
 
-  it("constructs OpenAI-compatible profiles with the configured endpoint", () => {
+  it("constructs profiles with the configured endpoint", () => {
     const runtime = createModelRuntime({
       connections: {
         local: {
-          provider: "openai-compatible",
           apiKey: "local-key",
           baseURL: "http://localhost:11434/v1",
         },
@@ -119,14 +76,14 @@ describe("createModelRuntime", () => {
   it("uses role overrides before the default assignment", () => {
     const runtime = createModelRuntime({
       connections: {
-        openrouter: {
-          provider: "openrouter",
+        default: {
           apiKey: "test-key",
+          baseURL: "https://api.openai.com/v1",
         },
       },
       models: {
-        primary: { connection: "openrouter", model: "primary-model" },
-        fast: { connection: "openrouter", model: "fast-model" },
+        primary: { connection: "default", model: "primary-model" },
+        fast: { connection: "default", model: "fast-model" },
       },
       assignments: {
         default: "primary",
@@ -141,10 +98,10 @@ describe("createModelRuntime", () => {
   it("fails clearly when a role has no direct or default assignment", () => {
     const runtime = createModelRuntime({
       connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
+        default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
       },
       models: {
-        primary: { connection: "openrouter", model: "primary-model" },
+        primary: { connection: "default", model: "primary-model" },
       },
       assignments: {
         reviewer: "primary",
@@ -156,7 +113,7 @@ describe("createModelRuntime", () => {
     );
   });
 
-  it("validates connection, profile, assignment, provider, role, and URL references", () => {
+  it("validates connection, profile, assignment, role, and URL references", () => {
     expect(() =>
       createModelRuntime({
         connections: {},
@@ -168,7 +125,7 @@ describe("createModelRuntime", () => {
     expect(() =>
       createModelRuntime({
         connections: {
-          openrouter: { provider: "openrouter" },
+          default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
         },
         models: {
           primary: { connection: "missing", model: "model" },
@@ -181,7 +138,6 @@ describe("createModelRuntime", () => {
       createModelRuntime({
         connections: {
           local: {
-            provider: "openai-compatible",
             baseURL: "not-a-url",
           },
         },
@@ -197,10 +153,10 @@ describe("createModelRuntime", () => {
     expect(() =>
       createModelRuntime({
         connections: {
-          openrouter: { provider: "openrouter" },
+          default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
         },
         models: {
-          primary: { connection: "openrouter", model: "model" },
+          primary: { connection: "default", model: "model" },
         },
         assignments: {
           default: "missing",
@@ -211,24 +167,10 @@ describe("createModelRuntime", () => {
     expect(() =>
       createModelRuntime({
         connections: {
-          openrouter: { provider: "anthropic" },
+          default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
         },
         models: {
-          primary: { connection: "openrouter", model: "model" },
-        },
-        assignments: {
-          default: "primary",
-        },
-      } as unknown as Parameters<typeof createModelRuntime>[0]),
-    ).toThrow('unsupported provider "anthropic"');
-
-    expect(() =>
-      createModelRuntime({
-        connections: {
-          openrouter: { provider: "openrouter" },
-        },
-        models: {
-          primary: { connection: "openrouter", model: "model" },
+          primary: { connection: "default", model: "model" },
         },
         assignments: {
           planner: "primary",
@@ -239,7 +181,7 @@ describe("createModelRuntime", () => {
     expect(() =>
       createModelRuntime({
         connections: {
-          " ": { provider: "openrouter" },
+          " ": { baseURL: "https://api.openai.com/v1" },
         },
         models: {
           primary: { connection: " ", model: "model" },
@@ -251,10 +193,10 @@ describe("createModelRuntime", () => {
     expect(() =>
       createModelRuntime({
         connections: {
-          openrouter: { provider: "openrouter" },
+          default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
         },
         models: {
-          primary: { connection: "openrouter", model: " " },
+          primary: { connection: "default", model: " " },
         },
         assignments: {},
       }),
@@ -264,10 +206,10 @@ describe("createModelRuntime", () => {
   it("rejects unknown profiles and roles at lookup time", () => {
     const runtime = createModelRuntime({
       connections: {
-        openrouter: { provider: "openrouter" },
+        default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
       },
       models: {
-        primary: { connection: "openrouter", model: "model" },
+        primary: { connection: "default", model: "model" },
       },
       assignments: {
         default: "primary",
@@ -287,7 +229,6 @@ describe("createModelRuntime", () => {
       createModelRuntime({
         connections: {
           local: {
-            provider: "openai-compatible",
             apiKey: secret,
             baseURL: secret,
           },
@@ -306,39 +247,18 @@ describe("createModelRuntime", () => {
 
     const runtime = createModelRuntime({
       connections: {
-        openrouter: {
-          provider: "openrouter",
+        default: {
           apiKey: secret,
+          baseURL: "https://api.openai.com/v1",
         },
       },
       models: {
-        primary: { connection: "openrouter", model: "model" },
+        primary: { connection: "default", model: "model" },
       },
       assignments: {
         default: "primary",
       },
     });
     expect(JSON.stringify(runtime)).not.toContain(secret);
-  });
-
-  it("rejects ambiguous combinations with legacy model options", () => {
-    const modelRuntime = createModelRuntime({
-      connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
-      },
-      models: {
-        primary: { connection: "openrouter", model: "model" },
-      },
-      assignments: {
-        default: "primary",
-      },
-    });
-
-    expect(() => assertCompatibleModelOptions({ modelRuntime, model: DEFAULT_MODEL_ID })).toThrow(
-      "cannot be combined",
-    );
-    expect(() =>
-      assertCompatibleModelOptions({ modelRuntime, openRouter: { apiKey: "other-key" } }),
-    ).toThrow("cannot be combined");
   });
 });

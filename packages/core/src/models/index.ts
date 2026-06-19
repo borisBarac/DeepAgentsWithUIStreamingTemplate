@@ -1,27 +1,6 @@
 import { ChatOpenAI, type ChatOpenAIFields } from "@langchain/openai";
-import { ChatOpenRouter, type ChatOpenRouterInput } from "@langchain/openrouter";
 
-export const DEFAULT_OPENROUTER_PROVIDER = "openrouter" as const;
-export const DEFAULT_DEEPSEEK_MODEL = "deepseek/deepseek-v4-pro";
-export const DEFAULT_MODEL_ID = `${DEFAULT_OPENROUTER_PROVIDER}:${DEFAULT_DEEPSEEK_MODEL}` as const;
-
-export type SupportedModelProvider = typeof DEFAULT_OPENROUTER_PROVIDER;
-
-export type ModelIdentifier =
-  | string
-  | {
-      provider?: SupportedModelProvider;
-      model?: string;
-    };
-
-export type OpenRouterModelOptions = Omit<ChatOpenRouterInput, "model"> & {
-  model?: string;
-};
-
-export type CreateChatModelOptions = {
-  model?: ModelIdentifier;
-  openRouter?: OpenRouterModelOptions;
-};
+export const DEFAULT_MODEL_ID = "deepseek-v4-flash" as const;
 
 export const MODEL_ROLES = [
   "baseline",
@@ -37,16 +16,7 @@ export const MODEL_ROLES = [
 
 export type ModelRole = (typeof MODEL_ROLES)[number];
 
-export type OpenRouterConnectionConfig = {
-  provider: "openrouter";
-  apiKey?: string;
-  siteName?: string;
-  siteUrl?: string;
-  options?: Omit<ChatOpenRouterInput, "apiKey" | "model" | "siteName" | "siteUrl">;
-};
-
 export type OpenAICompatibleConnectionConfig = {
-  provider: "openai-compatible";
   apiKey?: string;
   baseURL: string;
   options?: Omit<ChatOpenAIFields, "apiKey" | "configuration" | "model" | "useResponsesApi"> & {
@@ -54,7 +24,7 @@ export type OpenAICompatibleConnectionConfig = {
   };
 };
 
-export type ModelConnectionConfig = OpenRouterConnectionConfig | OpenAICompatibleConnectionConfig;
+export type ModelConnectionConfig = OpenAICompatibleConnectionConfig;
 
 export type ModelProfileConfig = {
   connection: string;
@@ -74,7 +44,7 @@ export type ModelRuntimeConfig = {
   } & Partial<Record<ModelRole, string>>;
 };
 
-export type RuntimeChatModel = ChatOpenRouter | ChatOpenAI;
+export type RuntimeChatModel = ChatOpenAI;
 
 export type ModelRuntime = {
   getModel(profile: string): RuntimeChatModel;
@@ -84,47 +54,6 @@ export type ModelRuntime = {
 export type ModelRuntimeOptions = {
   modelRuntime?: ModelRuntime;
 };
-
-export type ResolvedModelIdentifier = {
-  provider: SupportedModelProvider;
-  model: string;
-};
-
-export function resolveModelIdentifier(
-  model: ModelIdentifier = DEFAULT_MODEL_ID,
-): ResolvedModelIdentifier {
-  if (typeof model === "string") {
-    const [provider, ...modelParts] = model.split(":");
-    const modelName = modelParts.join(":");
-
-    if (provider !== DEFAULT_OPENROUTER_PROVIDER || !modelName) {
-      throw new Error(`Unsupported model identifier: ${model}`);
-    }
-
-    return {
-      provider,
-      model: modelName,
-    };
-  }
-
-  return {
-    provider: model.provider ?? DEFAULT_OPENROUTER_PROVIDER,
-    model: model.model ?? DEFAULT_DEEPSEEK_MODEL,
-  };
-}
-
-export function createChatModel(options: CreateChatModelOptions = {}): ChatOpenRouter {
-  const resolvedModel = resolveModelIdentifier(options.model);
-
-  switch (resolvedModel.provider) {
-    case DEFAULT_OPENROUTER_PROVIDER:
-      return new ChatOpenRouter({
-        siteName: "Deep Agent Template",
-        ...options.openRouter,
-        model: options.openRouter?.model ?? resolvedModel.model,
-      });
-  }
-}
 
 function assertValidName(name: string, kind: string): void {
   if (name.trim() === "" || name !== name.trim()) {
@@ -139,9 +68,7 @@ function validateBaseURL(connectionName: string, baseURL: string): void {
       throw new Error("unsupported protocol");
     }
   } catch {
-    throw new Error(
-      `OpenAI-compatible connection "${connectionName}" must provide a valid HTTP(S) baseURL.`,
-    );
+    throw new Error(`Connection "${connectionName}" must provide a valid HTTP(S) baseURL.`);
   }
 }
 
@@ -153,19 +80,14 @@ function validateRuntimeConfig(config: ModelRuntimeConfig): void {
     throw new Error("Model runtime requires at least one named connection.");
   }
   if (profileNames.length === 0) {
-    throw new Error("Model runtime requires at least one named model profile.");
+    throw new Error("Model runtime requires at least one model profile.");
   }
 
   for (const name of connectionNames) {
     assertValidName(name, "Connection");
     const connection = config.connections[name];
     if (!connection) continue;
-    const provider = (connection as { provider?: unknown }).provider;
-    if (provider === "openai-compatible") {
-      validateBaseURL(name, (connection as OpenAICompatibleConnectionConfig).baseURL);
-    } else if (provider !== "openrouter") {
-      throw new Error(`Connection "${name}" uses unsupported provider "${String(provider)}".`);
-    }
+    validateBaseURL(name, connection.baseURL);
   }
 
   for (const name of profileNames) {
@@ -207,27 +129,16 @@ function createRuntimeModel(
     model: profile.model,
   };
 
-  switch (connection.provider) {
-    case "openrouter":
-      return new ChatOpenRouter({
-        ...connection.options,
-        ...commonOptions,
-        apiKey: connection.apiKey,
-        siteName: connection.siteName ?? "Deep Agent Template",
-        siteUrl: connection.siteUrl,
-      });
-    case "openai-compatible":
-      return new ChatOpenAI({
-        ...connection.options,
-        ...commonOptions,
-        apiKey: connection.apiKey,
-        useResponsesApi: false,
-        configuration: {
-          ...connection.options?.configuration,
-          baseURL: connection.baseURL,
-        },
-      });
-  }
+  return new ChatOpenAI({
+    ...connection.options,
+    ...commonOptions,
+    apiKey: connection.apiKey,
+    useResponsesApi: false,
+    configuration: {
+      ...connection.options?.configuration,
+      baseURL: connection.baseURL,
+    },
+  });
 }
 
 export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
@@ -269,14 +180,4 @@ export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
       return getModel(profileName);
     },
   };
-}
-
-export function assertCompatibleModelOptions(
-  options: CreateChatModelOptions & ModelRuntimeOptions,
-): void {
-  if (options.modelRuntime && (options.model !== undefined || options.openRouter !== undefined)) {
-    throw new Error(
-      "modelRuntime cannot be combined with legacy model or openRouter options. Choose one model configuration path.",
-    );
-  }
 }

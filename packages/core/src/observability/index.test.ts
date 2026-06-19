@@ -1,8 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createBaselineAgent, createScaffoldedAgent } from "../agent/index.ts";
+import { createModelRuntime } from "../models/index.ts";
 import { createOrchestratedDeepAgentGraph } from "../orchestration/index.ts";
 import { configureLangSmithTracing } from "./index.ts";
+
+function createTestModelRuntime() {
+  return createModelRuntime({
+    connections: {
+      default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
+    },
+    models: {
+      primary: { connection: "default", model: "primary-model" },
+    },
+    assignments: { default: "primary" },
+  });
+}
 
 const langSmithEnvKeys = [
   "LANGSMITH_API_KEY",
@@ -106,7 +119,7 @@ describe("LangSmith factory integration", () => {
   it("applies typed tracing options in the baseline factory", () => {
     createBaselineAgent({
       guardrails: false,
-      openRouter: { apiKey: "test-openrouter-key" },
+      modelRuntime: createTestModelRuntime(),
       langSmith: { apiKey: "baseline-langsmith-key", projectName: "baseline-project" },
     });
 
@@ -118,7 +131,7 @@ describe("LangSmith factory integration", () => {
   it("applies typed tracing options in the scaffolded factory", () => {
     createScaffoldedAgent({
       guardrails: false,
-      openRouter: { apiKey: "test-openrouter-key" },
+      modelRuntime: createTestModelRuntime(),
       langSmith: { apiKey: "scaffold-langsmith-key", projectName: "scaffold-project" },
     });
 

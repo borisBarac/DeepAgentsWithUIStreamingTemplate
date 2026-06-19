@@ -123,15 +123,6 @@ describe("createOrchestratedDeepAgentGraph model runtime roles", () => {
       `No model assignment configured for role "${testCase.role}"`,
     );
   });
-
-  it("rejects a runtime combined with legacy graph model options", () => {
-    expect(() =>
-      createOrchestratedDeepAgentGraph({
-        modelRuntime: runtimeWithoutRoleAssignments(),
-        openRouter: { apiKey: "legacy-key" },
-      }),
-    ).toThrow("cannot be combined");
-  });
 });
 
 describe("createOrchestratedDeepAgentGraph error propagation", () => {

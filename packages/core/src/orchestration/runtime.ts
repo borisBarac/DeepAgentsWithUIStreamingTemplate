@@ -1,7 +1,7 @@
 import { createBaselineAgent } from "../agent/baseline.ts";
 import type { ClarificationConfig } from "../clarification/index.ts";
 import type { CreateGuardrailDecisionOptions, TaskScopeGatekeeper } from "../guardrails/index.ts";
-import type { ModelIdentifier, ModelRuntime, OpenRouterModelOptions } from "../models/index.ts";
+import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig } from "../review/index.ts";
 import { missingAgentError, toStructuredError } from "./errors.ts";
@@ -26,9 +26,7 @@ export type NodeContext = {
   guardrails: false | CreateGuardrailDecisionOptions;
   review: ReviewConfig;
   promptLoader: PromptLoader;
-  model?: ModelIdentifier;
   modelRuntime?: ModelRuntime;
-  openRouter?: OpenRouterModelOptions;
   defaults: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
 };
 
@@ -83,14 +81,12 @@ export function resolveAgent(
   if (cached) {
     return cached;
   }
-  if (ctx.modelRuntime === undefined && ctx.model === undefined && ctx.openRouter === undefined) {
+  if (ctx.modelRuntime === undefined) {
     return undefined;
   }
   const built = adaptDeepAgent(
     createBaselineAgent({
-      model: ctx.model,
       modelRuntime: ctx.modelRuntime ? modelRuntimeForRole(ctx.modelRuntime, role) : undefined,
-      openRouter: ctx.openRouter,
       guardrails: ctx.guardrails,
       promptLoader: rolePromptLoader(role, ctx.promptLoader),
     }),

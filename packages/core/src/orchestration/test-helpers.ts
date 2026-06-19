@@ -105,10 +105,10 @@ export function invokeInput(
 export function runtimeWithoutRoleAssignments() {
   return createModelRuntime({
     connections: {
-      openrouter: { provider: "openrouter", apiKey: "test-key" },
+      default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
     },
     models: {
-      unused: { connection: "openrouter", model: "unused-model" },
+      unused: { connection: "default", model: "unused-model" },
     },
     assignments: {},
   });

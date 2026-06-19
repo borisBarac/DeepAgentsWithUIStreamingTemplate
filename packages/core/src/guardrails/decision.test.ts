@@ -1,12 +1,25 @@
 import { describe, expect, it } from "bun:test";
 
 import { createBasicAgent } from "../agent/index.ts";
+import { createModelRuntime } from "../models/index.ts";
 import {
   createGuardrailDecision,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
 } from "./index.ts";
 import type { OpenAIContentSafetyClient, TaskScopeClassifier } from "./types.ts";
+
+function createTestModelRuntime() {
+  return createModelRuntime({
+    connections: {
+      default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
+    },
+    models: {
+      primary: { connection: "default", model: "primary-model" },
+    },
+    assignments: { default: "primary" },
+  });
+}
 
 function createFakeOpenAI(flagged: boolean): OpenAIContentSafetyClient {
   return {
@@ -98,9 +111,7 @@ describe("agent guardrail integration", () => {
       guardrails: {
         safety: { openai: createFakeOpenAI(false) },
       },
-      openRouter: {
-        apiKey: "test-key",
-      },
+      modelRuntime: createTestModelRuntime(),
       middleware: [callerMiddleware],
     });
     const names = agent.options.middleware?.map((middleware) => middleware.name);
@@ -118,9 +129,7 @@ describe("agent guardrail integration", () => {
   it("lets callers disable default guardrails", () => {
     const agent = createBasicAgent({
       guardrails: false,
-      openRouter: {
-        apiKey: "test-key",
-      },
+      modelRuntime: createTestModelRuntime(),
     });
     const names = agent.options.middleware?.map((middleware) => middleware.name) ?? [];
 

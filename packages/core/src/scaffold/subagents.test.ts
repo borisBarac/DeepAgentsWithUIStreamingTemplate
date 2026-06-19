@@ -90,11 +90,11 @@ describe("default subagents", () => {
   it("assigns role models to every default specialist and preserves explicit model overrides", () => {
     const runtime = createModelRuntime({
       connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
+        default: { apiKey: "test-key", baseURL: "https://api.openai.com/v1" },
       },
       models: {
-        primary: { connection: "openrouter", model: "primary-model" },
-        fast: { connection: "openrouter", model: "fast-model" },
+        primary: { connection: "default", model: "primary-model" },
+        fast: { connection: "default", model: "fast-model" },
       },
       assignments: {
         default: "primary",

@@ -20,12 +20,9 @@ describe("index barrel exports", () => {
   });
 
   it("re-exports model helpers from the models module", () => {
-    expect(index.createChatModel).toBe(models.createChatModel);
     expect(index.createModelRuntime).toBe(models.createModelRuntime);
-    expect(index.resolveModelIdentifier).toBe(models.resolveModelIdentifier);
     expect(index.MODEL_ROLES).toBe(models.MODEL_ROLES);
     expect(index.DEFAULT_MODEL_ID).toBe(models.DEFAULT_MODEL_ID);
-    expect(index.DEFAULT_DEEPSEEK_MODEL).toBe(models.DEFAULT_DEEPSEEK_MODEL);
   });
 
   it("re-exports observability helpers from the observability module", () => {

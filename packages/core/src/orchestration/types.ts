@@ -4,13 +4,7 @@ import type {
   TaskScopeDecision,
   TaskScopeGatekeeperOptions,
 } from "../guardrails/index.ts";
-import type {
-  CreateChatModelOptions,
-  ModelIdentifier,
-  ModelRuntime,
-  ModelRuntimeOptions,
-  OpenRouterModelOptions,
-} from "../models/index.ts";
+import type { ModelRuntime, ModelRuntimeOptions } from "../models/index.ts";
 import type { LangSmithTracingOptions } from "../observability/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig, ReviewState } from "../review/index.ts";
@@ -76,24 +70,21 @@ export type OrchestratedDeepAgentRoutingOptions = {
   enableCoding?: boolean;
 };
 
-export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions &
-  ModelRuntimeOptions & {
-    agents?: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
-    routing?: OrchestratedDeepAgentRoutingOptions;
-    gatekeeper?: false | TaskScopeGatekeeperOptions;
-    clarification?: Partial<ClarificationConfig>;
-    guardrails?: false | CreateGuardrailDecisionOptions;
-    review?: Partial<ReviewConfig>;
-    promptLoader?: PromptLoader;
-    langSmith?: LangSmithTracingOptions;
-  };
+export type CreateOrchestratedDeepAgentGraphOptions = ModelRuntimeOptions & {
+  agents?: Partial<Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>>;
+  routing?: OrchestratedDeepAgentRoutingOptions;
+  gatekeeper?: false | TaskScopeGatekeeperOptions;
+  clarification?: Partial<ClarificationConfig>;
+  guardrails?: false | CreateGuardrailDecisionOptions;
+  review?: Partial<ReviewConfig>;
+  promptLoader?: PromptLoader;
+  langSmith?: LangSmithTracingOptions;
+};
 
 export type OrchestratedDeepAgentDefaults = Partial<
   Record<OrchestratedDeepAgentRole, OrchestratedDeepAgent>
 >;
 
 export type OrchestratedDeepAgentModelContext = {
-  model?: ModelIdentifier;
   modelRuntime?: ModelRuntime;
-  openRouter?: OpenRouterModelOptions;
 };

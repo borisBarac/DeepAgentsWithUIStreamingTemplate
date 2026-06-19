@@ -5,6 +5,11 @@ import { createRuntimeScaffold } from "@deep-agent-template/core";
 
 import { runCli } from "./index";
 
+const DEFAULT_ENDPOINT = {
+  apiKey: "test-key",
+  baseURL: "https://api.deepseek.com",
+};
+
 function createDependencies(response = "Agent response") {
   const invocations: unknown[] = [];
   const createAgentOptions: unknown[] = [];
@@ -25,7 +30,7 @@ function createDependencies(response = "Agent response") {
       createScaffoldCalls.push(options ?? null);
       return createRuntimeScaffold(options);
     },
-    getLlmApiKey: () => "test-key",
+    getOpenAICompatibleEndpoint: () => ({ ...DEFAULT_ENDPOINT }),
   };
 
   return {
@@ -68,7 +73,12 @@ describe("runCli", () => {
       output: "Core works",
     });
     expect(test.createAgentOptions).toEqual([
-      { apiKey: "test-key", baseURL: undefined, model: undefined, runtime: "baseline" },
+      {
+        apiKey: "test-key",
+        baseURL: "https://api.deepseek.com",
+        model: undefined,
+        runtime: "baseline",
+      },
     ]);
     expect(test.invocations).toEqual([
       {
@@ -80,16 +90,13 @@ describe("runCli", () => {
   it("passes an explicit model to core", async () => {
     const test = createDependencies();
 
-    await runCli(
-      ["baseline", "--model", "openrouter:anthropic/claude-sonnet-4", "Hello"],
-      test.dependencies,
-    );
+    await runCli(["baseline", "--model", "deepseek-v4-flash", "Hello"], test.dependencies);
 
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "test-key",
-        baseURL: undefined,
-        model: "openrouter:anthropic/claude-sonnet-4",
+        baseURL: "https://api.deepseek.com",
+        model: "deepseek-v4-flash",
         runtime: "baseline",
       },
     ]);
@@ -103,7 +110,12 @@ describe("runCli", () => {
       output: "Scaffolded works",
     });
     expect(test.createAgentOptions).toEqual([
-      { apiKey: "test-key", baseURL: undefined, model: undefined, runtime: "scaffolded" },
+      {
+        apiKey: "test-key",
+        baseURL: "https://api.deepseek.com",
+        model: undefined,
+        runtime: "scaffolded",
+      },
     ]);
     expect(test.invocations).toEqual([{ messages: [{ role: "user", content: "Plan it" }] }]);
   });
@@ -116,7 +128,7 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "test-key",
-        baseURL: undefined,
+        baseURL: "https://api.deepseek.com",
         model: undefined,
         runtime: "scaffolded",
         systemPrompt: "You are a test agent",
@@ -138,7 +150,7 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "test-key",
-        baseURL: undefined,
+        baseURL: "https://api.deepseek.com",
         model: undefined,
         runtime: "scaffolded",
         systemPrompt: "File prompt body",
@@ -167,11 +179,11 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([]);
   });
 
-  it("routes through the OpenAI-compatible endpoint when LLM_BASE_URL is resolved", async () => {
+  it("honors a custom OpenAI-compatible endpoint when one is provided", async () => {
     const test = createDependencies("Compatible works");
     test.dependencies.getOpenAICompatibleEndpoint = () => ({
       apiKey: "compatible-key",
-      baseURL: "https://api.deepseek.com",
+      baseURL: "https://api.openai.com",
     });
 
     expect(await runCli(["baseline", "Hello"], test.dependencies)).toEqual({
@@ -181,7 +193,7 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "compatible-key",
-        baseURL: "https://api.deepseek.com",
+        baseURL: "https://api.openai.com",
         model: undefined,
         runtime: "baseline",
       },
@@ -192,7 +204,7 @@ describe("runCli", () => {
     const test = createDependencies();
     test.dependencies.getOpenAICompatibleEndpoint = () => ({
       apiKey: "compatible-key",
-      baseURL: "https://api.deepseek.com",
+      baseURL: "https://api.openai.com",
     });
 
     await runCli(["baseline", "--model", "deepseek-reasoner", "Hello"], test.dependencies);
@@ -200,25 +212,11 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "compatible-key",
-        baseURL: "https://api.deepseek.com",
+        baseURL: "https://api.openai.com",
         model: "deepseek-reasoner",
         runtime: "baseline",
       },
     ]);
-  });
-
-  it("does not require an OpenRouter key when the OpenAI-compatible endpoint is set", async () => {
-    const test = createDependencies("Compatible works");
-    test.dependencies.getOpenAICompatibleEndpoint = () => ({
-      apiKey: "compatible-key",
-      baseURL: "https://api.deepseek.com",
-    });
-    test.dependencies.getLlmApiKey = () => undefined;
-
-    expect(await runCli(["baseline", "Hello"], test.dependencies)).toEqual({
-      exitCode: 0,
-      output: "Compatible works",
-    });
   });
 
   it("requires LLM_API_KEY when LLM_BASE_URL is set", async () => {
@@ -230,7 +228,7 @@ describe("runCli", () => {
 
     expect(await runCli(["baseline", "Hello"], test.dependencies)).toEqual({
       exitCode: 1,
-      output: "LLM_API_KEY is required when LLM_BASE_URL is set.",
+      output: "LLM_API_KEY is required.",
     });
     expect(test.createAgentOptions).toEqual([]);
   });
@@ -277,12 +275,12 @@ describe("runCli", () => {
     }
   });
 
-  it("does not require an API key for scaffold --dump", async () => {
+  it("does not require credentials for scaffold --dump", async () => {
     const test = createDependencies();
 
     const result = await runCli(["scaffold", "--dump"], {
       ...test.dependencies,
-      getLlmApiKey: () => undefined,
+      getOpenAICompatibleEndpoint: () => undefined,
     });
 
     expect(result.exitCode).toBe(0);
@@ -312,11 +310,12 @@ describe("runCli", () => {
     expect(
       await runCli(["baseline", "Hello"], {
         ...test.dependencies,
-        getLlmApiKey: () => undefined,
+        getOpenAICompatibleEndpoint: () => undefined,
       }),
     ).toEqual({
       exitCode: 1,
-      output: "LLM_API_KEY is required.",
+      output:
+        "LLM_BASE_URL is required. Set it to your OpenAI-compatible endpoint (e.g. https://api.deepseek.com).",
     });
     expect(
       await runCli(["baseline", "Hello"], {
@@ -421,7 +420,7 @@ describe("runCli", () => {
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "test-key",
-        baseURL: undefined,
+        baseURL: "https://api.deepseek.com",
         model: undefined,
         runtime: "scaffolded",
         systemPrompt: "You are a test agent",
@@ -482,7 +481,7 @@ describe("runCli", () => {
       createScaffold: (options) => createRuntimeScaffold(options),
       createLineReader: () => lines(["bad", "good"]),
       print: (text) => outputs.push(text),
-      getLlmApiKey: () => "test-key",
+      getOpenAICompatibleEndpoint: () => ({ ...DEFAULT_ENDPOINT }),
     };
 
     const result = await runCli(["scaffold"], dependencies);
