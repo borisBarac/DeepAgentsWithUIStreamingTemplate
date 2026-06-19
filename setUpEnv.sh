@@ -60,4 +60,5 @@ fi
 
 log "Bootstrap complete."
 log "Next step: add your local secrets before running live agent flows."
-log "Required for live usage: OPENROUTER_API_KEY, OPENAI_API_KEY, and optional LangSmith settings."
+log "Required for live usage: OPENROUTER_API_KEY and OPENAI_API_KEY."
+log "Optional tracing: set LANGSMITH_API_KEY and LANGSMITH_TRACING=true."

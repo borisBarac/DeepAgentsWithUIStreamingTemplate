@@ -11,6 +11,7 @@ import type {
   ModelRuntimeOptions,
   OpenRouterModelOptions,
 } from "../models/index.ts";
+import type { LangSmithTracingOptions } from "../observability/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig, ReviewState } from "../review/index.ts";
 
@@ -84,6 +85,7 @@ export type CreateOrchestratedDeepAgentGraphOptions = CreateChatModelOptions &
     guardrails?: false | CreateGuardrailDecisionOptions;
     review?: Partial<ReviewConfig>;
     promptLoader?: PromptLoader;
+    langSmith?: LangSmithTracingOptions;
   };
 
 export type OrchestratedDeepAgentDefaults = Partial<

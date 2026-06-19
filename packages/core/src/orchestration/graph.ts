@@ -1,6 +1,7 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
 import { createTaskScopeGatekeeper } from "../guardrails/index.ts";
 import { assertCompatibleModelOptions, createChatModel } from "../models/index.ts";
+import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createReviewConfig } from "../review/index.ts";
 import { createFinalizerNode } from "./finalization.ts";
@@ -57,6 +58,7 @@ function resolveGatekeeper(
 }
 
 function buildOrchestratedDeepAgentGraph(options: CreateOrchestratedDeepAgentGraphOptions = {}) {
+  configureLangSmithTracing(options.langSmith);
   assertCompatibleModelOptions(options);
   const gatekeeper = resolveGatekeeper(options);
   const ctx = createNodeContext(options, gatekeeper);

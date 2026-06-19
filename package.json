@@ -11,6 +11,7 @@
     "check": "biome check .",
     "format": "biome format --write .",
     "lint": "biome lint .",
+    "smoke:langsmith": "bun run packages/core/scripts/langsmith-smoke.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "prepare": "husky"

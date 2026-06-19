@@ -34,10 +34,47 @@ OPENAI_API_KEY=...
 Optional LangSmith tracing:
 
 ```sh
+LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=...
 LANGSMITH_PROJECT=deep-agent-template
-LANGSMITH_TRACING=true
 ```
+
+Set `LANGSMITH_ENDPOINT` when the LangSmith account is outside the default US region, for example
+`https://eu.api.smith.langchain.com` for GCP EU. Set `LANGSMITH_WORKSPACE_ID` when an API key can
+access multiple workspaces.
+
+LangChain sends traces in the background by default. Use `LANGCHAIN_CALLBACKS_BACKGROUND=true` for
+persistent application processes to minimize request latency. Use `false` for serverless runtimes
+so the process waits for trace submission before exiting.
+
+Applications may provide the same configuration programmatically. Omitted fields continue to use
+the process environment, while `enabled: false` explicitly disables tracing:
+
+```ts
+const langSmith = {
+  enabled: true,
+  apiKey: process.env.LANGSMITH_API_KEY,
+  projectName: "deep-agent-template",
+  endpoint: process.env.LANGSMITH_ENDPOINT,
+  workspaceId: process.env.LANGSMITH_WORKSPACE_ID,
+};
+
+const agent = createScaffoldedAgent({ langSmith });
+const graph = createOrchestratedDeepAgentGraph({ langSmith });
+```
+
+Configure tracing before invoking agents. LangChain and LangGraph then capture model, tool, agent,
+and graph runs without additional callbacks.
+
+To verify error tracing without valid LLM credentials or incurring model cost, run:
+
+```sh
+bun run smoke:langsmith
+```
+
+The smoke script uses an intentionally invalid OpenRouter key, catches the expected model error,
+and prints a unique marker that can be searched in the configured LangSmith project. It sets
+`LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
 
 The default model is OpenRouter DeepSeek V4 Pro:
 
