@@ -136,7 +136,7 @@ export {
   type OrchestratedDeepAgentState,
   selectWorkRoute,
   toStructuredError,
-} from "./orchestration.ts";
+} from "./orchestration/index.ts";
 export {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
