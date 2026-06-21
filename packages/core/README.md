@@ -427,6 +427,36 @@ const reviewerNeedsInterrupts = store.roleHasRestrictedTools("reviewer");
 
 The store is static and explicit by design. It does not inherit tools across roles or auto-compose bundles from tags. Its role metadata is descriptive, so later scaffold work can align specialist prompts, safety controls, and evaluation fixtures without changing the registry API.
 
+## Sandbox (Python execution)
+
+The `sandbox` module ships an `execute` tool that runs Python in an isolated environment. The backend is injected — pick Docker for real isolation, or subprocess for dev/tests:
+
+```ts
+import {
+  createDefaultSpecialistRoleToolsets,
+  createDockerSandboxBackend,
+  createPythonSandboxToolDefinition,
+  createSpecializedToolStore,
+} from "@deep-agent-template/core";
+
+const definition = createPythonSandboxToolDefinition({
+  backend: createDockerSandboxBackend(),
+});
+
+const store = createSpecializedToolStore({
+  tools: [definition],
+  roles: createDefaultSpecialistRoleToolsets().map((r) =>
+    r.role === "analyst" ? { ...r, toolIds: ["python-sandbox"] } : r,
+  ),
+});
+// store.resolveRoleTools("analyst") === [executeTool]
+// store.roleHasRestrictedTools("analyst") === true
+```
+
+The tool name is `execute` so it fires the existing `interruptOn.execute` slot reserved in `scaffold/runtime.ts`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
+
+The backend is hidden behind the `SandboxBackend` interface — swap Docker for a hosted sandbox (E2B, Daytona, Vercel), Cloud Run Jobs, or any other runtime by implementing one method. The shared `describeSandboxBackend()` test suite proves any new backend honors the same contract. See [`src/sandbox/README.md`](src/sandbox/README.md) for the full design, security model, and the "Writing a new backend" checklist.
+
 ## Recommended next implementation steps
 
 1. Replace placeholder specialist bundles with your real research, browser, code, or retrieval tools.
