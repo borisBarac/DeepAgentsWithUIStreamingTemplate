@@ -1,11 +1,5 @@
 export { createGuardrailDecision } from "./decision.ts";
 export {
-  createTaskScopeGatekeeper,
-  DEFAULT_GATEKEEPER_BLOCKED_MESSAGE,
-  type TaskScopeGatekeeper,
-  type TaskScopeGatekeeperResult,
-} from "./gatekeeper.ts";
-export {
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   type GuardrailPolicyLoader,
   MarkdownGuardrailPolicyLoader,
@@ -35,5 +29,4 @@ export type {
   OpenAIContentSafetyClient,
   StructuredTaskScopeModel,
   TaskScopeClassifier,
-  TaskScopeGatekeeperOptions,
 } from "./types.ts";

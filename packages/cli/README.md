@@ -83,7 +83,7 @@ deep-agent-template scaffold --system-prompt "You are a test agent"
 
 ## Environment
 
-Two env vars are required (except for `scaffold --dump`):
+These env vars are required for live agent calls (except for `scaffold --dump`):
 
 ```sh
 # Your OpenAI-compatible endpoint (e.g. DeepSeek, OpenAI, Ollama, vLLM).
@@ -91,6 +91,9 @@ LLM_BASE_URL=https://api.deepseek.com
 
 # Authenticates against the LLM_BASE_URL endpoint.
 LLM_API_KEY=...
+
+# Authenticates the default OpenAI moderation safety guardrail.
+OPENAI_API_KEY=...
 ```
 
 With no explicit `--model`, the model defaults to `deepseek-v4-flash`.
@@ -101,8 +104,11 @@ With no explicit `--model`, the model defaults to `deepseek-v4-flash`.
 
 The default dependency factory picks an agent factory based on the command:
 
-- `baseline` → `createBaselineAgent({ guardrails: false, ... })`
-- `scaffold` → `createScaffoldedAgent({ guardrails: false, ... })` (forwarding `systemPrompt` when provided)
+- `baseline` → `createBaselineAgent({ ... })`
+- `scaffold` → `createScaffoldedAgent({ ... })` (forwarding `systemPrompt` when provided)
+
+Both paths use core's default middleware guardrails: OpenAI moderation safety and markdown-backed
+task-scope policy from `packages/core/guardrails/`.
 
 It always builds a `modelRuntime` from `LLM_BASE_URL` + `LLM_API_KEY` with a single connection and passes that, applying the optional `--model` (default `deepseek-v4-flash`). The agent's `messages` array is seeded with a single user message containing the joined prompt.
 

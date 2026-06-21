@@ -122,8 +122,8 @@ const defaultDependencies: CliDependencies = {
       assignments: { default: "default" },
     });
     return runtime === "scaffolded"
-      ? createScaffoldedAgent({ guardrails: false, modelRuntime, systemPrompt })
-      : createBaselineAgent({ guardrails: false, modelRuntime });
+      ? createScaffoldedAgent({ modelRuntime, systemPrompt })
+      : createBaselineAgent({ modelRuntime });
   },
   createScaffold: (options) => createRuntimeScaffold(options),
   createLineReader: () =>

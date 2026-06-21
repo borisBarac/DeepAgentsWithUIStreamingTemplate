@@ -6,7 +6,6 @@ export const DEFAULT_SITE_NAME = "Deep Agent Template";
 export const MODEL_ROLES = [
   "baseline",
   "supervisor",
-  "gatekeeper",
   "clarifier",
   "researcher",
   "analyst",

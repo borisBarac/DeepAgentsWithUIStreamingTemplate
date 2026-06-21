@@ -129,7 +129,7 @@ modelRuntime.getModel("fast");
 modelRuntime.getModelForRole("researcher");
 ```
 
-Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
+Supported roles are `baseline`, `supervisor`, `clarifier`, `researcher`, `analyst`,
 `reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
 Models are constructed on first lookup and cached by profile.
 
@@ -225,12 +225,15 @@ For scaffolded agents, explicit `systemPrompt` values and
 
 ## Guardrails
 
-The scaffolded and baseline factories install two LangChain middleware guardrails by default:
+The scaffolded and baseline factories install two LangChain middleware guardrails by default. Pass
+`guardrails: false` only when a caller explicitly needs to opt out:
 
 - `OpenAIContentSafetyGuardrail` runs before the agent and uses OpenAI moderation (`omni-moderation-latest`) to block unsafe user requests.
 - `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope.
 
-Task-scope policy is controlled by markdown files under `packages/core/guardrails/`:
+Task-scope policy is controlled by markdown files under `packages/core/guardrails/`. These files are
+loaded by `DEFAULT_GUARDRAIL_POLICY_LOADER` and passed into `TaskScopeGuardrailMiddleware` before the
+agent runs:
 
 - `taskScope.requiredContext.md`
 - `taskScope.allowedTasks.md`

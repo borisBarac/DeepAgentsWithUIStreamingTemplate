@@ -38,8 +38,6 @@ export {
 export {
   type CreateGuardrailDecisionOptions,
   createGuardrailDecision,
-  createTaskScopeGatekeeper,
-  DEFAULT_GATEKEEPER_BLOCKED_MESSAGE,
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   DEFAULT_GUARDRAIL_REFUSAL,
   DEFAULT_OPENAI_MODERATION_MODEL,
@@ -55,9 +53,6 @@ export {
   type StructuredTaskScopeModel,
   type TaskScopeClassifier,
   type TaskScopeDecision,
-  type TaskScopeGatekeeper,
-  type TaskScopeGatekeeperOptions,
-  type TaskScopeGatekeeperResult,
   type TaskScopePolicyBundle,
   taskScopeDecisionSchema,
 } from "./guardrails/index.ts";

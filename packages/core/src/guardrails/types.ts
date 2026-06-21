@@ -27,10 +27,6 @@ export type GuardrailTaskScopeOptions = {
   refusalMessage?: string;
 };
 
-export type TaskScopeGatekeeperOptions = Omit<GuardrailTaskScopeOptions, "refusalMessage"> & {
-  blockedMessage?: string;
-};
-
 export type CreateGuardrailDecisionOptions = {
   enabled?: boolean;
   middleware?: CreateDeepAgentParams["middleware"];
