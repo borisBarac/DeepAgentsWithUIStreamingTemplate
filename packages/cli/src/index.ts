@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { createBaselineAgent } from "@deep-agent-template/core";
+import { createBaselineAgent, createModelRuntime } from "@deep-agent-template/core";
 
 export type CliResult = {
   exitCode: number;
@@ -15,13 +15,18 @@ type Agent = {
   invoke(input: { messages: Array<{ content: string; role: "user" }> }): Promise<AgentResult>;
 };
 
+type CreateAgentOptions = {
+  apiKey: string;
+  model: string;
+};
+
 type CliDependencies = {
-  createAgent(options: { apiKey: string; model?: string }): Agent;
+  createAgent(options: CreateAgentOptions): Agent;
   getOpenRouterApiKey(): string | undefined;
 };
 
 type CliOptions = {
-  model?: string;
+  model: string;
   prompt: string;
 };
 
@@ -30,7 +35,7 @@ const version = "0.1.0";
 const helpText = `deep-agent-template
 
 Usage:
-  deep-agent-template [--model <provider:model>] <prompt>
+  deep-agent-template --model <provider:model> <prompt>
   deep-agent-template --help
   deep-agent-template --version
 
@@ -38,16 +43,31 @@ Environment:
   OPENROUTER_API_KEY  Required for agent requests
 
 Examples:
-  deep-agent-template "Explain this project in one sentence"
   deep-agent-template --model openrouter:anthropic/claude-sonnet-4 "Say hello"`;
 
+function parseModelIdentifier(id: string): { provider: string; model: string } {
+  const separator = id.indexOf(":");
+  if (separator < 1) {
+    throw new Error(`--model requires a provider-prefixed model ID (got "${id}").`);
+  }
+  return { provider: id.slice(0, separator), model: id.slice(separator + 1) };
+}
+
+function buildModelRuntime(options: CreateAgentOptions): ReturnType<typeof createModelRuntime> {
+  const { provider, model: modelName } = parseModelIdentifier(options.model);
+  if (provider !== "openrouter") {
+    throw new Error(`Unsupported provider "${provider}". Only "openrouter" is supported.`);
+  }
+  return createModelRuntime({
+    connections: { openrouter: { provider: "openrouter", apiKey: options.apiKey } },
+    models: { default: { connection: "openrouter", model: modelName } },
+    assignments: { default: "default" },
+  });
+}
+
 const defaultDependencies: CliDependencies = {
-  createAgent: ({ apiKey, model }) =>
-    createBaselineAgent({
-      guardrails: false,
-      model,
-      openRouter: { apiKey },
-    }),
+  createAgent: (options) =>
+    createBaselineAgent({ guardrails: false, modelRuntime: buildModelRuntime(options) }),
   getOpenRouterApiKey: () => process.env.OPENROUTER_API_KEY,
 };
 
@@ -75,6 +95,10 @@ function parseOptions(args: string[]): CliOptions {
     if (argument) {
       promptParts.push(argument);
     }
+  }
+
+  if (!model) {
+    throw new Error("--model is required. Run with --help for usage.");
   }
 
   const prompt = promptParts.join(" ").trim();
@@ -162,10 +186,7 @@ export async function runCli(
       throw new Error("OPENROUTER_API_KEY is required.");
     }
 
-    const agent = dependencies.createAgent({
-      apiKey,
-      model: options.model,
-    });
+    const agent = dependencies.createAgent({ apiKey, model: options.model });
     const result = await agent.invoke({
       messages: [{ role: "user", content: options.prompt }],
     });

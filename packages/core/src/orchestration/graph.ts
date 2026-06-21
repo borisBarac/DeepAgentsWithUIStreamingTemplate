@@ -1,6 +1,5 @@
 import { END, START, StateGraph } from "@langchain/langgraph";
 import { createTaskScopeGatekeeper } from "../guardrails/index.ts";
-import { assertCompatibleModelOptions, createChatModel } from "../models/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createReviewConfig } from "../review/index.ts";
@@ -29,9 +28,7 @@ function createNodeContext(
     guardrails: options.guardrails ?? false,
     review: createReviewConfig(options.review),
     promptLoader: options.promptLoader ?? DEFAULT_PROMPT_LOADER,
-    model: options.model,
     modelRuntime: options.modelRuntime,
-    openRouter: options.openRouter,
     defaults: {},
   };
 }
@@ -44,11 +41,9 @@ function resolveGatekeeper(
   const gatekeeperModel = !gatekeeperConfigured
     ? undefined
     : (gatekeeperOptions?.model ??
-      (options.modelRuntime
+      (options.modelRuntime.hasModelForRole("gatekeeper")
         ? options.modelRuntime.getModelForRole("gatekeeper")
-        : options.model !== undefined || options.openRouter !== undefined
-          ? createChatModel({ model: options.model, openRouter: options.openRouter })
-          : undefined));
+        : undefined));
   return !gatekeeperConfigured || (!gatekeeperOptions?.classifier && !gatekeeperModel)
     ? undefined
     : createTaskScopeGatekeeper({
@@ -57,9 +52,8 @@ function resolveGatekeeper(
       });
 }
 
-function buildOrchestratedDeepAgentGraph(options: CreateOrchestratedDeepAgentGraphOptions = {}) {
+function buildOrchestratedDeepAgentGraph(options: CreateOrchestratedDeepAgentGraphOptions) {
   configureLangSmithTracing(options.langSmith);
-  assertCompatibleModelOptions(options);
   const gatekeeper = resolveGatekeeper(options);
   const ctx = createNodeContext(options, gatekeeper);
 
@@ -84,7 +78,7 @@ function buildOrchestratedDeepAgentGraph(options: CreateOrchestratedDeepAgentGra
 export type OrchestratedDeepAgentGraph = ReturnType<typeof buildOrchestratedDeepAgentGraph>;
 
 export function createOrchestratedDeepAgentGraph(
-  options: CreateOrchestratedDeepAgentGraphOptions = {},
+  options: CreateOrchestratedDeepAgentGraphOptions,
 ): OrchestratedDeepAgentGraph {
   return buildOrchestratedDeepAgentGraph(options);
 }

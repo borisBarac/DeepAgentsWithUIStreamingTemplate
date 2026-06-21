@@ -85,9 +85,12 @@ export function createReviewAgent(reports: ReviewReport | ReviewReport[]): {
   return { agent, calls };
 }
 
-export const NO_CLARIFICATION = {
-  clarification: { enabled: false },
-} satisfies CreateOrchestratedDeepAgentGraphOptions;
+export function noClarificationOptions(): CreateOrchestratedDeepAgentGraphOptions {
+  return {
+    clarification: { enabled: false },
+    modelRuntime: runtimeWithoutRoleAssignments(),
+  };
+}
 
 export function invokeInput(
   task: string,

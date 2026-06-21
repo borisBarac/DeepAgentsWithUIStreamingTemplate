@@ -9,6 +9,7 @@ import {
   type OrchestratedDeepAgentState,
   type ReviewReport,
 } from "../src/index.ts";
+import { runtimeWithoutRoleAssignments } from "../src/orchestration/test-helpers.ts";
 
 const APPROVED_REVIEW: ReviewReport = {
   status: "approved",
@@ -63,6 +64,7 @@ describe("clarification integration", () => {
     const finalizer = createRecordingAgent("Implementation plan completed.");
     const reviewer = createReviewer();
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: false },
       agents: {
         finalizer: finalizer.agent,
@@ -109,6 +111,7 @@ describe("clarification integration", () => {
     const finalizer = createRecordingAgent("must not run");
     const reviewer = createReviewer();
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: false },
       agents: {
         finalizer: finalizer.agent,
@@ -152,6 +155,7 @@ describe("clarification integration", () => {
     const finalizer = createRecordingAgent("must not run");
     const reviewer = createReviewer();
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       clarification: { maxRounds: 1 },
       routing: { enableResearch: false, enableCoding: false },
       agents: {

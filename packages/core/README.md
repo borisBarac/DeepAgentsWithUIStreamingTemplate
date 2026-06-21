@@ -76,12 +76,6 @@ The smoke script uses an intentionally invalid OpenRouter key, catches the expec
 and prints a unique marker that can be searched in the configured LangSmith project. It sets
 `LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
 
-The default model is OpenRouter DeepSeek V4 Pro:
-
-```ts
-openrouter:deepseek/deepseek-v4-pro
-```
-
 ## Centralized model configuration
 
 Use `createModelRuntime(...)` when an application needs named provider connections, reusable model
@@ -154,19 +148,6 @@ const localRuntime = createModelRuntime({
 
 Explicit `subagentOverrides.<role>.model` values still win over runtime assignments. Injected
 StateGraph agents also win over generated runtime-backed agents.
-
-The legacy single-model API remains supported:
-
-```ts
-createBaselineAgent({
-  model: "openrouter:deepseek/deepseek-v4-pro",
-  openRouter: { apiKey: process.env.OPENROUTER_API_KEY },
-});
-```
-
-To migrate, move the connection and model ID into a runtime profile, assign it as `default`, and
-pass `modelRuntime` instead. Do not combine `modelRuntime` with legacy `model` or `openRouter`
-options; the factories reject ambiguous combinations.
 
 ## Usage
 
@@ -460,20 +441,33 @@ The graph is an **optional outer controller**. Each model-backed stage invokes a
 ```ts
 import {
   createOrchestratedDeepAgentGraph,
+  createModelRuntime,
   adaptDeepAgent,
   createBaselineAgent,
 } from "@deep-agent-template/core";
 
+const modelRuntime = createModelRuntime({
+  connections: {
+    openrouter: { provider: "openrouter", apiKey: process.env.OPENROUTER_API_KEY },
+  },
+  models: {
+    primary: { connection: "openrouter", model: "anthropic/claude-sonnet-4" },
+  },
+  assignments: { default: "primary" },
+});
+
 const graph = createOrchestratedDeepAgentGraph({
+  modelRuntime,
   routing: {
     enableResearch: true,
     enableCoding: true,
   },
-  // Provide a model to auto-build stage agents from the bundled prompts, or
-  // inject callables built with createBaselineAgent + adaptDeepAgent:
+  // Inject callables built with createBaselineAgent + adaptDeepAgent,
+  // or leave `agents` empty to let the graph auto-build stage agents
+  // from the bundled prompts and the runtime's role assignments:
   agents: {
     researcher: adaptDeepAgent(
-      createBaselineAgent({ openRouter: { apiKey: process.env.OPENROUTER_API_KEY } }),
+      createBaselineAgent({ modelRuntime }),
     ),
   },
 });

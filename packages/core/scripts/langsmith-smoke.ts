@@ -1,4 +1,4 @@
-import { createChatModel } from "../src/models/index.ts";
+import { createModelRuntime } from "../src/models/index.ts";
 import { configureLangSmithTracing } from "../src/observability/index.ts";
 
 const projectName = process.env.LANGSMITH_PROJECT ?? "deep-agent-template";
@@ -12,16 +12,22 @@ if (!process.env.LANGSMITH_API_KEY) {
 process.env.LANGCHAIN_CALLBACKS_BACKGROUND = "false";
 configureLangSmithTracing({ enabled: true, projectName });
 
-const model = createChatModel({
-  model: "openrouter:openai/gpt-4o-mini",
-  openRouter: {
-    apiKey: "intentionally-invalid-openrouter-key",
-    maxRetries: 0,
+const modelRuntime = createModelRuntime({
+  connections: {
+    openrouter: { provider: "openrouter", apiKey: "intentionally-invalid-openrouter-key" },
   },
+  models: {
+    smoke: {
+      connection: "openrouter",
+      model: "openai/gpt-4o-mini",
+      maxRetries: 0,
+    },
+  },
+  assignments: { default: "smoke" },
 });
 
 try {
-  await model.invoke("Reply with: tracing verified", {
+  await modelRuntime.getModel("smoke").invoke("Reply with: tracing verified", {
     runName: "deep-agent-template-langsmith-error-smoke",
     tags: ["langsmith-smoke", "expected-error"],
     metadata: { verificationId },

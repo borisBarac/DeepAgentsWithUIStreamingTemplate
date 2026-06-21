@@ -90,16 +90,9 @@ export {
   type SingleUserMemoryPolicy,
 } from "./memory/index.ts";
 export {
-  assertCompatibleModelOptions,
-  type CreateChatModelOptions,
-  createChatModel,
   createModelRuntime,
-  DEFAULT_DEEPSEEK_MODEL,
-  DEFAULT_MODEL_ID,
-  DEFAULT_OPENROUTER_PROVIDER,
   MODEL_ROLES,
   type ModelConnectionConfig,
-  type ModelIdentifier,
   type ModelProfileConfig,
   type ModelRole,
   type ModelRuntime,
@@ -107,11 +100,7 @@ export {
   type ModelRuntimeOptions,
   type OpenAICompatibleConnectionConfig,
   type OpenRouterConnectionConfig,
-  type OpenRouterModelOptions,
-  type ResolvedModelIdentifier,
   type RuntimeChatModel,
-  resolveModelIdentifier,
-  type SupportedModelProvider,
 } from "./models/index.ts";
 export {
   configureLangSmithTracing,

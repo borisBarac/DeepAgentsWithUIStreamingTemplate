@@ -1,48 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import {
-  assertCompatibleModelOptions,
-  createChatModel,
-  createModelRuntime,
-  DEFAULT_DEEPSEEK_MODEL,
-  DEFAULT_MODEL_ID,
-  resolveModelIdentifier,
-} from "./index.ts";
-
-describe("resolveModelIdentifier", () => {
-  it("uses OpenRouter DeepSeek V4 by default", () => {
-    expect(resolveModelIdentifier()).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
-  });
-
-  it("parses provider-prefixed model identifiers", () => {
-    expect(resolveModelIdentifier(DEFAULT_MODEL_ID)).toEqual({
-      provider: "openrouter",
-      model: DEFAULT_DEEPSEEK_MODEL,
-    });
-  });
-
-  it("rejects unsupported providers", () => {
-    expect(() => resolveModelIdentifier("openai:gpt-4o-mini")).toThrow(
-      "Unsupported model identifier",
-    );
-  });
-});
-
-describe("createChatModel", () => {
-  it("creates an OpenRouter chat model", () => {
-    const model = createChatModel({
-      openRouter: {
-        apiKey: "test-key",
-      },
-    });
-
-    expect(model.model).toBe(DEFAULT_DEEPSEEK_MODEL);
-    expect(model._llmType()).toBe("openrouter");
-  });
-});
+import { createModelRuntime } from "./runtime.ts";
 
 describe("createModelRuntime", () => {
   it("constructs OpenRouter profiles lazily and caches them by profile", () => {
@@ -319,26 +277,5 @@ describe("createModelRuntime", () => {
       },
     });
     expect(JSON.stringify(runtime)).not.toContain(secret);
-  });
-
-  it("rejects ambiguous combinations with legacy model options", () => {
-    const modelRuntime = createModelRuntime({
-      connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
-      },
-      models: {
-        primary: { connection: "openrouter", model: "model" },
-      },
-      assignments: {
-        default: "primary",
-      },
-    });
-
-    expect(() => assertCompatibleModelOptions({ modelRuntime, model: DEFAULT_MODEL_ID })).toThrow(
-      "cannot be combined",
-    );
-    expect(() =>
-      assertCompatibleModelOptions({ modelRuntime, openRouter: { apiKey: "other-key" } }),
-    ).toThrow("cannot be combined");
   });
 });

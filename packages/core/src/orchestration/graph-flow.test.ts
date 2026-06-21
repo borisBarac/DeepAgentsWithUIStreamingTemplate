@@ -13,14 +13,15 @@ import {
   createMockAgent,
   createReviewAgent,
   invokeInput,
-  NO_CLARIFICATION,
+  noClarificationOptions,
+  runtimeWithoutRoleAssignments,
 } from "./test-helpers.ts";
 
 describe("createOrchestratedDeepAgentGraph state shape", () => {
   it("returns a state object with the contract fields", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -41,7 +42,7 @@ describe("createOrchestratedDeepAgentGraph gatekeeper", () => {
     const researcher = createMockAgent("allowed task completed");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       gatekeeper: {
         classifier: {
           invoke: async () => ({
@@ -70,7 +71,7 @@ describe("createOrchestratedDeepAgentGraph gatekeeper", () => {
     const finalizer = createMockAgent("must not run");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       gatekeeper: {
         classifier: {
           invoke: async () => ({
@@ -105,7 +106,7 @@ describe("createOrchestratedDeepAgentGraph clarification gate", () => {
   it("skips clarification when disabled and runs the finalizer", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -121,6 +122,7 @@ describe("createOrchestratedDeepAgentGraph clarification gate", () => {
 
   it("pauses for clarification when enabled and the task is unresolved", async () => {
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: false },
     });
 
@@ -136,6 +138,7 @@ describe("createOrchestratedDeepAgentGraph clarification gate", () => {
   it("proceeds to work when clarification is already resolved", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -175,7 +178,7 @@ describe("createOrchestratedDeepAgentGraph routing", () => {
 describe("createOrchestratedDeepAgentGraph message passthrough", () => {
   it("passes prior messages through the graph state", async () => {
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
     });
 
@@ -191,7 +194,7 @@ describe("createOrchestratedDeepAgentGraph message passthrough", () => {
     const researcher = createMockAgent("research result");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: true, enableCoding: false },
       agents: { researcher: researcher.agent, reviewer: reviewer.agent },
     });
@@ -217,7 +220,7 @@ describe("createOrchestratedDeepAgentGraph state reducers", () => {
     const researcher = createFailingAgent(new Error("model rate limit 429"));
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: true, enableCoding: false },
       agents: { researcher: researcher.agent, reviewer: reviewer.agent },
     });

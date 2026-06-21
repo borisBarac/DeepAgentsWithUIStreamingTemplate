@@ -1,14 +1,13 @@
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
-import { assertCompatibleModelOptions, createChatModel } from "../models/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
 import { DEFAULT_AGENT_NAME } from "./constants.ts";
 import type { CreateScaffoldedAgentOptions } from "./types.ts";
 
-export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}): DeepAgent {
+export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
   const {
     backend,
     backendOptions,
@@ -17,9 +16,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     langSmith,
     memory,
     middleware,
-    model,
     modelRuntime,
-    openRouter,
     permissions,
     permissionOptions,
     promptLoader = DEFAULT_PROMPT_LOADER,
@@ -30,7 +27,6 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
     ...agentOptions
   } = options;
 
-  assertCompatibleModelOptions({ model, modelRuntime, openRouter });
   const scaffold = createRuntimeScaffold({
     backend,
     backendOptions,
@@ -47,9 +43,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
   });
 
   configureLangSmithTracing(langSmith);
-  const chatModel = modelRuntime
-    ? modelRuntime.getModelForRole("supervisor")
-    : createChatModel({ model, openRouter });
+  const chatModel = modelRuntime.getModelForRole("supervisor");
   const guardrailDecision = createGuardrailDecision(
     guardrails === false
       ? { enabled: false, middleware }
@@ -70,6 +64,6 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions = {}
   });
 }
 
-export function createBasicAgent(options: CreateScaffoldedAgentOptions = {}): DeepAgent {
+export function createBasicAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
   return createScaffoldedAgent(options);
 }

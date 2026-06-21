@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createBaselineAgent, createScaffoldedAgent } from "../agent/index.ts";
+import { createTestModelRuntime } from "../agent/test-helpers.ts";
 import { createOrchestratedDeepAgentGraph } from "../orchestration/index.ts";
+import { runtimeWithoutRoleAssignments } from "../orchestration/test-helpers.ts";
 import { configureLangSmithTracing } from "./index.ts";
 
 const langSmithEnvKeys = [
@@ -106,7 +108,7 @@ describe("LangSmith factory integration", () => {
   it("applies typed tracing options in the baseline factory", () => {
     createBaselineAgent({
       guardrails: false,
-      openRouter: { apiKey: "test-openrouter-key" },
+      modelRuntime: createTestModelRuntime(),
       langSmith: { apiKey: "baseline-langsmith-key", projectName: "baseline-project" },
     });
 
@@ -118,7 +120,7 @@ describe("LangSmith factory integration", () => {
   it("applies typed tracing options in the scaffolded factory", () => {
     createScaffoldedAgent({
       guardrails: false,
-      openRouter: { apiKey: "test-openrouter-key" },
+      modelRuntime: createTestModelRuntime(),
       langSmith: { apiKey: "scaffold-langsmith-key", projectName: "scaffold-project" },
     });
 
@@ -129,6 +131,7 @@ describe("LangSmith factory integration", () => {
 
   it("applies typed tracing options before constructing orchestration", () => {
     createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       langSmith: {
         apiKey: "orchestration-langsmith-key",
         projectName: "orchestration-project",

@@ -45,11 +45,18 @@ describe("runCli", () => {
   it("invokes the core agent with the prompt and prints its response", async () => {
     const test = createDependencies("Core works");
 
-    expect(await runCli(["Explain", "the core"], test.dependencies)).toEqual({
+    expect(
+      await runCli(
+        ["--model", "openrouter:anthropic/claude-sonnet-4", "Explain", "the core"],
+        test.dependencies,
+      ),
+    ).toEqual({
       exitCode: 0,
       output: "Core works",
     });
-    expect(test.createAgentOptions).toEqual([{ apiKey: "test-key", model: undefined }]);
+    expect(test.createAgentOptions).toEqual([
+      { apiKey: "test-key", model: "openrouter:anthropic/claude-sonnet-4" },
+    ]);
     expect(test.invocations).toEqual([
       {
         messages: [{ role: "user", content: "Explain the core" }],
@@ -60,12 +67,12 @@ describe("runCli", () => {
   it("passes an explicit model to core", async () => {
     const test = createDependencies();
 
-    await runCli(["--model", "openrouter:anthropic/claude-sonnet-4", "Hello"], test.dependencies);
+    await runCli(["--model", "openrouter:openai/gpt-4o-mini", "Hello"], test.dependencies);
 
     expect(test.createAgentOptions).toEqual([
       {
         apiKey: "test-key",
-        model: "openrouter:anthropic/claude-sonnet-4",
+        model: "openrouter:openai/gpt-4o-mini",
       },
     ]);
   });
@@ -75,14 +82,14 @@ describe("runCli", () => {
 
     expect(await runCli([], test.dependencies)).toEqual({
       exitCode: 1,
-      output: "A prompt is required. Run with --help for usage.",
+      output: "--model is required. Run with --help for usage.",
     });
     expect(await runCli(["--unknown"], test.dependencies)).toEqual({
       exitCode: 1,
       output: "Unknown option: --unknown",
     });
     expect(
-      await runCli(["Hello"], {
+      await runCli(["--model", "openrouter:anthropic/claude-sonnet-4", "Hello"], {
         ...test.dependencies,
         getOpenRouterApiKey: () => undefined,
       }),
@@ -91,7 +98,7 @@ describe("runCli", () => {
       output: "OPENROUTER_API_KEY is required.",
     });
     expect(
-      await runCli(["Hello"], {
+      await runCli(["--model", "openrouter:anthropic/claude-sonnet-4", "Hello"], {
         ...test.dependencies,
         createAgent: () => ({
           invoke: async () => {
@@ -120,7 +127,9 @@ describe("runCli", () => {
       }),
     });
 
-    expect(await runCli(["Hello"], test.dependencies)).toEqual({
+    expect(
+      await runCli(["--model", "openrouter:anthropic/claude-sonnet-4", "Hello"], test.dependencies),
+    ).toEqual({
       exitCode: 0,
       output: "First\nSecond",
     });

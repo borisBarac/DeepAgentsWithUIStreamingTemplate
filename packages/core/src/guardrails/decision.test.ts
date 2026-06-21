@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { createBasicAgent } from "../agent/index.ts";
+import { createTestModelRuntime } from "../agent/test-helpers.ts";
 import {
   createGuardrailDecision,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
@@ -98,9 +99,7 @@ describe("agent guardrail integration", () => {
       guardrails: {
         safety: { openai: createFakeOpenAI(false) },
       },
-      openRouter: {
-        apiKey: "test-key",
-      },
+      modelRuntime: createTestModelRuntime(),
       middleware: [callerMiddleware],
     });
     const names = agent.options.middleware?.map((middleware) => middleware.name);
@@ -118,9 +117,7 @@ describe("agent guardrail integration", () => {
   it("lets callers disable default guardrails", () => {
     const agent = createBasicAgent({
       guardrails: false,
-      openRouter: {
-        apiKey: "test-key",
-      },
+      modelRuntime: createTestModelRuntime(),
     });
     const names = agent.options.middleware?.map((middleware) => middleware.name) ?? [];
 

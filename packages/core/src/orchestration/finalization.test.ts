@@ -10,7 +10,7 @@ import {
   createMockAgent,
   createReviewAgent,
   invokeInput,
-  NO_CLARIFICATION,
+  noClarificationOptions,
 } from "./test-helpers.ts";
 
 describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
@@ -24,7 +24,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
       readyToProceed: true,
     };
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { finalizer: finalizer.agent, reviewer: reviewer.agent },
     });
@@ -64,7 +64,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("finalizes the candidate unchanged when review approves", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -82,7 +82,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("sends the original request and candidate to the reviewer", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -103,7 +103,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
       readyToProceed: true,
     };
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -148,7 +148,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("finalizes with explicit caveats when review is blocked", async () => {
     const reviewer = createReviewAgent(BLOCKED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -166,7 +166,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("explicitly represents blocked delivery and never claims approval", async () => {
     const reviewer = createReviewAgent(BLOCKED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });
@@ -181,7 +181,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
     const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW, APPROVED_REVIEW]);
     const reviser = createMockAgent("polished candidate");
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent, finalizer: reviser.agent },
     });
@@ -200,7 +200,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
     const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW, CHANGES_REQUIRED_REVIEW]);
     const reviser = createMockAgent("polished candidate");
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent, finalizer: reviser.agent },
     });
@@ -219,7 +219,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("honours a configured review loop limit lower than the default", async () => {
     const reviewer = createReviewAgent([CHANGES_REQUIRED_REVIEW]);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       review: { maxRevisions: 1 },
       agents: { reviewer: reviewer.agent },
@@ -235,7 +235,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
 
   it("represents delivery as blocked/caveated when no reviewer is configured", async () => {
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
     });
 
@@ -250,7 +250,7 @@ describe("createOrchestratedDeepAgentGraph review finalization gate", () => {
   it("reviews a pure conversational answer using only the candidate final message", async () => {
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       routing: { enableResearch: false, enableCoding: false },
       agents: { reviewer: reviewer.agent },
     });

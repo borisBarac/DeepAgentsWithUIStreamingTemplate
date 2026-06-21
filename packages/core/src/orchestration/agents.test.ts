@@ -9,7 +9,7 @@ import {
   createMockAgent,
   createReviewAgent,
   invokeInput,
-  NO_CLARIFICATION,
+  noClarificationOptions,
   runtimeWithoutRoleAssignments,
 } from "./test-helpers.ts";
 
@@ -18,7 +18,8 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
     const { agent: researcher, calls } = createMockAgent("Redis streams are append-only logs.");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: true, enableCoding: false },
       agents: { researcher, reviewer: reviewer.agent },
     });
@@ -47,6 +48,7 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
       { role: "assistant", content: "Understood." },
     ];
     const graph = createOrchestratedDeepAgentGraph({
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: true, enableCoding: false },
       agents: { researcher: researcher.agent, reviewer: reviewer.agent },
     });
@@ -67,7 +69,7 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
     const finalizer = createMockAgent("final answer");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
       modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: true, enableCoding: false },
       agents: {
@@ -85,52 +87,41 @@ describe("createOrchestratedDeepAgentGraph custom agent injection", () => {
   });
 });
 
-describe("createOrchestratedDeepAgentGraph model runtime roles", () => {
-  it.each([
-    {
-      role: "researcher",
-      task: "Research Redis streams",
-      routing: { enableResearch: true, enableCoding: false },
-      agents: {},
-    },
-    {
-      role: "coder",
-      task: "Implement a consumer",
-      routing: { enableResearch: false, enableCoding: true },
-      agents: {},
-    },
-    {
-      role: "finalizer",
-      task: "hello",
-      routing: { enableResearch: false, enableCoding: false },
-      agents: {},
-    },
-    {
-      role: "reviewer",
-      task: "hello",
-      routing: { enableResearch: false, enableCoding: false },
-      agents: { finalizer: createMockAgent("answer").agent },
-    },
-  ])("resolves the $role assignment for its generated stage agent", async (testCase) => {
+describe("createOrchestratedDeepAgentGraph partial runtime assignments", () => {
+  it("records a missing-agent error and skips the stage when an optional role has no model or injection", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
-      modelRuntime: runtimeWithoutRoleAssignments(),
-      routing: testCase.routing,
-      agents: testCase.agents,
+      ...noClarificationOptions(),
+      routing: { enableResearch: true, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
     });
 
-    await expect(graph.invoke(invokeInput(testCase.task))).rejects.toThrow(
-      `No model assignment configured for role "${testCase.role}"`,
-    );
+    const result = (await graph.invoke(
+      invokeInput("Research Redis streams"),
+    )) as OrchestratedDeepAgentState;
+
+    expect(result.next).toBe("end");
+    expect(result.errors).toEqual([
+      expect.objectContaining({
+        node: "researcher",
+        category: "validation",
+        required: false,
+      }),
+    ]);
   });
 
-  it("rejects a runtime combined with legacy graph model options", () => {
-    expect(() =>
-      createOrchestratedDeepAgentGraph({
-        modelRuntime: runtimeWithoutRoleAssignments(),
-        openRouter: { apiKey: "legacy-key" },
-      }),
-    ).toThrow("cannot be combined");
+  it("falls back to the draft final answer when the finalizer role has no model or injection", async () => {
+    const reviewer = createReviewAgent(APPROVED_REVIEW);
+    const graph = createOrchestratedDeepAgentGraph({
+      ...noClarificationOptions(),
+      routing: { enableResearch: false, enableCoding: false },
+      agents: { reviewer: reviewer.agent },
+    });
+
+    const result = (await graph.invoke(invokeInput("hello"))) as OrchestratedDeepAgentState;
+
+    expect(result.finalAnswer).toBe("hello");
+    expect(result.errors).toEqual([]);
   });
 });
 
@@ -139,7 +130,8 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     const { agent: researcher } = createFailingAgent(new Error("model rate limit 429"));
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: true, enableCoding: false },
       agents: { researcher, reviewer: reviewer.agent },
     });
@@ -159,7 +151,8 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     const coder = createMockAgent("implementation plan");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: true },
       agents: { coder: coder.agent, reviewer: reviewer.agent },
     });
@@ -177,7 +170,8 @@ describe("createOrchestratedDeepAgentGraph error propagation", () => {
     const coder = createMockAgent("implementation plan");
     const reviewer = createReviewAgent(APPROVED_REVIEW);
     const graph = createOrchestratedDeepAgentGraph({
-      ...NO_CLARIFICATION,
+      ...noClarificationOptions(),
+      modelRuntime: runtimeWithoutRoleAssignments(),
       routing: { enableResearch: false, enableCoding: true },
       agents: { coder: coder.agent, reviewer: reviewer.agent },
     });
