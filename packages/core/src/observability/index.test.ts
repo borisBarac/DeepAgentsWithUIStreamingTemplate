@@ -2,8 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createBaselineAgent, createScaffoldedAgent } from "../agent/index.ts";
 import { createTestModelRuntime } from "../agent/test-helpers.ts";
-import { createOrchestratedDeepAgentGraph } from "../orchestration/index.ts";
-import { runtimeWithoutRoleAssignments } from "../orchestration/test-helpers.ts";
 import { configureLangSmithTracing } from "./index.ts";
 
 const langSmithEnvKeys = [
@@ -126,22 +124,6 @@ describe("LangSmith factory integration", () => {
 
     expect(process.env.LANGSMITH_API_KEY).toBe("scaffold-langsmith-key");
     expect(process.env.LANGSMITH_PROJECT).toBe("scaffold-project");
-    expect(process.env.LANGSMITH_TRACING).toBe("true");
-  });
-
-  it("applies typed tracing options before constructing orchestration", () => {
-    createOrchestratedDeepAgentGraph({
-      modelRuntime: runtimeWithoutRoleAssignments(),
-      langSmith: {
-        apiKey: "orchestration-langsmith-key",
-        projectName: "orchestration-project",
-        workspaceId: "orchestration-workspace",
-      },
-    });
-
-    expect(process.env.LANGSMITH_API_KEY).toBe("orchestration-langsmith-key");
-    expect(process.env.LANGSMITH_PROJECT).toBe("orchestration-project");
-    expect(process.env.LANGSMITH_WORKSPACE_ID).toBe("orchestration-workspace");
     expect(process.env.LANGSMITH_TRACING).toBe("true");
   });
 });

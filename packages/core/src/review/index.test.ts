@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createReviewConfig, getDefaultReviewConfig } from "./config.ts";
+import { createReviewConfig } from "./config.ts";
 import { DEFAULT_REVIEW_MAX_REVISIONS } from "./defaults.ts";
 import { createReviewReport, parseReviewReport } from "./report.ts";
 import {
@@ -36,7 +36,6 @@ const changesReport: ReviewReport = {
 describe("createReviewConfig", () => {
   it("defaults maxRevisions to 2", () => {
     expect(createReviewConfig().maxRevisions).toBe(DEFAULT_REVIEW_MAX_REVISIONS);
-    expect(getDefaultReviewConfig().maxRevisions).toBe(2);
   });
 
   it("honours explicit maxRevisions overrides", () => {

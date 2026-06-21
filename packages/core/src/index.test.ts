@@ -14,9 +14,8 @@ import * as tools from "./tools/index.ts";
 
 describe("index barrel exports", () => {
   it("re-exports agent helpers from the agent module", () => {
-    expect(index.createBasicAgent).toBe(agent.createBasicAgent);
+    expect(index.createScaffoldedAgent).toBe(agent.createScaffoldedAgent);
     expect(index.DEFAULT_AGENT_NAME).toBe(agent.DEFAULT_AGENT_NAME);
-    expect(index.DEFAULT_SYSTEM_PROMPT).toBe(agent.DEFAULT_SYSTEM_PROMPT);
   });
 
   it("re-exports model helpers from the models module", () => {

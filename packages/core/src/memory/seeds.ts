@@ -47,13 +47,6 @@ export type MemorySeedFile = {
   content: string;
 };
 
-export function createDefaultMemorySeedFiles(): MemorySeedFile[] {
-  return [
-    { path: DEFAULT_PROJECT_FACTS_PATH, content: DEFAULT_PROJECT_FACTS_SEED },
-    { path: DEFAULT_USER_PREFERENCES_PATH, content: DEFAULT_USER_PREFERENCES_SEED },
-  ];
-}
-
 export function createMemorySeedFiles(
   overrides: Partial<Record<"projectFacts" | "userPreferences", string>> = {},
 ): MemorySeedFile[] {

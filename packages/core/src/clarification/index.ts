@@ -1,7 +1,4 @@
-export {
-  createClarificationConfig,
-  getDefaultClarificationConfig,
-} from "./config.ts";
+export { createClarificationConfig } from "./config.ts";
 export { resolveClarificationGate } from "./decision.ts";
 export {
   DEFAULT_CLARIFICATION_MAX_ROUNDS,

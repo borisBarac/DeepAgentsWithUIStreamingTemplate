@@ -1,4 +1,4 @@
-export { createReviewConfig, getDefaultReviewConfig } from "./config.ts";
+export { createReviewConfig } from "./config.ts";
 export {
   APPROVED_REVIEW_MIN_SCORE,
   DEFAULT_REVIEW_AGENT_DESCRIPTION,

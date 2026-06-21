@@ -24,10 +24,6 @@ function assertQuestionsPerRound(value: number): asserts value is ClarificationQ
   }
 }
 
-export function getDefaultClarificationConfig(): ClarificationConfig {
-  return DEFAULT_CLARIFICATION_CONFIG_VALUE;
-}
-
 export function createClarificationConfig(
   overrides: Partial<ClarificationConfig> = {},
 ): ClarificationConfig {

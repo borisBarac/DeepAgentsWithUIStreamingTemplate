@@ -23,7 +23,6 @@ export {
   type SingleUserMemoryPolicy,
 } from "./policy.ts";
 export {
-  createDefaultMemorySeedFiles,
   createMemorySeedFiles,
   DEFAULT_PROJECT_FACTS_SEED,
   DEFAULT_USER_PREFERENCES_SEED,

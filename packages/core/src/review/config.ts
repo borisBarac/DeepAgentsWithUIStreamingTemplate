@@ -11,10 +11,6 @@ function assertMaxRevisions(value: number): void {
   }
 }
 
-export function getDefaultReviewConfig(): ReviewConfig {
-  return DEFAULT_REVIEW_CONFIG_VALUE;
-}
-
 export function createReviewConfig(overrides: Partial<ReviewConfig> = {}): ReviewConfig {
   const maxRevisions = overrides.maxRevisions ?? DEFAULT_REVIEW_CONFIG_VALUE.maxRevisions;
   assertMaxRevisions(maxRevisions);

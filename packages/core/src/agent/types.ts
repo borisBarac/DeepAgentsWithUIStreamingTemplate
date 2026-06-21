@@ -43,5 +43,3 @@ export type CreateScaffoldedAgentOptions = Omit<
       "researcher" | "analyst" | "reviewer" | "clarifier"
     >;
   };
-
-export type CreateBasicAgentOptions = CreateScaffoldedAgentOptions;

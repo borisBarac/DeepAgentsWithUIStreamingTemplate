@@ -1,12 +1,9 @@
 export {
   type CreateBaselineAgentOptions,
-  type CreateBasicAgentOptions,
   type CreateScaffoldedAgentOptions,
   createBaselineAgent,
-  createBasicAgent,
   createScaffoldedAgent,
   DEFAULT_AGENT_NAME,
-  DEFAULT_SYSTEM_PROMPT,
 } from "./agent/index.ts";
 export {
   type ArchivedClarificationState,
@@ -32,8 +29,6 @@ export {
   DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_MODE,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
-  getDefaultClarificationConfig,
-  type ResolveClarificationGateOptions,
   recordClarificationAnswers,
   resolveClarificationGate,
   selectUserFacingQuestions,
@@ -65,7 +60,6 @@ export {
   taskScopeDecisionSchema,
 } from "./guardrails/index.ts";
 export {
-  createDefaultMemorySeedFiles,
   createMemorySeedFiles,
   createSingleUserMemoryNamespace,
   createSingleUserMemoryPolicy,
@@ -108,25 +102,6 @@ export {
   type LangSmithTracingOptions,
 } from "./observability/index.ts";
 export {
-  adaptDeepAgent,
-  type CreateOrchestratedDeepAgentGraphOptions,
-  composeFinalAnswer,
-  createOrchestratedDeepAgentGraph,
-  type OrchestratedDeepAgent,
-  type OrchestratedDeepAgentError,
-  type OrchestratedDeepAgentErrorCategory,
-  type OrchestratedDeepAgentGraph,
-  type OrchestratedDeepAgentInvokeInput,
-  type OrchestratedDeepAgentInvokeOutput,
-  type OrchestratedDeepAgentMessage,
-  type OrchestratedDeepAgentRole,
-  type OrchestratedDeepAgentRoute,
-  type OrchestratedDeepAgentRoutingOptions,
-  type OrchestratedDeepAgentState,
-  selectWorkRoute,
-  toStructuredError,
-} from "./orchestration/index.ts";
-export {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
   DEFAULT_ANALYST_SYSTEM_PROMPT,
@@ -147,7 +122,6 @@ export {
   DEFAULT_REVIEW_AGENT_DESCRIPTION,
   DEFAULT_REVIEW_AGENT_NAME,
   DEFAULT_REVIEW_MAX_REVISIONS,
-  getDefaultReviewConfig,
   isReviewApproved,
   lifecycleStatusForReport,
   markReviewCaveated,

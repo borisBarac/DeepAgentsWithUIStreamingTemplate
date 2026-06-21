@@ -6,7 +6,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 
 ## What is scaffolded
 
-- A supervisor-first agent factory: `createScaffoldedAgent` and `createBasicAgent`
+- A supervisor-first agent factory: `createScaffoldedAgent`
 - Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `review-agent`
 - A mandatory clarification-first intake gate for new supervisor-path requests
 - Two default preflight guardrails: `safety` and `taskScope`
@@ -60,7 +60,6 @@ const langSmith = {
 };
 
 const agent = createScaffoldedAgent({ langSmith });
-const graph = createOrchestratedDeepAgentGraph({ langSmith });
 ```
 
 Configure tracing before invoking agents. LangChain and LangGraph then capture model, tool, agent,
@@ -146,21 +145,20 @@ const localRuntime = createModelRuntime({
 });
 ```
 
-Explicit `subagentOverrides.<role>.model` values still win over runtime assignments. Injected
-StateGraph agents also win over generated runtime-backed agents.
+Explicit `subagentOverrides.<role>.model` values still win over runtime assignments.
 
 ## Usage
 
 ```ts
 import {
-  createBasicAgent,
+  createScaffoldedAgent,
   createDefaultSkillFiles,
   createRuntimeScaffold,
 } from "@deep-agent-template/core";
 
 const runtime = createRuntimeScaffold();
 
-const agent = createBasicAgent({
+const agent = createScaffoldedAgent({
   backend: runtime.backend,
   skills: [runtime.virtualFilesystem.skills],
 });
@@ -171,7 +169,7 @@ const result = await agent.invoke({
 });
 ```
 
-`createBasicAgent` is an alias for the scaffolded factory. For a thinner single-agent control variant, use `createBaselineAgent`.
+`createBaselineAgent` provides a thinner single-agent control variant.
 
 `createBaselineAgent` always gets its system prompt from `PromptLoader.getBaselinePrompt()`. With
 the default loader, that is `packages/core/prompts/baseline.md`; callers cannot bypass the loader
@@ -198,20 +196,20 @@ Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edi
 
 ```ts
 import {
-  createDefaultMemorySeedFiles,
+  createMemorySeedFiles,
   createSingleUserMemoryNamespace,
   createSingleUserMemoryPolicy,
   reviewMemoryContent,
 } from "@deep-agent-template/core";
 
-const seedFiles = createDefaultMemorySeedFiles();
+const seedFiles = createMemorySeedFiles();
 const namespace = createSingleUserMemoryNamespace();
 const policy = createSingleUserMemoryPolicy();
 
 reviewMemoryContent("OPENAI_API_KEY=sk-...").allowed; // false
 ```
 
-StateGraph orchestration nodes must not auto-write durable `/memory`; durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
+Durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
 
 ## Prompts
 
@@ -231,7 +229,7 @@ const promptLoader: PromptLoader = {
   getReviewAgentPrompt: () => "Review prompt",
 };
 
-const agent = createBasicAgent({ promptLoader });
+const agent = createScaffoldedAgent({ promptLoader });
 ```
 
 For scaffolded agents, explicit `systemPrompt` values and
@@ -269,7 +267,7 @@ createDeepAgent({
 Disable the default guardrails when building a custom runtime:
 
 ```ts
-const agent = createBasicAgent({
+const agent = createScaffoldedAgent({
   guardrails: false,
 });
 ```
@@ -277,7 +275,7 @@ const agent = createBasicAgent({
 Or override one rail while keeping the other:
 
 ```ts
-const agent = createBasicAgent({
+const agent = createScaffoldedAgent({
   guardrails: {
     safety: {
       model: "omni-moderation-latest",
@@ -290,26 +288,6 @@ const agent = createBasicAgent({
   },
 });
 ```
-
-## Gatekeeper routing
-
-The orchestrated graph can install an explicit task-scope gatekeeper before every other node. It
-uses the same markdown-backed task-scope policies as the middleware guardrail.
-
-```ts
-const graph = createOrchestratedDeepAgentGraph({
-  modelRuntime,
-  gatekeeper: {},
-});
-```
-
-When `gatekeeper` is configured, the graph resolves the `gatekeeper` model role and classifies the
-task before clarification or delegation. In-scope tasks continue unchanged to the main deep-agent
-flow. Out-of-scope tasks end immediately with an "outside the system parameters" response; no
-researcher, coder, finalizer, or reviewer is invoked.
-
-For deterministic tests or a custom policy service, inject `gatekeeper.classifier`. Set
-`gatekeeper: false` or omit the option to preserve an ungated orchestration entry point.
 
 ## Clarification-first supervisor flow
 
@@ -373,7 +351,7 @@ const runtime = createRuntimeScaffold({
   },
 });
 
-const agent = createBasicAgent({
+const agent = createScaffoldedAgent({
   clarificationOptions: {
     enabled: false,
   },
@@ -422,87 +400,6 @@ const reviewerNeedsInterrupts = store.roleHasRestrictedTools("reviewer");
 ```
 
 The store is static and explicit by design. It does not inherit tools across roles or auto-compose bundles from tags. Its role metadata is descriptive, so later scaffold work can align specialist prompts, safety controls, and evaluation fixtures without changing the registry API.
-
-## Orchestration with StateGraph
-
-`createBasicAgent(...)` remains the default entrypoint for autonomous work. Use `createOrchestratedDeepAgentGraph(...)` only when an application needs explicit stages, deterministic routing, inspectable state snapshots, or review-gated multi-stage workflows.
-
-### When to use each
-
-| Pattern | Use when |
-| --- | --- |
-| Deep Agent only (`createBasicAgent`) | Ordinary autonomous research, coding, analysis, and tool-heavy work. The supervisor and its subagents own planning and delegation. |
-| StateGraph + Deep Agents (`createOrchestratedDeepAgentGraph`) | You need deterministic stage order, testable routing, approval boundaries, retries around a single stage, or explicit review gating. |
-
-The graph is an **optional outer controller**. Each model-backed stage invokes a Deep Agent (or a custom callable). The graph owns routing, state, errors, and finalization; the agents own planning, filesystem use, and tool calls inside a stage.
-
-### Minimal example
-
-```ts
-import {
-  createOrchestratedDeepAgentGraph,
-  createModelRuntime,
-  adaptDeepAgent,
-  createBaselineAgent,
-} from "@deep-agent-template/core";
-
-const modelRuntime = createModelRuntime({
-  connections: {
-    openrouter: { provider: "openrouter", apiKey: process.env.OPENROUTER_API_KEY },
-  },
-  models: {
-    primary: { connection: "openrouter", model: "anthropic/claude-sonnet-4" },
-  },
-  assignments: { default: "primary" },
-});
-
-const graph = createOrchestratedDeepAgentGraph({
-  modelRuntime,
-  routing: {
-    enableResearch: true,
-    enableCoding: true,
-  },
-  // Inject callables built with createBaselineAgent + adaptDeepAgent,
-  // or leave `agents` empty to let the graph auto-build stage agents
-  // from the bundled prompts and the runtime's role assignments:
-  agents: {
-    researcher: adaptDeepAgent(
-      createBaselineAgent({ modelRuntime }),
-    ),
-  },
-});
-
-const result = await graph.invoke({
-  task: "Research Redis streams and propose a Node.js consumer implementation.",
-  messages: [],
-  next: "final",
-  errors: [],
-});
-
-console.log(result.finalAnswer);
-```
-
-### Graph state and routing
-
-The graph state (`OrchestratedDeepAgentState`) carries `task`, `messages`, the clarification state, per-stage outputs (`researchResult`, `codeResult`), `finalAnswer`, review state, the selected `next` route, and a structured `errors` list. Routes are `clarify`, `research`, `code`, `final`, `blocked`, and `end`.
-
-Model-backed stages consume role-specific graph context. Each stage receives relevant prior outputs, answered clarifications, known errors, and the host-managed conversation in `messages`; the reviewer receives the complete accumulated evidence packet. Stage-internal responses are stored in their dedicated result fields and are not appended to `messages`, so the host remains responsible for conversation history.
-
-The default flow is:
-
-```text
-START -> route_intake -> clarify (when required) -> research/code -> finalizer -> review -> END
-```
-
-Routing is deterministic in v1 (see `selectWorkRoute`) and unit-testable without live models. The default finalizer composes stage outputs deterministically; inject an `agents.finalizer` callable only when you want model-backed synthesis at the delivery boundary.
-
-### Approval and pause points
-
-The clarification gate pauses the graph (route `clarify`) and exposes `clarification.openQuestions` for the host application to answer. Re-invoke the graph with a `ready_to_proceed` clarification state to resume. Failed optional work stages route to the finalizer with the failure recorded in `errors`; final delivery is always evaluated by the reviewer and is caveated if review cannot approve it.
-
-### Avoid over-nesting
-
-Prefer graph nodes for **business stages and approval boundaries**. Keep context-isolated work as Deep Agents subagents inside one stage. Do not promote every subagent to a top-level graph node.
 
 ## Recommended next implementation steps
 

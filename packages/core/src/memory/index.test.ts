@@ -4,7 +4,7 @@ import { CompositeBackend, StateBackend, StoreBackend } from "deepagents";
 import { createDefaultCompositeBackend, createDefaultPermissions } from "../scaffold/index.ts";
 import { createRuntimeScaffold } from "../scaffold/runtime.ts";
 import {
-  createDefaultMemorySeedFiles,
+  createMemorySeedFiles,
   createSingleUserMemoryNamespace,
   createSingleUserMemoryPolicy,
   DEFAULT_MEMORY_FILE_PATHS,
@@ -124,12 +124,12 @@ describe("single-user memory approval policy", () => {
 
 describe("memory seed helpers", () => {
   it("produces deterministic seed files for the default memory paths", () => {
-    const seeds = createDefaultMemorySeedFiles();
+    const seeds = createMemorySeedFiles();
     expect(seeds.map((seed) => seed.path)).toEqual([
       "/memory/project-facts.md",
       "/memory/user-preferences.md",
     ]);
-    expect(createDefaultMemorySeedFiles()).toEqual(seeds);
+    expect(createMemorySeedFiles()).toEqual(seeds);
     expect(seeds[0]?.content).toContain("Project Facts");
     expect(seeds[1]?.content).toContain("User Preferences");
   });
@@ -162,7 +162,7 @@ describe("memory content policy", () => {
   });
 
   it("does not false-positive on the seed wording", () => {
-    for (const seed of createDefaultMemorySeedFiles()) {
+    for (const seed of createMemorySeedFiles()) {
       expect(reviewMemoryContent(seed.content).allowed).toBe(true);
     }
   });

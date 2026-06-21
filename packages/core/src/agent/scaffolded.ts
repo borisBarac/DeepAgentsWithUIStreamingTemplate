@@ -63,7 +63,3 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     model: chatModel,
   });
 }
-
-export function createBasicAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
-  return createScaffoldedAgent(options);
-}

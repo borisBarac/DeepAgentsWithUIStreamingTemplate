@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { PromptLoader } from "../prompts/index.ts";
-import { createBaselineAgent, createBasicAgent } from "./index.ts";
+import { createBaselineAgent, createScaffoldedAgent } from "./index.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";
 
 const testPromptLoader: PromptLoader = {
@@ -17,9 +17,9 @@ function expectSystemPromptToContain(systemPrompt: unknown, text: string): void 
   expect(JSON.stringify(systemPrompt)).toContain(text);
 }
 
-describe("createBasicAgent", () => {
+describe("createScaffoldedAgent", () => {
   it("returns a scaffolded deep agent instance", () => {
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
     });
 
@@ -27,7 +27,7 @@ describe("createBasicAgent", () => {
   });
 
   it("loads the scaffold memory files by default", () => {
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
     });
 
@@ -37,7 +37,7 @@ describe("createBasicAgent", () => {
   });
 
   it("uses a custom prompt loader for the scaffolded supervisor", () => {
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
     });
@@ -46,7 +46,7 @@ describe("createBasicAgent", () => {
   });
 
   it("lets an explicit scaffolded system prompt win over the prompt loader", () => {
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
       systemPrompt: "explicit supervisor prompt",
@@ -57,7 +57,7 @@ describe("createBasicAgent", () => {
 
   it("uses the supervisor role model", () => {
     const modelRuntime = createTestModelRuntime();
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       guardrails: false,
       modelRuntime,
     });

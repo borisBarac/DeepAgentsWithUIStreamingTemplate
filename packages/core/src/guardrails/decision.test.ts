@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { createBasicAgent } from "../agent/index.ts";
+import { createScaffoldedAgent } from "../agent/index.ts";
 import { createTestModelRuntime } from "../agent/test-helpers.ts";
 import {
   createGuardrailDecision,
@@ -95,7 +95,7 @@ describe("createGuardrailDecision", () => {
 describe("agent guardrail integration", () => {
   it("adds default guardrails to scaffolded agents before caller middleware", () => {
     const callerMiddleware = { name: "CallerMiddleware" };
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       guardrails: {
         safety: { openai: createFakeOpenAI(false) },
       },
@@ -115,7 +115,7 @@ describe("agent guardrail integration", () => {
   });
 
   it("lets callers disable default guardrails", () => {
-    const agent = createBasicAgent({
+    const agent = createScaffoldedAgent({
       guardrails: false,
       modelRuntime: createTestModelRuntime(),
     });
