@@ -5,10 +5,17 @@ export type ClarificationQuestionsPerRound = 1 | 2 | 3;
 export type ClarificationStatus = "needs_clarification" | "ready_to_proceed" | "blocked";
 export type ClarificationGatePhase = "clarification" | "execution" | "blocked";
 
+export type ClarificationOption = {
+  label: string;
+  description: string;
+  recommended?: boolean;
+};
+
 export type ClarificationQuestion = {
   id: string;
   question: string;
   context?: string;
+  options?: readonly ClarificationOption[];
 };
 
 export type ClarificationAnsweredInformation = {
@@ -72,10 +79,29 @@ export const clarificationStatusSchema = z.enum([
   "blocked",
 ]);
 
+export const clarificationOptionSchema = z.object({
+  label: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  recommended: z.boolean().optional(),
+});
+
 export const clarificationQuestionSchema = z.object({
   id: z.string(),
   question: z.string(),
   context: z.string().optional(),
+  options: z
+    .array(clarificationOptionSchema)
+    .min(2)
+    .max(4)
+    .superRefine((options, ctx) => {
+      if (options.filter((option) => option.recommended).length > 1) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Clarification questions can recommend at most one option.",
+        });
+      }
+    })
+    .optional(),
 });
 
 export const clarificationAnsweredInformationSchema = z.object({

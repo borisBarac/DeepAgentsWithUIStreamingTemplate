@@ -1,3 +1,4 @@
+import { InMemoryStore } from "@langchain/langgraph";
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
@@ -13,8 +14,15 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions): DeepAg
     middleware,
     modelRuntime,
     promptLoader = DEFAULT_PROMPT_LOADER,
+    store = new InMemoryStore(),
     ...agentOptions
   } = options;
+
+  if (!modelRuntime) {
+    throw new Error(
+      "createBaselineAgent requires a modelRuntime. Provide one via createModelRuntime(...).",
+    );
+  }
 
   configureLangSmithTracing(langSmith);
   const chatModel = modelRuntime.getModelForRole("baseline");
@@ -27,6 +35,7 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions): DeepAg
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
     ...agentOptions,
+    store,
     systemPrompt: promptLoader.getBaselinePrompt(),
     middleware: guardrailDecision.middleware,
     model: chatModel,

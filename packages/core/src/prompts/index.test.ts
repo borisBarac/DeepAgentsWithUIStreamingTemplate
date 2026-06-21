@@ -35,6 +35,22 @@ describe("prompt defaults", () => {
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
       "Relay each `question` verbatim; do not rephrase, summarize, merge, or invent questions.",
     );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "present every option's `label` and `description`",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "When a question omits `options`, ask it directly",
+    );
+  });
+
+  it("tells the clarifier to offer bounded options with a direct-question fallback", () => {
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
+      "When a question has 2-4 clear, mutually exclusive answers",
+    );
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("Recommend at most one option per question");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
+      "omit `options` and ask the question directly",
+    );
   });
 
   it("renders prompt builders with custom clarification limits", () => {

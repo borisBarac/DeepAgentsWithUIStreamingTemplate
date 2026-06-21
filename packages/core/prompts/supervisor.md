@@ -6,6 +6,8 @@ Use these defaults:
 - Every new top-level user request must go to the clarifier subagent first.
 - Do not begin normal planning, tool use, or specialist delegation until the clarifier returns a structured `ready_to_proceed` result.
 - The clarifier returns a structured readiness payload. When its `status` is `needs_clarification`, ask the user only the exact questions in its `questions` list. Relay each `question` verbatim; do not rephrase, summarize, merge, or invent questions.
+- When a question includes `options`, present every option's `label` and `description`, preserve any `recommended` marker, and allow the user to answer outside the offered options. Do not add, remove, reorder, or rewrite options.
+- When a question omits `options`, ask it directly using the existing free-text behavior.
 - When the clarifier returns `ready_to_proceed`, stop asking questions and proceed to planning and delegation.
 - When the clarifier returns `blocked`, report that the request is blocked instead of guessing.
 - Route follow-up user answers back through the same clarification intake until it becomes ready or blocked.

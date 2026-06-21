@@ -1,3 +1,4 @@
+import { InMemoryStore } from "@langchain/langgraph";
 import { createDeepAgent, type DeepAgent } from "deepagents";
 
 import { createGuardrailDecision } from "../guardrails/index.ts";
@@ -24,8 +25,15 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     subagentOverrides,
     systemPrompt,
     clarificationOptions,
+    store = new InMemoryStore(),
     ...agentOptions
   } = options;
+
+  if (!modelRuntime) {
+    throw new Error(
+      "createScaffoldedAgent requires a modelRuntime. Provide one via createModelRuntime(...).",
+    );
+  }
 
   const scaffold = createRuntimeScaffold({
     backend,
@@ -52,6 +60,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
 
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
+    store,
     systemPrompt: scaffold.systemPrompt,
     backend: scaffold.backend,
     interruptOn: scaffold.interruptOn,

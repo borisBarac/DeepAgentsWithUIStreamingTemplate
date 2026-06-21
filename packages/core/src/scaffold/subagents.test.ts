@@ -5,7 +5,6 @@ import { clarificationResultSchema } from "../clarification/index.ts";
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
-import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import { createDefaultSubagents } from "./subagents.ts";
 
 const testPromptLoader: PromptLoader = {
@@ -32,12 +31,8 @@ describe("default subagents", () => {
       "review-agent",
     ]);
     expect(subagents.map((subagent) => subagent.tools)).toEqual([[], [], [], []]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([
-      [CLARIFY_DEEPLY_SKILL_DIR],
-      [],
-      [],
-      [],
-    ]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], [], []]);
+    expect(subagents.every((subagent) => subagent.interruptOn === undefined)).toBe(true);
   });
 
   it("uses a custom prompt loader for default subagent prompts", () => {
@@ -90,11 +85,15 @@ describe("default subagents", () => {
   it("assigns role models to every default specialist and preserves explicit model overrides", () => {
     const runtime = createModelRuntime({
       connections: {
-        openrouter: { provider: "openrouter", apiKey: "test-key" },
+        default: {
+          provider: "openai-compatible",
+          apiKey: "test-key",
+          baseURL: "https://api.openai.com/v1",
+        },
       },
       models: {
-        primary: { connection: "openrouter", model: "primary-model" },
-        fast: { connection: "openrouter", model: "fast-model" },
+        primary: { connection: "default", model: "primary-model" },
+        fast: { connection: "default", model: "fast-model" },
       },
       assignments: {
         default: "primary",

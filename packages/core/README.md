@@ -22,7 +22,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 Required for live agent calls:
 
 ```sh
-OPENROUTER_API_KEY=...
+LLM_API_KEY=...
 ```
 
 Required when the default safety guardrail is enabled:
@@ -77,54 +77,21 @@ and prints a unique marker that can be searched in the configured LangSmith proj
 
 ## Centralized model configuration
 
-Use `createModelRuntime(...)` when an application needs named provider connections, reusable model
-profiles, or different models by agent role. Core does not load `.env` files; pass keys from the
-application or leave them undefined to use the provider SDK's environment-variable conventions.
+Models are configured exclusively through `createModelRuntime(...)`, which wires named
+OpenAI-compatible connections to reusable model profiles and assigns them by agent role. Core does
+not load `.env` files; pass keys and endpoints from the application or leave them undefined to use
+the provider SDK's environment-variable conventions.
 
 ```ts
 import { createModelRuntime, createScaffoldedAgent } from "@deep-agent-template/core";
 
 const modelRuntime = createModelRuntime({
   connections: {
-    openrouter: {
-      provider: "openrouter",
-      apiKey: process.env.OPENROUTER_API_KEY,
-    },
-  },
-  models: {
     primary: {
-      connection: "openrouter",
-      model: "anthropic/claude-sonnet-4",
+      provider: "openai-compatible",
+      apiKey: process.env.LLM_API_KEY,
+      baseURL: "https://api.deepseek.com",
     },
-    fast: {
-      connection: "openrouter",
-      model: "google/gemini-2.5-flash",
-      temperature: 0,
-    },
-  },
-  assignments: {
-    default: "primary",
-    clarifier: "fast",
-    researcher: "fast",
-    reviewer: "primary",
-  },
-});
-
-const agent = createScaffoldedAgent({ modelRuntime });
-
-modelRuntime.getModel("primary");
-modelRuntime.getModelForRole("researcher");
-```
-
-Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
-`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
-Models are constructed on first lookup and cached by profile.
-
-Generic OpenAI-compatible chat-completion endpoints use the same runtime:
-
-```ts
-const localRuntime = createModelRuntime({
-  connections: {
     local: {
       provider: "openai-compatible",
       apiKey: process.env.LOCAL_API_KEY,
@@ -132,6 +99,15 @@ const localRuntime = createModelRuntime({
     },
   },
   models: {
+    default: {
+      connection: "primary",
+      model: "deepseek-v4-flash",
+    },
+    fast: {
+      connection: "primary",
+      model: "deepseek-v4-flash",
+      temperature: 0,
+    },
     localQwen: {
       connection: "local",
       model: "qwen3",
@@ -140,10 +116,22 @@ const localRuntime = createModelRuntime({
     },
   },
   assignments: {
-    default: "localQwen",
+    default: "default",
+    clarifier: "fast",
+    researcher: "fast",
+    reviewer: "default",
   },
 });
+
+const agent = createScaffoldedAgent({ modelRuntime });
+
+modelRuntime.getModel("fast");
+modelRuntime.getModelForRole("researcher");
 ```
+
+Supported roles are `baseline`, `supervisor`, `gatekeeper`, `clarifier`, `researcher`, `analyst`,
+`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
+Models are constructed on first lookup and cached by profile.
 
 Explicit `subagentOverrides.<role>.model` values still win over runtime assignments.
 
@@ -305,6 +293,11 @@ The clarifier returns a structured readiness payload with:
 - `reasoningSummary`
 - `roundCount`
 - `maxRounds`
+
+Each question may optionally include 2-4 structured `options`. An option has a user-facing `label`,
+a one-sentence `description`, and an optional `recommended` marker. At most one option may be
+recommended. When the clarifier cannot generate useful choices, it omits `options` and asks the
+question directly. Hosts should still allow free-text answers when options are present.
 
 The default clarification policy is:
 

@@ -11,7 +11,6 @@ import { createRuntimeScaffold } from "../scaffold/index.ts";
 import {
   CLARIFY_DEEPLY_SKILL_CONTENT,
   CLARIFY_DEEPLY_SKILL_DESCRIPTION,
-  CLARIFY_DEEPLY_SKILL_DIR,
   CLARIFY_DEEPLY_SKILL_NAME,
   CLARIFY_DEEPLY_SKILL_PATH,
   createDefaultSkillFiles,
@@ -41,6 +40,15 @@ describe("bundled skills", () => {
     expect(metadata?.description).toBe(CLARIFY_DEEPLY_SKILL_DESCRIPTION);
   });
 
+  it("describes bounded options and direct-question fallback", () => {
+    expect(CLARIFY_DEEPLY_SKILL_CONTENT).toContain(
+      "provide 2-4 concrete, mutually exclusive options",
+    );
+    expect(CLARIFY_DEEPLY_SKILL_CONTENT).toContain(
+      "if useful options cannot be generated, omit them and ask the question directly",
+    );
+  });
+
   it("creates invoke-ready skill files for the state backend", () => {
     const issuedAt = new Date("2026-06-15T00:00:00.000Z");
     const files = createDefaultSkillFiles(issuedAt);
@@ -55,12 +63,12 @@ describe("bundled skills", () => {
     });
   });
 
-  it("attaches clarify-deeply to the clarifier by default", () => {
+  it("does not attach skills to any default subagent", () => {
     const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
       createRuntimeScaffold().subagents,
     );
 
-    expect(clarifier?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
+    expect(clarifier?.skills).toEqual([]);
     expect(researcher?.skills).toEqual([]);
     expect(analyst?.skills).toEqual([]);
     expect(reviewer?.skills).toEqual([]);

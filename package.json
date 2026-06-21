@@ -14,7 +14,11 @@
     "smoke:langsmith": "bun run packages/core/scripts/langsmith-smoke.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "husky",
+    "cli": "bun run packages/cli/src/index.ts",
+    "baseline": "bun run packages/cli/src/index.ts baseline",
+    "scaffold": "bun run packages/cli/src/index.ts scaffold",
+    "scaffold:dump": "bun run packages/cli/src/index.ts scaffold --dump"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.9.0",

@@ -60,5 +60,6 @@ fi
 
 log "Bootstrap complete."
 log "Next step: add your local secrets before running live agent flows."
-log "Required for live usage: OPENROUTER_API_KEY and OPENAI_API_KEY."
+log "Required for CLI live usage: LLM_BASE_URL and LLM_API_KEY."
+log "Core model runtimes can also be configured directly for OpenRouter."
 log "Optional tracing: set LANGSMITH_API_KEY and LANGSMITH_TRACING=true."

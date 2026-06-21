@@ -29,7 +29,11 @@ Your job is to eliminate ambiguity and surface hidden decisions until there is e
 3. For every question:
    - explain briefly why it matters
    - provide your recommended answer or default assumption
-   - when useful, provide 2-4 concrete options
+   - when useful, provide 2-4 concrete, mutually exclusive options
+   - give each option a concise label and a one-sentence description
+   - mark at most one option as recommended, and only when context justifies it
+   - if useful options cannot be generated, omit them and ask the question directly
+   - allow the user to answer outside the offered options
 4. Prefer resolving the highest-leverage uncertainty first:
    - objective / success criteria
    - scope / boundaries

@@ -3,6 +3,7 @@ import type {
   ArchivedClarificationState,
   ClarificationAnsweredInformation,
   ClarificationConfig,
+  ClarificationQuestion,
   ClarificationResult,
   ClarificationState,
 } from "./types.ts";
@@ -45,10 +46,10 @@ export function recordClarificationAnswers(
   };
 }
 
-export function selectUserFacingQuestions(result: ClarificationResult): readonly string[] {
-  return result.status === "needs_clarification"
-    ? result.questions.map((question) => question.question)
-    : [];
+export function selectUserFacingQuestions(
+  result: ClarificationResult,
+): readonly ClarificationQuestion[] {
+  return result.status === "needs_clarification" ? [...result.questions] : [];
 }
 
 export function clearClarificationState(state: ClarificationState): ClarificationState | null {
