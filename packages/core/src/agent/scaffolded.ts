@@ -16,6 +16,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     interruptOn,
     langSmith,
     memory,
+    memoryUserId,
     middleware,
     modelRuntime,
     permissions,
@@ -37,7 +38,11 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
 
   const scaffold = createRuntimeScaffold({
     backend,
-    backendOptions,
+    backendOptions: {
+      ...backendOptions,
+      memoryStore: backendOptions?.memoryStore ?? store,
+      memoryUserId: memoryUserId ?? backendOptions?.memoryUserId,
+    },
     clarificationOptions,
     interruptOn,
     memory,

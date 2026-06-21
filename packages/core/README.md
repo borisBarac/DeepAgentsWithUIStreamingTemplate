@@ -135,6 +135,36 @@ Models are constructed on first lookup and cached by profile.
 
 Explicit `subagentOverrides.<role>.model` values still win over runtime assignments.
 
+### `createModelRuntime(config)`
+
+`createModelRuntime` creates the model registry used by baseline, scaffolded, and specialist
+agents. The registry separates provider connectivity from model selection so applications can define
+one set of credentials and then assign different model profiles to different agent roles.
+
+The config has three parts:
+
+- `connections`: named provider endpoints. Supported providers are `openai-compatible` and `openrouter`.
+- `models`: named model profiles. Each profile points at one connection and sets the concrete model id plus optional runtime settings like `temperature`, `maxTokens`, `maxRetries`, `timeout`, and `providerOptions`.
+- `assignments`: maps roles to model profile names. `assignments.default` is the fallback for any role without an explicit assignment.
+
+The returned runtime exposes:
+
+- `getModel(profile)`: returns the chat model for a named profile.
+- `getModelForRole(role)`: resolves the role assignment, falling back to `assignments.default`.
+- `hasModelForRole(role)`: reports whether a role can resolve through an explicit assignment or the default.
+
+Models are lazy and cached by profile name. The first lookup constructs the underlying LangChain chat
+model; later lookups for the same profile return the same instance.
+
+Validation happens when the runtime is created. The runtime rejects empty connection/profile names,
+unknown providers, invalid OpenAI-compatible `baseURL` values, profiles that reference unknown
+connections, assignments that reference unknown profiles, and assignments for unsupported roles.
+
+`getModelForRole(role)` throws if the role is unsupported, or if the role has no assignment and no
+`assignments.default` exists. Use role assignments for normal scaffold wiring, and use
+`subagentOverrides.<role>.model` only when one specialist instance needs to bypass the runtime's
+standard assignment.
+
 ## Usage
 
 ```ts

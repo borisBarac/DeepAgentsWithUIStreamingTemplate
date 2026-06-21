@@ -1,3 +1,4 @@
+import type { BaseStore } from "@langchain/langgraph";
 import type {
   CreateDeepAgentParams,
   StateBackend,
@@ -25,6 +26,8 @@ export type CreateCompositeBackendOptions = {
   defaultBackend?: StateBackend;
   memoryBackend?: StoreBackend;
   memoryNamespace?: string[] | StoreBackendNamespaceFactory;
+  memoryStore?: BaseStore;
+  memoryUserId?: string;
 };
 
 export type CreateDefaultPermissionsOptions = {

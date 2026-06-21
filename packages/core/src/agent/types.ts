@@ -38,6 +38,7 @@ export type CreateScaffoldedAgentOptions = Omit<
     CreateRuntimeScaffoldOptions,
     "promptLoader" | "researcher" | "analyst" | "reviewer" | "clarifier"
   > & {
+    memoryUserId?: string;
     subagentOverrides?: Pick<
       CreateRuntimeScaffoldOptions,
       "researcher" | "analyst" | "reviewer" | "clarifier"

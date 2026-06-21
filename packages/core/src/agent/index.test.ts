@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { createInMemoryMemoryStore, createUserMemoryNamespace } from "../memory/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { createBaselineAgent, createScaffoldedAgent } from "./index.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";
@@ -64,6 +65,43 @@ describe("createScaffoldedAgent", () => {
 
     expect((agent.options.model as { model?: string }).model).toBe("supervisor-model");
   });
+
+  it("uses the agent store for the default memory backend", async () => {
+    const store = createInMemoryMemoryStore();
+    const agent = createScaffoldedAgent({
+      guardrails: false,
+      memoryUserId: "alice@example.com",
+      modelRuntime: createTestModelRuntime(),
+      store,
+    });
+
+    await writeAgentMemory(agent, "/memory/project-facts.md", "Agent memory");
+
+    expect(
+      (await store.search(createUserMemoryNamespace("alice@example.com"))).map(
+        (item) => item.value.content,
+      ),
+    ).toEqual(["Agent memory"]);
+  });
+
+  it("lets backendOptions.memoryStore override the agent store", async () => {
+    const agentStore = createInMemoryMemoryStore();
+    const memoryStore = createInMemoryMemoryStore();
+    const agent = createScaffoldedAgent({
+      backendOptions: { memoryStore },
+      guardrails: false,
+      memoryUserId: "u1",
+      modelRuntime: createTestModelRuntime(),
+      store: agentStore,
+    });
+
+    await writeAgentMemory(agent, "/memory/project-facts.md", "Overridden memory store");
+
+    expect(
+      (await memoryStore.search(createUserMemoryNamespace("u1"))).map((item) => item.value.content),
+    ).toEqual(["Overridden memory store"]);
+    expect(await agentStore.search(createUserMemoryNamespace("u1"))).toEqual([]);
+  });
 });
 
 describe("createBaselineAgent", () => {
@@ -104,3 +142,22 @@ describe("createBaselineAgent", () => {
     expect((agent.options.model as { model?: string }).model).toBe("baseline-model");
   });
 });
+
+async function writeAgentMemory(
+  agent: ReturnType<typeof createScaffoldedAgent>,
+  path: string,
+  content: string,
+): Promise<void> {
+  const middleware = agent.options.middleware?.find(
+    (entry) => entry.name === "FilesystemMiddleware",
+  );
+  const writeTool = middleware?.tools?.find((tool) => tool.name === "write_file") as
+    | { invoke: (input: { file_path: string; content: string }) => Promise<unknown> }
+    | undefined;
+
+  if (!writeTool) {
+    throw new Error("write_file tool was not registered on the scaffolded agent.");
+  }
+
+  await writeTool.invoke({ file_path: path, content });
+}

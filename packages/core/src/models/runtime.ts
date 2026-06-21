@@ -52,6 +52,19 @@ function createRuntimeModel(
   }
 }
 
+/**
+ * Creates a lazy model registry for named profiles and role-based assignments.
+ *
+ * Connections describe provider credentials and endpoints, model profiles select
+ * a concrete model on one connection, and assignments map agent roles to those
+ * profiles. Models are constructed on first lookup and then cached by profile
+ * name, so repeated `getModel(...)` or `getModelForRole(...)` calls return the
+ * same chat model instance.
+ *
+ * Role-specific assignments take precedence over `assignments.default`. If a
+ * role has no explicit assignment and no default is configured,
+ * `getModelForRole(...)` throws.
+ */
 export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
   validateRuntimeConfig(config);
   const cache = new Map<string, RuntimeChatModel>();
