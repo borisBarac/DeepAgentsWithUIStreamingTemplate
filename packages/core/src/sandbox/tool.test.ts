@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
+import type { SandboxBackend, SandboxRequest, SandboxResult } from "@deep-agent-template/sandbox";
 import { createDefaultSpecialistRoleToolsets, createSpecializedToolStore } from "../tools/index.ts";
 import {
   createPythonSandboxTool,
   createPythonSandboxToolDefinition,
   pythonSandboxInputSchema,
 } from "./tool.ts";
-import type { SandboxBackend, SandboxRequest, SandboxResult } from "./types.ts";
 
 function makeFakeBackend(capture: {
   request?: SandboxRequest;

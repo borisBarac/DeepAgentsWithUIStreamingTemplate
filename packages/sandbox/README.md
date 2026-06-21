@@ -1,17 +1,16 @@
-# Sandbox
+# Sandbox runtime
 
-Isolated Python execution for the Deep Agent runtime, exposed as the `execute`
-LangChain tool. Backend is injected: Docker is one implementation, hidden
-behind the `SandboxBackend` interface. Swap to a hosted sandbox (E2B, Daytona,
-Vercel), Cloud Run Jobs, or any other runtime by implementing one method.
+Isolated Python execution for the Deep Agent runtime. Docker is one
+implementation behind the `SandboxBackend` interface. Agent-facing LangChain
+tool definitions remain in `@deep-agent-template/core`.
 
 ## Quick start
 
 ```ts
 import {
-  createDockerSandboxBackend,
   createPythonSandboxToolDefinition,
 } from "@deep-agent-template/core";
+import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const definition = createPythonSandboxToolDefinition({
   backend: createDockerSandboxBackend(),
@@ -46,12 +45,10 @@ once it's registered.
 
 | Backend | Factory | Isolation | Use case |
 |---|---|---|---|
-| `docker` | `createDockerSandboxBackend()` | container | **Default for untrusted code.** `--network none`, `--cap-drop ALL`, `--read-only` rootfs, non-root user, frozen `python:3.12-slim` image. |
-| `subprocess` | `createSubprocessSandboxBackend()` | none | Dev / tests on machines without Docker. **Not safe for untrusted code.** |
+| `docker` | `createDockerSandboxBackend()` | container | **Default for untrusted code.** `--network none`, `--cap-drop ALL`, `--read-only` rootfs, non-root user, frozen `python:3.12-slim` image. Pass `containerName` to reuse a long-lived container started by `docker compose up`. |
 
-Both backends honor the same contract. The shared `describeSandboxBackend()`
-test suite (in `backend-test-harness.ts`) runs all acceptance cases against
-each backend — proving equivalence.
+The backend honors the shared `describeSandboxBackend()` contract (in
+`backend-test-harness.ts`), which runs all acceptance cases against it.
 
 ## Resource profiles
 
@@ -64,9 +61,10 @@ artifact count. Defined in `constants.ts`.
 | `sandbox-medium` | 1.0 | 512m | 180s | 256 KiB | 8 MiB / 32 files |
 | `sandbox-large` | 2.0 | 1g | 300s | 1 MiB | 32 MiB / 64 files |
 
-CPU and memory limits are enforced by the docker backend via cgroups; the
-subprocess backend documents that it does NOT enforce them (its
-`capabilities.isolation` is `"none"`).
+CPU and memory limits are enforced by the docker backend via cgroups when it
+runs a fresh container per execution (`docker run` mode). In `containerName`
+mode (reusing a compose-managed container via `docker exec`), per-execution
+CPU/memory limits are NOT enforced — the container's overall limits apply.
 
 ## Result envelope
 
@@ -132,23 +130,15 @@ policy engine and no package install, and network is always `none`.
 - No GPU profile (spec §6.4).
 - No metrics/tracing pipeline (spec §16.2–16.3). Structured JSON logs only.
 
-### Subprocess backend caveat
-
-`createSubprocessSandboxBackend()` runs Python directly via `Bun.spawn` with
-**no isolation** beyond timeout, output caps, and workspace cleanup. It is for
-dev / tests on trusted code only. Never use it for code that came from an LLM
-or end user.
-
 ## Writing a new backend
 
 A new backend (E2B, Daytona, Vercel Sandbox, Modal, Cloud Run Jobs, …) is one
 file + one test file. The tool layer never needs to change.
 
 1. **Implement `SandboxBackend`** as a factory that delegates to the shared
-   pipeline in [`backends/backend-helpers.ts`](backends/backend-helpers.ts).
-   The two existing backends (`subprocess-backend.ts` at ~115 LOC and
-   `docker-backend.ts` at ~255 LOC) are the canonical references — copy either
-   one as a starting point. Each backend only supplies:
+   pipeline exported from `@deep-agent-template/sandbox/backend-helpers`.
+   The existing backend (`docker-backend.ts` at ~255 LOC) is the canonical
+   reference — copy it as a starting point. Each backend only supplies:
 
    - `executeWithHandling({ backendName, request, execOptions, workDirRoot, run, ... })`
      — the outer skeleton (profile resolution, workspace setup, cleanup wrap).
@@ -180,7 +170,7 @@ file + one test file. The tool layer never needs to change.
 3. **Add a test file** that calls `describeSandboxBackend()`:
 
    ```ts
-   import { describeSandboxBackend } from "../backend-test-harness.ts";
+   import { describeSandboxBackend } from "@deep-agent-template/sandbox";
    import { createE2bSandboxBackend } from "./e2b-backend.ts";
 
    describeSandboxBackend("e2b", () => createE2bSandboxBackend(), {
@@ -194,25 +184,25 @@ file + one test file. The tool layer never needs to change.
 4. **Export the factory** from `backends/index.ts`.
 
 That's it — `createPythonSandboxTool({ backend: createE2bSandboxBackend() })`
-now works without any changes to `tool.ts` or `types.ts`.
+now works without any changes to the core tool package or runtime contracts.
 
 ## File layout
 
 ```
 sandbox/
-  index.ts                   Public barrel (trimmed — see "Public API" below)
-  types.ts                   SandboxBackend, SandboxRequest, SandboxResult, …
-  constants.ts               SANDBOX_PROFILES, caps, defaults
-  profiles.ts                resolveSandboxProfile, assertValidArtifactName, SandboxValidationError
-  envelope.ts                collectStream, classifyFailure, buildResultEnvelope
-  tool.ts                    createPythonSandboxTool, createPythonSandboxToolDefinition
-  backend-test-harness.ts    describeSandboxBackend — shared acceptance suite
-  backends/
-    index.ts                 Backend barrel
-    backend-helpers.ts       Shared pipeline: executeWithHandling, runExecution, createWorkspace, …
-    subprocess-backend.ts    Reference impl (no isolation, dev/test) — ~115 LOC
-    docker-backend.ts        Container isolation (default for untrusted code) — ~255 LOC
-  *.test.ts                  Unit + integration tests
+  infra/
+    docker-compose.yml       Reference long-lived container configuration
+  src/
+    index.ts                 Public runtime barrel
+    types.ts                 SandboxBackend, SandboxRequest, SandboxResult, …
+    constants.ts             SANDBOX_PROFILES, caps, defaults
+    profiles.ts              Profile resolution and validation
+    envelope.ts              Result collection and failure classification
+    backend-test-harness.ts  Shared backend acceptance suite
+    backends/
+      backend-helpers.ts     Shared execution pipeline
+      docker-backend.ts      Container isolation backend
+    *.test.ts                Unit + integration tests
 ```
 
 ## Spec coverage

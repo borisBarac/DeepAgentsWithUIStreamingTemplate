@@ -164,7 +164,6 @@ export {
   createDockerSandboxBackend,
   createPythonSandboxTool,
   createPythonSandboxToolDefinition,
-  createSubprocessSandboxBackend,
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
   type DockerSandboxBackendOptions,
@@ -182,7 +181,6 @@ export {
   type SandboxResourceProfileConfig,
   type SandboxResult,
   type SandboxStatus,
-  type SubprocessSandboxBackendOptions,
 } from "./sandbox/index.ts";
 export {
   type CreateCompositeBackendOptions,

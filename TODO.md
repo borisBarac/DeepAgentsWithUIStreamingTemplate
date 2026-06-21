@@ -1,6 +1,3 @@
 # TODO
-
-- state management
-- review subagenr
-- sandbox
+- review subagent
 - tools

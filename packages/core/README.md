@@ -429,15 +429,15 @@ The store is static and explicit by design. It does not inherit tools across rol
 
 ## Sandbox (Python execution)
 
-The `sandbox` module ships an `execute` tool that runs Python in an isolated environment. The backend is injected — pick Docker for real isolation, or subprocess for dev/tests:
+The `sandbox` module ships an `execute` tool that runs Python in an isolated environment. The Docker backend is injected at construction time:
 
 ```ts
 import {
   createDefaultSpecialistRoleToolsets,
-  createDockerSandboxBackend,
   createPythonSandboxToolDefinition,
   createSpecializedToolStore,
 } from "@deep-agent-template/core";
+import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const definition = createPythonSandboxToolDefinition({
   backend: createDockerSandboxBackend(),
@@ -455,7 +455,13 @@ const store = createSpecializedToolStore({
 
 The tool name is `execute` so it fires the existing `interruptOn.execute` slot reserved in `scaffold/runtime.ts`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
 
-The backend is hidden behind the `SandboxBackend` interface — swap Docker for a hosted sandbox (E2B, Daytona, Vercel), Cloud Run Jobs, or any other runtime by implementing one method. The shared `describeSandboxBackend()` test suite proves any new backend honors the same contract. See [`src/sandbox/README.md`](src/sandbox/README.md) for the full design, security model, and the "Writing a new backend" checklist.
+The backend is hidden behind the `SandboxBackend` interface from
+`@deep-agent-template/sandbox` — swap Docker for a hosted sandbox (E2B,
+Daytona, Vercel), Cloud Run Jobs, or any other runtime by implementing one
+method. The shared `describeSandboxBackend()` test suite proves any new backend
+honors the same contract. See the
+[`@deep-agent-template/sandbox` README](../sandbox/README.md) for the full
+design, security model, and the "Writing a new backend" checklist.
 
 ## Recommended next implementation steps
 

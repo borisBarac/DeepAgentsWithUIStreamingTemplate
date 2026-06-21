@@ -1,51 +1,34 @@
 /**
- * Sandbox module — isolated Python execution for the Deep Agent runtime.
+ * Agent-facing sandbox tools.
  *
- * Architecture: the tool layer depends only on the {@link SandboxBackend}
- * interface. Concrete backends live under `./backends/` and are passed in at
- * tool-construction time. See `sandbox/README.md` for the full design,
- * security model, and the "Writing a new backend" contract.
- *
- * Public API (this barrel):
- *  - Tool factories:           createPythonSandboxTool, createPythonSandboxToolDefinition
- *  - Backend factories:        createDockerSandboxBackend, createSubprocessSandboxBackend
- *  - Test harness:             describeSandboxBackend
- *  - Core types & constants:   see exports below
- *
- * Backend authors who need lower-level helpers (runExecution, executeWithHandling,
- * resolveSandboxProfile, classifyFailure, …) can import them directly from their
- * source files under `./backends/` and `./profiles.ts` / `./envelope.ts`.
+ * Code-execution contracts and backends live in
+ * `@deep-agent-template/sandbox`. They are re-exported here to preserve the
+ * existing `@deep-agent-template/core` API.
  */
 
-export { describeSandboxBackend } from "./backend-test-harness.ts";
-export {
-  createDockerSandboxBackend,
-  createSubprocessSandboxBackend,
-  type DockerSandboxBackendOptions,
-  type SubprocessSandboxBackendOptions,
-} from "./backends/index.ts";
 export {
   CONTAINER_WORKSPACE_PATH,
+  createDockerSandboxBackend,
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
+  type DockerSandboxBackendOptions,
+  describeSandboxBackend,
   ENTRYPOINT_FILENAME,
   SANDBOX_PROFILES,
-} from "./constants.ts";
+  type SandboxArtifact,
+  type SandboxBackend,
+  type SandboxBackendCapabilities,
+  type SandboxExecuteOptions,
+  type SandboxExecutionId,
+  type SandboxFailureClass,
+  type SandboxRequest,
+  type SandboxResourceProfile,
+  type SandboxResourceProfileConfig,
+  type SandboxResult,
+  type SandboxStatus,
+} from "@deep-agent-template/sandbox";
 export {
   type CreatePythonSandboxToolOptions,
   createPythonSandboxTool,
   createPythonSandboxToolDefinition,
 } from "./tool.ts";
-export type {
-  SandboxArtifact,
-  SandboxBackend,
-  SandboxBackendCapabilities,
-  SandboxExecuteOptions,
-  SandboxExecutionId,
-  SandboxFailureClass,
-  SandboxRequest,
-  SandboxResourceProfile,
-  SandboxResourceProfileConfig,
-  SandboxResult,
-  SandboxStatus,
-} from "./types.ts";

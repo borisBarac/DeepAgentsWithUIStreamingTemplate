@@ -1,9 +1,13 @@
+import {
+  DEFAULT_RESOURCE_PROFILE,
+  type SandboxBackend,
+  type SandboxResourceProfile,
+  type SandboxResult,
+} from "@deep-agent-template/sandbox";
 import type { StructuredTool } from "@langchain/core/tools";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import type { SpecializedToolDefinition } from "../tools/types.ts";
-import { DEFAULT_RESOURCE_PROFILE } from "./constants.ts";
-import type { SandboxBackend, SandboxResourceProfile, SandboxResult } from "./types.ts";
 
 /**
  * Input schema for the {@link createPythonSandboxTool} tool. Mirrors the

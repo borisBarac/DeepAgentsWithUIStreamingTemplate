@@ -1,0 +1,31 @@
+/**
+ * Backend-agnostic sandbox runtime and concrete code-execution backends.
+ *
+ * Agent-facing tool definitions remain in `@deep-agent-template/core`.
+ */
+export { describeSandboxBackend } from "./backend-test-harness.ts";
+export {
+  createDockerSandboxBackend,
+  type DockerSandboxBackendOptions,
+} from "./backends/index.ts";
+export {
+  CONTAINER_WORKSPACE_PATH,
+  DEFAULT_PYTHON_IMAGE,
+  DEFAULT_RESOURCE_PROFILE,
+  ENTRYPOINT_FILENAME,
+  MAX_TIMEOUT_CEILING_SECONDS,
+  SANDBOX_PROFILES,
+} from "./constants.ts";
+export type {
+  SandboxArtifact,
+  SandboxBackend,
+  SandboxBackendCapabilities,
+  SandboxExecuteOptions,
+  SandboxExecutionId,
+  SandboxFailureClass,
+  SandboxRequest,
+  SandboxResourceProfile,
+  SandboxResourceProfileConfig,
+  SandboxResult,
+  SandboxStatus,
+} from "./types.ts";

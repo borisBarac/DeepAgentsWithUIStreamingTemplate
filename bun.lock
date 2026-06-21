@@ -26,6 +26,7 @@
       "name": "@deep-agent-template/core",
       "version": "0.1.0",
       "dependencies": {
+        "@deep-agent-template/sandbox": "workspace:*",
         "@langchain/core": "^1.1.49",
         "@langchain/langgraph": "^1.4.2",
         "@langchain/openai": "^1.4.7",
@@ -35,6 +36,10 @@
         "openai": "^6.42.0",
         "zod": "^4.4.3",
       },
+    },
+    "packages/sandbox": {
+      "name": "@deep-agent-template/sandbox",
+      "version": "0.1.0",
     },
   },
   "packages": {
@@ -67,6 +72,8 @@
     "@deep-agent-template/cli": ["@deep-agent-template/cli@workspace:packages/cli"],
 
     "@deep-agent-template/core": ["@deep-agent-template/core@workspace:packages/core"],
+
+    "@deep-agent-template/sandbox": ["@deep-agent-template/sandbox@workspace:packages/sandbox"],
 
     "@langchain/core": ["@langchain/core@1.1.49", "", { "dependencies": { "@cfworker/json-schema": "^4.0.2", "@standard-schema/spec": "^1.1.0", "js-tiktoken": "^1.0.12", "langsmith": ">=0.5.0 <1.0.0", "mustache": "^4.2.0", "p-queue": "^6.6.2", "zod": "^3.25.76 || ^4" } }, "sha512-7wkN3Qv/qZqsY0p3h48CNu6E6y5GMYatYxj+JrX4uVNBiqIVQm1Z528QrmayJWVW9SQTQicqRNoyTCzl+K9F8Q=="],
 

@@ -8,6 +8,7 @@ import * as models from "./models/index.ts";
 import * as observability from "./observability/index.ts";
 import * as prompts from "./prompts/index.ts";
 import * as review from "./review/index.ts";
+import * as sandbox from "./sandbox/index.ts";
 import * as scaffold from "./scaffold/index.ts";
 import * as skills from "./skills/index.ts";
 import * as tools from "./tools/index.ts";
@@ -78,6 +79,12 @@ describe("index barrel exports", () => {
     expect(index.DEFAULT_REPORTS_ROOT).toBe(scaffold.DEFAULT_REPORTS_ROOT);
     expect(index.DEFAULT_SCRATCH_ROOT).toBe(scaffold.DEFAULT_SCRATCH_ROOT);
     expect(index.DEFAULT_SKILLS_ROOT).toBe(scaffold.DEFAULT_SKILLS_ROOT);
+  });
+
+  it("re-exports sandbox tools and runtime compatibility exports", () => {
+    expect(index.createPythonSandboxTool).toBe(sandbox.createPythonSandboxTool);
+    expect(index.createDockerSandboxBackend).toBe(sandbox.createDockerSandboxBackend);
+    expect(index.SANDBOX_PROFILES).toBe(sandbox.SANDBOX_PROFILES);
   });
 
   it("re-exports skill helpers from the skills module", () => {

@@ -13,7 +13,3 @@ export {
   createDockerSandboxBackend,
   type DockerSandboxBackendOptions,
 } from "./docker-backend.ts";
-export {
-  createSubprocessSandboxBackend,
-  type SubprocessSandboxBackendOptions,
-} from "./subprocess-backend.ts";

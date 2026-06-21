@@ -2,8 +2,8 @@
  * Sandbox module — types shared across all backends.
  *
  * No backend-specific symbols live here. The {@link SandboxBackend} interface is
- * the only abstraction the tool layer depends on; concrete backends (subprocess,
- * docker, future cloud-run / hosted) implement it independently.
+ * the only abstraction the tool layer depends on; concrete backends (docker,
+ * future cloud-run / hosted) implement it independently.
  */
 
 /**
@@ -54,8 +54,8 @@ export type SandboxFailureClass =
 
 /**
  * Per-profile resource limits. Values are advisory targets that each backend
- * enforces in its own units (cgroup quotas for Docker, rlimit heuristics for
- * subprocess, Cloud Run job flags for a future cloud backend).
+ * enforces in its own units (cgroup quotas for Docker, Cloud Run job flags
+ * for a future cloud backend).
  */
 export type SandboxResourceProfileConfig = {
   readonly profile: SandboxResourceProfile;

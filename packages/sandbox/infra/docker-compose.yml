@@ -1,0 +1,66 @@
+# Docker Compose for the Python sandbox runtime in packages/sandbox
+# Mirrors the isolation flags that createDockerSandboxBackend()
+# passes to `docker run`, so code executed here behaves the same as code executed
+# through the `execute` tool.
+#
+# Usage:
+#   # Long-lived container for poking around (matches what the backend runs):
+#   docker compose up --detach sandbox
+#   docker compose exec sandbox python /workspace/main.py
+#
+#   # One-off script run (closest to a real execution):
+#   docker compose run --rm sandbox python /workspace/main.py
+#
+#   # Interactive REPL:
+#   docker compose run --rm sandbox python -
+#
+# Resource profile: defaults to sandbox-small (0.5 CPU, 256m). Override on the
+# CLI to test the larger profiles from constants.ts:
+#   SANDBOX_CPU=2.0 SANDBOX_MEM=1024m docker compose up sandbox
+
+services:
+  sandbox:
+    # Stable name so createDockerSandboxBackend({ containerName: "python-sandbox" })
+    # can target this container with `docker exec`.
+    container_name: python-sandbox
+    image: python:3.12-slim
+    init: true
+
+    # --- Isolation (matches docker-backend.ts spawnDocker) ---
+    network_mode: "none"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,mode=1777
+    user: "65534:65534" # nobody
+
+    # --- Per-profile resource limits (default: sandbox-small) ---
+    mem_limit: ${SANDBOX_MEM:-256m}
+    cpus: ${SANDBOX_CPU:-0.5}
+
+    # --- Workspace ---
+    # Mirrors the backend's CONTAINER_WORKSPACE_PATH. The host directory must be
+    # world-writable (chmod 0777) because the container runs as nobody (65534).
+    # The backend does this itself via createWorkspace(); for compose, fix it
+    # once on the host:
+    #   mkdir -p ./sandbox-workspace && chmod 0777 ./sandbox-workspace
+    working_dir: /workspace
+    volumes:
+      - ./sandbox-workspace:/workspace:rw
+
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+      RESOURCE_PROFILE: ${SANDBOX_PROFILE:-sandbox-small}
+      # EXECUTION_ID is normally set per-execution by the backend; set it here
+      # if you want to test scripts that read it.
+      EXECUTION_ID: manual-run
+
+    # Keep the container alive by default so `docker compose up` is useful for
+    # inspection. Override with `docker compose run --rm sandbox <cmd>` to run
+    # a specific command and exit.
+    entrypoint: ["sleep", "infinity"]
+    command: []

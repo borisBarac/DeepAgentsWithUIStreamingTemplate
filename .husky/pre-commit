@@ -1,2 +1,3 @@
 bunx biome format --write --staged --no-errors-on-unmatched
-git diff --cached --name-only -z | xargs -0 git add --
+# Re-stage formatted files, but skip deletions (`git add` errors on those).
+git diff --cached --name-only --diff-filter=d -z | xargs -0 git add --

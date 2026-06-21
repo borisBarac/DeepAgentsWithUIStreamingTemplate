@@ -17,3 +17,7 @@ coverage
 .dolt/
 *.db
 .beads-credential-key
+
+# Sandbox workspace — bind-mounted into the compose-managed python-sandbox
+# container. Filled with per-execution mkdtemp dirs at runtime.
+sandbox-workspace/
