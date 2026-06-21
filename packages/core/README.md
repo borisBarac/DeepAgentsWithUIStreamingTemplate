@@ -453,7 +453,7 @@ const store = createSpecializedToolStore({
 // store.roleHasRestrictedTools("analyst") === true
 ```
 
-The tool name is `execute` so it fires the existing `interruptOn.execute` slot reserved in `scaffold/runtime.ts`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
+The tool name is `execute_python` so it fires the existing `interruptOn.execute_python` slot reserved in `scaffold/runtime.ts`. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
 
 The backend is hidden behind the `SandboxBackend` interface from
 `@deep-agent-template/sandbox` — swap Docker for a hosted sandbox (E2B,

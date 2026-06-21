@@ -34,7 +34,7 @@ describe("runtime scaffold defaults", () => {
     expect(scaffold.interruptOn).toEqual({
       write_file: true,
       edit_file: true,
-      execute: true,
+      execute_python: true,
     });
     expect(scaffold.clarification).toEqual({
       requiredSubagent: "clarifier",
@@ -49,7 +49,7 @@ describe("runtime scaffold defaults", () => {
 
   it("lets explicit runtime overrides win over defaults", () => {
     const customBackend = new StateBackend();
-    const customInterrupts = { execute: false };
+    const customInterrupts = { execute_python: false };
     const customMemory = ["/memory/custom.md"];
     const customPermissions: FilesystemPermission[] = [
       { operations: ["read"], paths: ["/custom"] },

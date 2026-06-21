@@ -72,9 +72,9 @@ describe("pythonSandboxInputSchema", () => {
 });
 
 describe("createPythonSandboxTool", () => {
-  it("exposes the reserved `execute` name", () => {
+  it("exposes the reserved `execute_python` name", () => {
     const tool = createPythonSandboxTool({ backend: makeFakeBackend({}) });
-    expect(tool.name).toBe("execute");
+    expect(tool.name).toBe("execute_python");
   });
 
   it("invokes the backend with code and a generated executionId", async () => {
@@ -117,7 +117,7 @@ describe("createPythonSandboxToolDefinition", () => {
     expect(definition.riskLevel).toBe("restricted");
     expect(definition.evidenceMode).toBe("execution");
     expect(definition.specialists).toEqual(["analyst"]);
-    expect(definition.tool.name).toBe("execute");
+    expect(definition.tool.name).toBe("execute_python");
   });
 
   it("registers cleanly with the SpecializedToolStore and flags analyst as restricted", () => {
@@ -130,6 +130,6 @@ describe("createPythonSandboxToolDefinition", () => {
     expect(store.roleHasRestrictedTools("analyst")).toBe(true);
     expect(store.roleHasRestrictedTools("researcher")).toBe(false);
     const resolved = store.resolveRoleTools("analyst");
-    expect(resolved.map((t) => t.name)).toEqual(["execute"]);
+    expect(resolved.map((t) => t.name)).toEqual(["execute_python"]);
   });
 });

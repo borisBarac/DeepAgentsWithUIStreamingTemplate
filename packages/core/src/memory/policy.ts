@@ -1,11 +1,11 @@
 import { DEFAULT_MEMORY_FILE_PATHS, DEFAULT_MEMORY_ROOT } from "../scaffold/constants.ts";
 
-export type MemorySensitiveInterrupt = "write_file" | "edit_file" | "execute";
+export type MemorySensitiveInterrupt = "write_file" | "edit_file" | "execute_python";
 
 export const DEFAULT_SENSITIVE_INTERRUPTS: readonly MemorySensitiveInterrupt[] = [
   "write_file",
   "edit_file",
-  "execute",
+  "execute_python",
 ];
 
 export type MemoryApprovalMode = "auto" | "manual";

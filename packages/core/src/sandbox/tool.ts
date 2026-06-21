@@ -52,13 +52,15 @@ export type CreatePythonSandboxToolOptions = {
 };
 
 /**
- * Build the LangChain `execute` tool that runs Python via the provided
+ * Build the LangChain `execute_python` tool that runs Python via the provided
  * {@link SandboxBackend}. The tool always returns a {@link SandboxResult}
  * envelope (even on failure) so the agent sees structured output rather than
  * an exception.
  *
- * The tool name is `execute` so it fires the existing `interruptOn.execute`
- * slot reserved in `scaffold/runtime.ts`.
+ * The tool name is `execute_python` so it fires the existing
+ * `interruptOn.execute_python` slot reserved in `scaffold/runtime.ts`. This
+ * avoids colliding with the built-in `execute` (shell) tool reserved by
+ * `deepagents`'s `BUILTIN_TOOL_NAMES`.
  *
  * @example
  *   const tool = createPythonSandboxTool({
@@ -85,7 +87,7 @@ export function createPythonSandboxTool(options: CreatePythonSandboxToolOptions)
       );
     },
     {
-      name: "execute",
+      name: "execute_python",
       description:
         "Execute Python code in an isolated sandbox. Network access is disabled by default; " +
         "dependencies are frozen to the container image. Returns a structured result envelope " +
