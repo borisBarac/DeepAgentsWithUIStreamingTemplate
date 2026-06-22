@@ -12,6 +12,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@deep-agent-template/image-gen": "workspace:*",
     "@deep-agent-template/sandbox": "workspace:*",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",

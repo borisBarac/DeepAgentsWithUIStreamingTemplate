@@ -1,0 +1,16 @@
+{
+  "name": "@deep-agent-template/image-gen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "dependencies": {
+    "replicate": "^1.4.0"
+  }
+}
