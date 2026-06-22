@@ -1,3 +1,4 @@
+export { IMAGE_DESIGNER_TOOL_NAME } from "../image-designer/index.ts";
 export { createDefaultSpecialistRoleToolsets } from "./defaults.ts";
 export {
   createSpecializedToolStore,

@@ -50,6 +50,9 @@ describe("index barrel exports", () => {
     expect(index.DEFAULT_ANALYST_SYSTEM_PROMPT).toBe(prompts.DEFAULT_ANALYST_SYSTEM_PROMPT);
     expect(index.DEFAULT_BASELINE_SYSTEM_PROMPT).toBe(prompts.DEFAULT_BASELINE_SYSTEM_PROMPT);
     expect(index.DEFAULT_CLARIFIER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CLARIFIER_SYSTEM_PROMPT);
+    expect(index.DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toBe(
+      prompts.DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
+    );
     expect(index.DEFAULT_RESEARCHER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_RESEARCHER_SYSTEM_PROMPT);
     expect(index.DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toBe(
       prompts.DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
@@ -100,8 +103,14 @@ describe("index barrel exports", () => {
     expect(index.createDefaultSpecialistRoleToolsets).toBe(
       tools.createDefaultSpecialistRoleToolsets,
     );
+    expect(index.IMAGE_DESIGNER_TOOL_NAME).toBe(tools.IMAGE_DESIGNER_TOOL_NAME);
     expect(index.createSpecializedToolStore).toBe(tools.createSpecializedToolStore);
     expect(index.resolveSpecializedTools).toBe(tools.resolveSpecializedTools);
     expect(index.resolveSpecializedToolsForRoles).toBe(tools.resolveSpecializedToolsForRoles);
+  });
+
+  it("re-exports the image designer module helpers", () => {
+    expect(typeof index.createImageDesignerTool).toBe("function");
+    expect(index.imageDesignerResponseSchema.safeParse).toBeDefined();
   });
 });

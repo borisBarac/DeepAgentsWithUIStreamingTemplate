@@ -21,6 +21,12 @@ describe("default specialist role toolsets", () => {
         purpose: "Computation, extraction, transformation, and file-based analysis.",
       },
       {
+        role: "image-designer",
+        toolIds: ["generate_image"],
+        purpose:
+          "Design production-ready image prompts and execute one generate-or-edit image operation.",
+      },
+      {
         role: "reviewer",
         toolIds: [],
         purpose: "Final quality review, approval decisions, and required-change verification.",

@@ -6,6 +6,8 @@ const DEFAULT_SPECIALIST_ROLE_PURPOSES: Record<SpecialistRole, string> = {
   clarifier: "Structured intake, requirement checks, and preflight readiness gating.",
   researcher: "Evidence gathering, retrieval, search, and source collection.",
   analyst: "Computation, extraction, transformation, and file-based analysis.",
+  "image-designer":
+    "Design production-ready image prompts and execute one generate-or-edit image operation.",
   reviewer: "Final quality review, approval decisions, and required-change verification.",
 };
 
@@ -38,6 +40,11 @@ export function createDefaultSpecialistRoleToolsets(): readonly SpecializedRoleT
       role: "analyst",
       toolIds: [],
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.analyst,
+    },
+    {
+      role: "image-designer",
+      toolIds: ["generate_image"],
+      purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES["image-designer"],
     },
     {
       role: "reviewer",

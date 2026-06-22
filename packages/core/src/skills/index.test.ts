@@ -16,6 +16,15 @@ import {
   createDefaultSkillFiles,
 } from "./index.ts";
 
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
+};
+
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
   return subagents as SubAgent[];
 }
@@ -64,13 +73,14 @@ describe("bundled skills", () => {
   });
 
   it("does not attach skills to any default subagent", () => {
-    const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
-      createRuntimeScaffold().subagents,
+    const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
+      createRuntimeScaffold({ imageGenerationService: testImageGenerationService }).subagents,
     );
 
     expect(clarifier?.skills).toEqual([]);
     expect(researcher?.skills).toEqual([]);
     expect(analyst?.skills).toEqual([]);
+    expect(imageDesigner?.skills).toEqual([]);
     expect(reviewer?.skills).toEqual([]);
   });
 });

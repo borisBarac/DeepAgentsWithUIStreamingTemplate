@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
+import { IMAGE_DESIGNER_TOOL_NAME, imageDesignerResponseSchema } from "../image-designer/index.ts";
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
@@ -13,7 +14,17 @@ const testPromptLoader: PromptLoader = {
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
+  getImageDesignerPrompt: () => "custom image designer prompt",
   getReviewAgentPrompt: () => "custom review prompt",
+};
+
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
 };
 
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
@@ -22,7 +33,7 @@ function asDefaultSubagents(subagents: unknown): SubAgent[] {
 
 describe("runtime scaffold defaults", () => {
   it("creates the default runtime shape", () => {
-    const scaffold = createRuntimeScaffold();
+    const scaffold = createRuntimeScaffold({ imageGenerationService: testImageGenerationService });
 
     expect(scaffold.architecture).toBe("supervisor-specialists");
     expect(scaffold.memoryFilePaths).toEqual([
@@ -77,6 +88,7 @@ describe("runtime scaffold defaults", () => {
 
   it("applies custom clarification limits to runtime prompts and subagents", () => {
     const scaffold = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
       clarificationOptions: {
         maxRounds: 6,
         questionsPerRound: 2,
@@ -92,13 +104,17 @@ describe("runtime scaffold defaults", () => {
   });
 
   it("uses a custom prompt loader for default subagent prompts", () => {
-    const scaffold = createRuntimeScaffold({ promptLoader: testPromptLoader });
+    const scaffold = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
+      promptLoader: testPromptLoader,
+    });
     const subagents = asDefaultSubagents(scaffold.subagents);
 
     expect(subagents.map((subagent) => subagent.systemPrompt)).toEqual([
       "custom clarifier prompt",
       "custom researcher prompt",
       "custom analyst prompt",
+      "custom image designer prompt",
       "custom review prompt",
     ]);
     expect(scaffold.systemPrompt).toBe("supervisor prompt");
@@ -107,6 +123,7 @@ describe("runtime scaffold defaults", () => {
   it("lets explicit subagent prompt overrides win over the prompt loader", () => {
     const [clarifier] = asDefaultSubagents(
       createRuntimeScaffold({
+        imageGenerationService: testImageGenerationService,
         promptLoader: testPromptLoader,
         clarifier: {
           systemPrompt: "explicit clarifier prompt",
@@ -118,19 +135,21 @@ describe("runtime scaffold defaults", () => {
   });
 
   it("enforces structured output on the clarifier and review agent", () => {
-    const [clarifier, researcher, analyst, reviewer] = asDefaultSubagents(
-      createRuntimeScaffold().subagents,
+    const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
+      createRuntimeScaffold({ imageGenerationService: testImageGenerationService }).subagents,
     );
 
     expect(clarifier?.responseFormat).toBe(clarificationResultSchema);
     expect(researcher?.responseFormat).toBeUndefined();
     expect(analyst?.responseFormat).toBeUndefined();
+    expect(imageDesigner?.responseFormat).toBe(imageDesignerResponseSchema);
     expect(reviewer?.responseFormat).toBe(reviewReportSchema);
   });
 
   it("lets an explicit clarifier responseFormat override the default schema", () => {
     const customSchema = clarificationResultSchema;
     const [clarifier] = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
       clarifier: {
         responseFormat: customSchema,
       },
@@ -155,13 +174,35 @@ describe("runtime scaffold defaults", () => {
       assignments: {
         default: "primary",
         clarifier: "fast",
+        "image-designer": "fast",
       },
     });
-    const [clarifier, researcher] = createRuntimeScaffold({
+    const [clarifier, researcher, , imageDesigner] = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
       modelRuntime,
     }).subagents as SubAgent[];
 
     expect((clarifier?.model as { model?: string }).model).toBe("fast-model");
     expect((researcher?.model as { model?: string }).model).toBe("primary-model");
+    expect((imageDesigner?.model as { model?: string }).model).toBe("fast-model");
+  });
+
+  it("omits the image designer when image generation is not configured", () => {
+    const subagents = createRuntimeScaffold().subagents as SubAgent[];
+
+    expect(subagents.map((subagent) => subagent.name)).toEqual([
+      "clarifier",
+      "researcher",
+      "analyst",
+      "review-agent",
+    ]);
+  });
+
+  it("assigns only the image generation tool to the image designer by default", () => {
+    const [, , , imageDesigner] = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
+    }).subagents as SubAgent[];
+
+    expect(imageDesigner?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
   });
 });

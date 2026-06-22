@@ -4,6 +4,7 @@ import {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
+  DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
@@ -71,7 +72,23 @@ describe("prompt defaults", () => {
     expect(loader.getBaselinePrompt()).toContain("helpful general-purpose deep agent");
     expect(loader.getResearcherPrompt()).toContain("You are the researcher subagent.");
     expect(loader.getAnalystPrompt()).toContain("You are the analyst subagent.");
+    expect(loader.getImageDesignerPrompt()).toContain("You are the image designer subagent.");
     expect(loader.getReviewAgentPrompt()).toContain("You are the Review Agent.");
+  });
+
+  it("exports the default image designer prompt with generate and edit guidance", () => {
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain("generate({ prompt })");
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain("edit({ prompt, imageUrl })");
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain("Call `generate_image` exactly once");
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain(
+      "state the requested changes directly and explicitly name what must remain unchanged",
+    );
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain(
+      "unsupported controls such as masks, seeds, negative prompts, guidance values, or model-specific parameters",
+    );
+    expect(DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toContain(
+      "editing requires an absolute source image URL",
+    );
   });
 
   it("exports the default review agent prompt with the structured report contract", () => {

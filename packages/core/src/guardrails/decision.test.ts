@@ -9,6 +9,15 @@ import {
 } from "./index.ts";
 import type { OpenAIContentSafetyClient, TaskScopeClassifier } from "./types.ts";
 
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
+};
+
 function createFakeOpenAI(flagged: boolean): OpenAIContentSafetyClient {
   return {
     moderations: {
@@ -99,6 +108,7 @@ describe("agent guardrail integration", () => {
       guardrails: {
         safety: { openai: createFakeOpenAI(false) },
       },
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
       middleware: [callerMiddleware],
     });
@@ -117,6 +127,7 @@ describe("agent guardrail integration", () => {
   it("lets callers disable default guardrails", () => {
     const agent = createScaffoldedAgent({
       guardrails: false,
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
     });
     const names = agent.options.middleware?.map((middleware) => middleware.name) ?? [];

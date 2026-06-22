@@ -18,6 +18,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     memory,
     memoryUserId,
     middleware,
+    imageGenerationService,
     modelRuntime,
     permissions,
     permissionOptions,
@@ -35,7 +36,6 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
       "createScaffoldedAgent requires a modelRuntime. Provide one via createModelRuntime(...).",
     );
   }
-
   const scaffold = createRuntimeScaffold({
     backend,
     backendOptions: {
@@ -44,6 +44,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
       memoryUserId: memoryUserId ?? backendOptions?.memoryUserId,
     },
     clarificationOptions,
+    imageGenerationService,
     interruptOn,
     memory,
     modelRuntime,

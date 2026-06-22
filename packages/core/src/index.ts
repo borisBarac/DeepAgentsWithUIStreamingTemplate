@@ -57,6 +57,18 @@ export {
   taskScopeDecisionSchema,
 } from "./guardrails/index.ts";
 export {
+  createImageDesignerTool,
+  IMAGE_DESIGNER_TOOL_NAME,
+  type ImageDesignerError,
+  type ImageDesignerResponse,
+  type ImageDesignerToolInput,
+  type ImageDesignerToolResult,
+  imageDesignerErrorSchema,
+  imageDesignerResponseSchema,
+  imageDesignerToolInputSchema,
+  imageDesignerToolResultSchema,
+} from "./image-designer/index.ts";
+export {
   BucketMemoryStore,
   type BucketMemoryStoreOptions,
   type CreateMemoryRepositoryFactoryOptions,
@@ -124,6 +136,7 @@ export {
   DEFAULT_ANALYST_SYSTEM_PROMPT,
   DEFAULT_BASELINE_SYSTEM_PROMPT,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
+  DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
   DEFAULT_RESEARCHER_SYSTEM_PROMPT,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,

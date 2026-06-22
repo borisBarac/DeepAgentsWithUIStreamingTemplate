@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { SandboxBackend, SandboxRequest, SandboxResult } from "@deep-agent-template/sandbox";
-import { createDefaultSpecialistRoleToolsets, createSpecializedToolStore } from "../tools/index.ts";
+import { createSpecializedToolStore } from "../tools/index.ts";
 import {
   createPythonSandboxTool,
   createPythonSandboxToolDefinition,
@@ -122,9 +122,7 @@ describe("createPythonSandboxToolDefinition", () => {
 
   it("registers cleanly with the SpecializedToolStore and flags analyst as restricted", () => {
     const definition = createPythonSandboxToolDefinition({ backend: makeFakeBackend({}) });
-    const roles = createDefaultSpecialistRoleToolsets().map((role) =>
-      role.role === "analyst" ? { ...role, toolIds: ["python-sandbox"] } : role,
-    );
+    const roles = [{ role: "analyst", toolIds: ["python-sandbox"] }] as const;
     const store = createSpecializedToolStore({ tools: [definition], roles });
     expect(store.hasTool("python-sandbox")).toBe(true);
     expect(store.roleHasRestrictedTools("analyst")).toBe(true);

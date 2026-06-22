@@ -11,7 +11,17 @@ const testPromptLoader: PromptLoader = {
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
+  getImageDesignerPrompt: () => "custom image designer prompt",
   getReviewAgentPrompt: () => "custom review prompt",
+};
+
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
 };
 
 function expectSystemPromptToContain(systemPrompt: unknown, text: string): void {
@@ -21,6 +31,7 @@ function expectSystemPromptToContain(systemPrompt: unknown, text: string): void 
 describe("createScaffoldedAgent", () => {
   it("returns a scaffolded deep agent instance", () => {
     const agent = createScaffoldedAgent({
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
     });
 
@@ -29,6 +40,7 @@ describe("createScaffoldedAgent", () => {
 
   it("loads the scaffold memory files by default", () => {
     const agent = createScaffoldedAgent({
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
     });
 
@@ -39,6 +51,7 @@ describe("createScaffoldedAgent", () => {
 
   it("uses a custom prompt loader for the scaffolded supervisor", () => {
     const agent = createScaffoldedAgent({
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
     });
@@ -48,6 +61,7 @@ describe("createScaffoldedAgent", () => {
 
   it("lets an explicit scaffolded system prompt win over the prompt loader", () => {
     const agent = createScaffoldedAgent({
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
       systemPrompt: "explicit supervisor prompt",
@@ -60,6 +74,7 @@ describe("createScaffoldedAgent", () => {
     const modelRuntime = createTestModelRuntime();
     const agent = createScaffoldedAgent({
       guardrails: false,
+      imageGenerationService: testImageGenerationService,
       modelRuntime,
     });
 
@@ -70,6 +85,7 @@ describe("createScaffoldedAgent", () => {
     const store = createInMemoryMemoryStore();
     const agent = createScaffoldedAgent({
       guardrails: false,
+      imageGenerationService: testImageGenerationService,
       memoryUserId: "alice@example.com",
       modelRuntime: createTestModelRuntime(),
       store,
@@ -90,6 +106,7 @@ describe("createScaffoldedAgent", () => {
     const agent = createScaffoldedAgent({
       backendOptions: { memoryStore },
       guardrails: false,
+      imageGenerationService: testImageGenerationService,
       memoryUserId: "u1",
       modelRuntime: createTestModelRuntime(),
       store: agentStore,
@@ -101,6 +118,14 @@ describe("createScaffoldedAgent", () => {
       (await memoryStore.search(createUserMemoryNamespace("u1"))).map((item) => item.value.content),
     ).toEqual(["Overridden memory store"]);
     expect(await agentStore.search(createUserMemoryNamespace("u1"))).toEqual([]);
+  });
+
+  it("creates the default scaffold without an image designer when image generation is not configured", () => {
+    const agent = createScaffoldedAgent({
+      modelRuntime: createTestModelRuntime(),
+    });
+
+    expect(typeof agent.invoke).toBe("function");
   });
 });
 

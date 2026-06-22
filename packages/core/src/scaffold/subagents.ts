@@ -5,6 +5,7 @@ import {
   clarificationResultSchema,
   createClarificationConfig,
 } from "../clarification/index.ts";
+import { createImageDesignerTool, imageDesignerResponseSchema } from "../image-designer/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "../prompts/index.ts";
 import {
   DEFAULT_REVIEW_AGENT_DESCRIPTION,
@@ -37,6 +38,9 @@ export function createDefaultSubagents(
   promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
 ): SubAgent[] {
   const clarification = createClarificationConfig(clarificationOptions);
+  const imageDesignerTool = options.imageGenerationService
+    ? createImageDesignerTool(options.imageGenerationService)
+    : undefined;
 
   const clarifier = mergeSubagent(
     {
@@ -90,5 +94,23 @@ export function createDefaultSubagents(
     options.reviewer,
   );
 
-  return [clarifier, researcher, analyst, reviewer];
+  if (!imageDesignerTool) {
+    return [clarifier, researcher, analyst, reviewer];
+  }
+
+  const imageDesigner = mergeSubagent(
+    {
+      name: "image-designer",
+      description:
+        "Turn image requests into production-ready prompts, generate or edit exactly once, and return the prompt plus final image result.",
+      systemPrompt: promptLoader.getImageDesignerPrompt(),
+      responseFormat: imageDesignerResponseSchema,
+      model: options.modelRuntime?.getModelForRole("image-designer"),
+      tools: [imageDesignerTool],
+      skills: [],
+    },
+    options.imageDesigner,
+  );
+
+  return [clarifier, researcher, analyst, imageDesigner, reviewer];
 }

@@ -6,12 +6,13 @@ import type {
   StoreBackendNamespaceFactory,
   SubAgent,
 } from "deepagents";
+import type { ImageGenerationServiceContract } from "../../../image-gen/src/index.ts";
 
 import type { ClarificationConfig } from "../clarification/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 
-export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier";
+export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier" | "image-designer";
 
 export type VirtualFilesystemLayout = {
   scratch: string;
@@ -38,11 +39,13 @@ export type CreateDefaultPermissionsOptions = {
 };
 
 export type CreateDefaultSubagentsOptions = {
+  imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
   reviewer?: Partial<SubAgent>;
   clarifier?: Partial<SubAgent>;
+  imageDesigner?: Partial<SubAgent>;
 };
 
 export type DeepAgentBlueprint = {

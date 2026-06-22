@@ -9,6 +9,7 @@ export const MODEL_ROLES = [
   "clarifier",
   "researcher",
   "analyst",
+  "image-designer",
   "reviewer",
   "coder",
   "finalizer",

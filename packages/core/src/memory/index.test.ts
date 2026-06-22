@@ -29,6 +29,15 @@ import {
   reviewMemoryContent,
 } from "./index.ts";
 
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
+};
+
 describe("memory default paths", () => {
   it("loads project-facts.md and user-preferences.md by default", () => {
     expect(DEFAULT_MEMORY_FILE_PATHS).toEqual([
@@ -40,7 +49,7 @@ describe("memory default paths", () => {
   });
 
   it("is consumed by the default runtime scaffold blueprint", () => {
-    const scaffold = createRuntimeScaffold();
+    const scaffold = createRuntimeScaffold({ imageGenerationService: testImageGenerationService });
     expect(scaffold.memoryFilePaths).toEqual([
       "/memory/project-facts.md",
       "/memory/user-preferences.md",
@@ -308,6 +317,7 @@ describe("memory permissions", () => {
 
   it("keeps the default permission safety when custom memory paths are supplied", () => {
     const scaffold = createRuntimeScaffold({
+      imageGenerationService: testImageGenerationService,
       memoryFilePaths: ["/memory/custom.md"],
     });
 

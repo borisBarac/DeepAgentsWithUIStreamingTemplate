@@ -4,6 +4,15 @@ import { createBaselineAgent, createScaffoldedAgent } from "../agent/index.ts";
 import { createTestModelRuntime } from "../agent/test-helpers.ts";
 import { configureLangSmithTracing } from "./index.ts";
 
+const testImageGenerationService = {
+  async generate() {
+    return { success: true as const, url: "https://example.com/generated.png" };
+  },
+  async edit() {
+    return { success: true as const, url: "https://example.com/edited.png" };
+  },
+};
+
 const langSmithEnvKeys = [
   "LANGSMITH_API_KEY",
   "LANGSMITH_ENDPOINT",
@@ -118,6 +127,7 @@ describe("LangSmith factory integration", () => {
   it("applies typed tracing options in the scaffolded factory", () => {
     createScaffoldedAgent({
       guardrails: false,
+      imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),
       langSmith: { apiKey: "scaffold-langsmith-key", projectName: "scaffold-project" },
     });

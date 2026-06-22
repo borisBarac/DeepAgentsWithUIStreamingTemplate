@@ -89,10 +89,12 @@ describe("createModelRuntime", () => {
       assignments: {
         default: "primary",
         clarifier: "fast",
+        "image-designer": "fast",
       },
     });
 
     expect(runtime.getModelForRole("clarifier").model).toBe("fast-model");
+    expect(runtime.getModelForRole("image-designer").model).toBe("fast-model");
     expect(runtime.getModelForRole("researcher").model).toBe("primary-model");
   });
 

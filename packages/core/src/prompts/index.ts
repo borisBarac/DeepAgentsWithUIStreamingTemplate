@@ -1,6 +1,7 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
 import baselinePromptText from "../../prompts/baseline.md" with { type: "text" };
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
+import imageDesignerPromptText from "../../prompts/image-designer.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
 import supervisorPromptText from "../../prompts/supervisor.md" with { type: "text" };
@@ -17,6 +18,7 @@ export interface PromptLoader {
   getClarifierPrompt(config: Partial<ClarificationConfig>): string;
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
+  getImageDesignerPrompt(): string;
   getReviewAgentPrompt(): string;
 }
 
@@ -57,6 +59,10 @@ export class MarkdownPromptLoader implements PromptLoader {
     return analystPromptText;
   }
 
+  getImageDesignerPrompt(): string {
+    return imageDesignerPromptText;
+  }
+
   getReviewAgentPrompt(): string {
     return reviewAgentPromptText;
   }
@@ -85,6 +91,8 @@ export const DEFAULT_SUPERVISOR_SYSTEM_PROMPT = createSupervisorSystemPrompt({
 export const DEFAULT_RESEARCHER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getResearcherPrompt();
 
 export const DEFAULT_ANALYST_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getAnalystPrompt();
+
+export const DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getImageDesignerPrompt();
 
 export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
 
