@@ -195,7 +195,7 @@ with an inline `systemPrompt`.
 
 The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists. Supplying `imageGenerationService` adds the default `image-designer` specialist with its image-generation tool; without that service, the specialist is omitted. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
-The default `clarifier` subagent includes the bundled `clarify-deeply` skill at `/skills/clarify-deeply/`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
+The default `clarifier` subagent is wired with the bundled `clarify-deeply` skill via `skills: ["/skills/clarify-deeply/"]`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
 
 ## Memory
 
@@ -210,7 +210,7 @@ Default durable memory files:
 
 The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the seed helpers ship wording that defines what belongs in each file.
 
-Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edit_file`) — there is no hidden side channel. In v1, writes to the writable single-user memory files are auto-approved (see `createSingleUserMemoryPolicy`), while other sensitive tool interrupts (`write_file`, `edit_file`, `execute`) stay enabled. `resolveMemoryInterrupts(...)` is an explicit passthrough so memory auto-approval never silently disables interrupt safety.
+Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edit_file`) — there is no hidden side channel. In v1, writes to the writable single-user memory files are auto-approved (see `createSingleUserMemoryPolicy`), and the caller can opt into additional `interruptOn` rules explicitly when needed. `resolveMemoryInterrupts(...)` is an explicit passthrough so memory auto-approval never silently changes interrupt policy.
 
 ```ts
 import {
@@ -336,8 +336,10 @@ The default clarification policy is:
 
 - `enabled: true`
 - `mode: "mandatory-preflight"`
-- `maxRounds: 10`
+- `maxRounds: 2`
 - `questionsPerRound: 3`
+
+Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below).
 
 If the request is still unresolved at the round cap, the clarification state becomes blocked instead of silently proceeding.
 
@@ -453,7 +455,7 @@ const store = createSpecializedToolStore({
 // store.roleHasRestrictedTools("analyst") === true
 ```
 
-The tool name is `execute_python` so it fires the existing `interruptOn.execute_python` slot reserved in `scaffold/runtime.ts`. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
+The tool name is `execute_python` so callers can opt into an `interruptOn.execute_python` rule when they want approval prompts for Python execution. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
 
 The backend is hidden behind the `SandboxBackend` interface from
 `@deep-agent-template/sandbox` — swap Docker for a hosted sandbox (E2B,

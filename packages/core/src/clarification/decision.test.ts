@@ -18,19 +18,22 @@ describe("clarification orchestration", () => {
   });
 
   it("keeps planning and delegation blocked while clarification is unresolved", () => {
-    const state = applyClarificationResult(createClarificationState("Ship the feature."), {
-      status: "needs_clarification",
-      readyToProceed: false,
-      questions: [
-        { id: "platform", question: "Which platform should this ship on first?" },
-        { id: "deadline", question: "What deadline should the plan optimize for?" },
-      ],
-      missingInformation: ["platform", "deadline"],
-      answeredInformation: [],
-      reasoningSummary: "Execution choices change with platform and deadline.",
-      roundCount: 1,
-      maxRounds: 10,
-    });
+    const state = applyClarificationResult(
+      createClarificationState("Ship the feature.", { maxRounds: 10 }),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [
+          { id: "platform", question: "Which platform should this ship on first?" },
+          { id: "deadline", question: "What deadline should the plan optimize for?" },
+        ],
+        missingInformation: ["platform", "deadline"],
+        answeredInformation: [],
+        reasoningSummary: "Execution choices change with platform and deadline.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
 
     const decision = resolveClarificationGate({
       isNewRequest: false,
@@ -45,19 +48,22 @@ describe("clarification orchestration", () => {
   });
 
   it("unlocks normal execution once clarification is ready", () => {
-    const state = applyClarificationResult(createClarificationState("Ship the feature."), {
-      status: "ready_to_proceed",
-      readyToProceed: true,
-      questions: [],
-      missingInformation: [],
-      answeredInformation: [
-        { key: "platform", value: "web" },
-        { key: "deadline", value: "end of month" },
-      ],
-      reasoningSummary: "The request now has enough scope and timing detail.",
-      roundCount: 1,
-      maxRounds: 10,
-    });
+    const state = applyClarificationResult(
+      createClarificationState("Ship the feature.", { maxRounds: 10 }),
+      {
+        status: "ready_to_proceed",
+        readyToProceed: true,
+        questions: [],
+        missingInformation: [],
+        answeredInformation: [
+          { key: "platform", value: "web" },
+          { key: "deadline", value: "end of month" },
+        ],
+        reasoningSummary: "The request now has enough scope and timing detail.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
 
     const decision = resolveClarificationGate({
       isNewRequest: false,

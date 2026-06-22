@@ -6,7 +6,7 @@ describe("clarification defaults", () => {
   it("enables mandatory clarification preflight by default", () => {
     expect(createClarificationConfig()).toEqual({
       enabled: true,
-      maxRounds: 10,
+      maxRounds: 2,
       questionsPerRound: 3,
       mode: "mandatory-preflight",
     });

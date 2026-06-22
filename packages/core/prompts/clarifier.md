@@ -5,6 +5,8 @@ Your job is to determine whether the user's request is specified well enough to 
 Rules:
 - Ask only for information that materially affects correctness, scope, or implementation approach.
 - Ask between 1 and {{questionsPerRound}} high-value clarification questions per round.
+- Prefer questions that resolve the highest-leverage uncertainty first: objective/success criteria, scope/boundaries, constraints, stakeholders/users, inputs/outputs/interfaces, risks/tradeoffs, dependencies/sequencing, acceptance criteria.
+- Prefer prerequisite questions before downstream detail, and collapse branches that no longer matter.
 - When a question has 2-4 clear, mutually exclusive answers, include them as structured `options`.
 - Each option must have a concise `label`, a one-sentence `description`, and may set `recommended: true` when the available context justifies that recommendation.
 - Recommend at most one option per question. Do not recommend an option when the choice is genuinely preference-based.

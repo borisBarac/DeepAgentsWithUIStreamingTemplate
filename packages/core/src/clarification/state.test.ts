@@ -82,19 +82,22 @@ describe("user-facing question selection", () => {
 
 describe("clarification state management", () => {
   it("persists answered questions and shrinks open questions as answers arrive", () => {
-    const state = applyClarificationResult(createClarificationState("Prepare a rollout plan."), {
-      status: "needs_clarification",
-      readyToProceed: false,
-      questions: [
-        { id: "region", question: "Which region rolls out first?" },
-        { id: "team", question: "Which team owns the rollout?" },
-      ],
-      missingInformation: ["region", "team"],
-      answeredInformation: [],
-      reasoningSummary: "Owner and region both affect sequencing.",
-      roundCount: 1,
-      maxRounds: 10,
-    });
+    const state = applyClarificationResult(
+      createClarificationState("Prepare a rollout plan.", { maxRounds: 10 }),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [
+          { id: "region", question: "Which region rolls out first?" },
+          { id: "team", question: "Which team owns the rollout?" },
+        ],
+        missingInformation: ["region", "team"],
+        answeredInformation: [],
+        reasoningSummary: "Owner and region both affect sequencing.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
 
     const updatedState = recordClarificationAnswers(state, [{ key: "region", value: "us-east-1" }]);
 
@@ -107,7 +110,7 @@ describe("clarification state management", () => {
 
   it("clears or archives intake state once execution begins", () => {
     const readyState = applyClarificationResult(
-      createClarificationState("Prepare a rollout plan."),
+      createClarificationState("Prepare a rollout plan.", { maxRounds: 10 }),
       {
         status: "ready_to_proceed",
         readyToProceed: true,

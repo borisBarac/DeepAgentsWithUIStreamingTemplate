@@ -85,4 +85,4 @@ export function reviewMemoryContent(content: string): MemoryContentReview {
   return { allowed: reasons.length === 0, reasons };
 }
 
-export const MEMORY_POLICY_WORDING = `Single-user durable memory holds only explicit user preferences and stable project facts. It must not automatically store inferred preferences, credentials, arbitrary observations, or transient task details. Durable writes use Deep Agents filesystem tools and remain traceable; single-user memory writes are auto-approved in v1 while other sensitive tool interrupts stay enabled.`;
+export const MEMORY_POLICY_WORDING = `Single-user durable memory holds only explicit user preferences and stable project facts. It must not automatically store inferred preferences, credentials, arbitrary observations, or transient task details. Durable writes use Deep Agents filesystem tools and remain traceable; single-user memory writes are auto-approved in v1, and any additional interrupt policy is caller-controlled.`;

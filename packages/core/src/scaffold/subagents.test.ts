@@ -6,6 +6,7 @@ import { IMAGE_DESIGNER_TOOL_NAME, imageDesignerResponseSchema } from "../image-
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
+import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import { createDefaultSubagents } from "./subagents.ts";
 
 const testPromptLoader: PromptLoader = {
@@ -62,7 +63,13 @@ describe("default subagents", () => {
       [IMAGE_DESIGNER_TOOL_NAME],
       [],
     ]);
-    expect(subagents.map((subagent) => subagent.skills)).toEqual([[], [], [], [], []]);
+    expect(subagents.map((subagent) => subagent.skills)).toEqual([
+      [CLARIFY_DEEPLY_SKILL_DIR],
+      [],
+      [],
+      [],
+      [],
+    ]);
     expect(subagents.every((subagent) => subagent.interruptOn === undefined)).toBe(true);
   });
 

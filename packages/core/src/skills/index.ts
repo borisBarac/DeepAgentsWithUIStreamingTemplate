@@ -6,7 +6,7 @@ export const CLARIFY_DEEPLY_SKILL_NAME = "clarify-deeply";
 export const CLARIFY_DEEPLY_SKILL_DIR = "/skills/clarify-deeply/";
 export const CLARIFY_DEEPLY_SKILL_PATH = `${CLARIFY_DEEPLY_SKILL_DIR}SKILL.md`;
 export const CLARIFY_DEEPLY_SKILL_DESCRIPTION =
-  "Drive toward shared understanding by asking targeted, dependency-aware questions one at a time. Use when the user's request, plan, product idea, design, goal, requirement, or task is underspecified, ambiguous, or likely to fail without clarification. For each question, provide a recommended answer. If a question can be answered by inspecting the codebase, files, or existing context, investigate first instead of asking the user.";
+  "Drive toward shared understanding by asking targeted, dependency-aware questions. Use when the user's request, plan, product idea, design, goal, requirement, or task is underspecified, ambiguous, or likely to fail without clarification. Provide a recommended answer for each question when context justifies it.";
 export const CLARIFY_DEEPLY_SKILL_CONTENT = clarifyDeeplySkillText;
 
 function assertBundledSkillMetadata(): void {

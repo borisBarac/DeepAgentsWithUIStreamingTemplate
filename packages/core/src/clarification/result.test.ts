@@ -5,7 +5,7 @@ import { createClarificationState, recordClarificationAnswers } from "./state.ts
 
 describe("clarification result application", () => {
   it("limits each clarification round to a small question batch", () => {
-    const state = createClarificationState("Plan the migration.");
+    const state = createClarificationState("Plan the migration.", { maxRounds: 10 });
 
     expect(() =>
       applyClarificationResult(state, {
@@ -28,7 +28,7 @@ describe("clarification result application", () => {
 
   it("increments rounds across follow-up turns", () => {
     const firstRound = applyClarificationResult(
-      createClarificationState("Create a migration plan."),
+      createClarificationState("Create a migration plan.", { maxRounds: 10 }),
       {
         status: "needs_clarification",
         readyToProceed: false,
@@ -63,32 +63,35 @@ describe("clarification result application", () => {
   });
 
   it("preserves question options in clarification state", () => {
-    const state = applyClarificationResult(createClarificationState("Choose a deployment model."), {
-      status: "needs_clarification",
-      readyToProceed: false,
-      questions: [
-        {
-          id: "deployment",
-          question: "Which deployment model should we use?",
-          options: [
-            {
-              label: "Managed",
-              description: "Use a hosted service with lower operational overhead.",
-              recommended: true,
-            },
-            {
-              label: "Self-hosted",
-              description: "Operate the service within existing infrastructure.",
-            },
-          ],
-        },
-      ],
-      missingInformation: ["deployment"],
-      answeredInformation: [],
-      reasoningSummary: "The deployment model changes the implementation path.",
-      roundCount: 1,
-      maxRounds: 10,
-    });
+    const state = applyClarificationResult(
+      createClarificationState("Choose a deployment model.", { maxRounds: 10 }),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [
+          {
+            id: "deployment",
+            question: "Which deployment model should we use?",
+            options: [
+              {
+                label: "Managed",
+                description: "Use a hosted service with lower operational overhead.",
+                recommended: true,
+              },
+              {
+                label: "Self-hosted",
+                description: "Operate the service within existing infrastructure.",
+              },
+            ],
+          },
+        ],
+        missingInformation: ["deployment"],
+        answeredInformation: [],
+        reasoningSummary: "The deployment model changes the implementation path.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
 
     expect(state.openQuestions[0]?.options).toEqual([
       {

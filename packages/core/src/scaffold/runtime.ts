@@ -17,7 +17,7 @@ export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}
     virtualFilesystem: createVirtualFilesystemLayout(),
     memoryFilePaths,
     backend: options.backend ?? createDefaultCompositeBackend(options.backendOptions),
-    interruptOn: options.interruptOn ?? { write_file: true, edit_file: true, execute_python: true },
+    interruptOn: options.interruptOn,
     memory: options.memory ?? [...memoryFilePaths],
     permissions: options.permissions ?? createDefaultPermissions(options.permissionOptions),
     subagents: options.subagents ?? createDefaultSubagents(options, clarification, promptLoader),

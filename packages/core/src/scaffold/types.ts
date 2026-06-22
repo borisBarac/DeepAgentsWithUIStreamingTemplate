@@ -52,7 +52,7 @@ export type DeepAgentBlueprint = {
   architecture: "supervisor-specialists";
   virtualFilesystem: VirtualFilesystemLayout;
   memoryFilePaths: readonly string[];
-  interruptOn: NonNullable<CreateDeepAgentParams["interruptOn"]>;
+  interruptOn: CreateDeepAgentParams["interruptOn"];
   permissions: NonNullable<CreateDeepAgentParams["permissions"]>;
   subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
   clarification: {

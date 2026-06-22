@@ -20,7 +20,7 @@ describe("prompt defaults", () => {
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
       "between 1 and 3 high-value clarification questions per round",
     );
-    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("round 10");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("round 2");
   });
 
   it("makes clarification a required supervisor intake phase", () => {
@@ -104,10 +104,10 @@ describe("prompt defaults", () => {
   });
 
   it("uses the default markdown loader for compatibility exports", () => {
-    expect(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 10 })).toBe(
+    expect(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 })).toBe(
       DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
     );
-    expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ maxRounds: 10, questionsPerRound: 3 })).toBe(
+    expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ maxRounds: 2, questionsPerRound: 3 })).toBe(
       DEFAULT_CLARIFIER_SYSTEM_PROMPT,
     );
   });

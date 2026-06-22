@@ -349,7 +349,7 @@ describe("single-user memory approval policy", () => {
     expect(isMemoryWriteAutoApproved(policy, "/reports/final.md")).toBe(false);
   });
 
-  it("keeps sensitive tool interrupts enabled when applying memory auto-approval", () => {
+  it("preserves explicit interrupt settings when applying memory auto-approval", () => {
     const policy = createSingleUserMemoryPolicy();
     expect(policy.protectedInterrupts).toEqual(["write_file", "edit_file", "execute_python"]);
 

@@ -12,6 +12,7 @@ import {
   DEFAULT_REVIEW_AGENT_NAME,
   reviewReportSchema,
 } from "../review/index.ts";
+import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { CreateDefaultSubagentsOptions } from "./types.ts";
 
 function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
@@ -51,7 +52,7 @@ export function createDefaultSubagents(
       responseFormat: clarificationResultSchema,
       model: options.modelRuntime?.getModelForRole("clarifier"),
       tools: [],
-      skills: [],
+      skills: [CLARIFY_DEEPLY_SKILL_DIR],
     },
     options.clarifier,
   );

@@ -42,16 +42,12 @@ describe("runtime scaffold defaults", () => {
     ]);
     expect(scaffold.memory).toEqual(["/memory/project-facts.md", "/memory/user-preferences.md"]);
     expect(scaffold.virtualFilesystem.reports).toBe("/reports");
-    expect(scaffold.interruptOn).toEqual({
-      write_file: true,
-      edit_file: true,
-      execute_python: true,
-    });
+    expect(scaffold.interruptOn).toBeUndefined();
     expect(scaffold.clarification).toEqual({
       requiredSubagent: "clarifier",
       config: {
         enabled: true,
-        maxRounds: 10,
+        maxRounds: 2,
         questionsPerRound: 3,
         mode: "mandatory-preflight",
       },

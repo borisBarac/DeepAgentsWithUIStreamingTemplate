@@ -1,7 +1,7 @@
 ---
 name: clarify-deeply
 description: >-
-  Drive toward shared understanding by asking targeted, dependency-aware questions one at a time. Use when the user's request, plan, product idea, design, goal, requirement, or task is underspecified, ambiguous, or likely to fail without clarification. For each question, provide a recommended answer. If a question can be answered by inspecting the codebase, files, or existing context, investigate first instead of asking the user.
+  Drive toward shared understanding by asking targeted, dependency-aware questions. Use when the user's request, plan, product idea, design, goal, requirement, or task is underspecified, ambiguous, or likely to fail without clarification. Provide a recommended answer for each question when context justifies it.
 ---
 
 # clarify-deeply
@@ -25,10 +25,10 @@ Your job is to eliminate ambiguity and surface hidden decisions until there is e
 ## Behavior
 
 1. Clarify by walking the decision tree, one dependency at a time.
-2. Ask exactly one question at a time.
+2. Ask one question at a time by default. When the host accepts a structured readiness payload with a per-round question budget, you may return up to that budget in a single turn.
 3. For every question:
    - explain briefly why it matters
-   - provide your recommended answer or default assumption
+   - provide a recommended answer only when context justifies it; do not recommend when the choice is genuinely preference-based
    - when useful, provide 2-4 concrete, mutually exclusive options
    - give each option a concise label and a one-sentence description
    - mark at most one option as recommended, and only when context justifies it
@@ -43,15 +43,15 @@ Your job is to eliminate ambiguity and surface hidden decisions until there is e
    - risks / tradeoffs
    - dependencies / sequencing
    - acceptance criteria
-5. If the answer may already exist in the codebase, docs, files, tests, configs, or surrounding context, inspect those first instead of asking.
-6. Do not ask questions whose answers can be inferred confidently from existing evidence.
-7. Keep drilling until one of these is true:
+5. Use what the user has already stated in this conversation before asking.
+6. Keep drilling until one of these is true:
    - the request is implementable
    - the remaining ambiguities are low-risk and can be handled by stated assumptions
    - the user explicitly wants to stop clarifying
-8. Maintain a live mental model of what has been resolved and what remains open.
-9. When a new answer changes prior assumptions, update the decision tree and continue from the new highest-leverage branch.
-10. Avoid broad questionnaires. Be surgical and sequential.
+   - the host's round cap (`maxRounds`) is reached
+7. Maintain a live mental model of what has been resolved and what remains open.
+8. When a new answer changes prior assumptions, update the decision tree and continue from the new highest-leverage branch.
+9. Avoid broad questionnaires. Be surgical and sequential.
 
 ## Question Selection Policy
 
@@ -62,10 +62,14 @@ Your job is to eliminate ambiguity and surface hidden decisions until there is e
 
 ## Output Style For Each Turn
 
+In free-form conversational use, structure each turn as:
+
 - Current understanding: 1-3 bullets max
 - Open issue: the single most important unresolved question
-- Question: one clear question only
-- Recommended answer: your suggested answer with a short rationale
+- Question: one clear question, or up to the host's per-round budget when batched rounds are supported
+- Recommended answer: your suggested answer with a short rationale, only when context justifies it
+
+When the host enforces a structured response format (for example a Zod `responseFormat`), return only the structured payload and omit this prose wrapper.
 
 ## When Clarity Is Sufficient
 
@@ -76,3 +80,5 @@ If enough clarity is reached, stop asking questions and produce:
 - Assumptions taken
 - Remaining open questions
 - Recommended next step
+
+When the host enforces a structured readiness payload, map these into the payload fields instead of producing free text.

@@ -11,6 +11,7 @@ import { createRuntimeScaffold } from "../scaffold/index.ts";
 import {
   CLARIFY_DEEPLY_SKILL_CONTENT,
   CLARIFY_DEEPLY_SKILL_DESCRIPTION,
+  CLARIFY_DEEPLY_SKILL_DIR,
   CLARIFY_DEEPLY_SKILL_NAME,
   CLARIFY_DEEPLY_SKILL_PATH,
   createDefaultSkillFiles,
@@ -72,12 +73,12 @@ describe("bundled skills", () => {
     });
   });
 
-  it("does not attach skills to any default subagent", () => {
+  it("attaches clarify-deeply only to the clarifier", () => {
     const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
       createRuntimeScaffold({ imageGenerationService: testImageGenerationService }).subagents,
     );
 
-    expect(clarifier?.skills).toEqual([]);
+    expect(clarifier?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
     expect(researcher?.skills).toEqual([]);
     expect(analyst?.skills).toEqual([]);
     expect(imageDesigner?.skills).toEqual([]);
