@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { SandboxBackend } from "@deep-agent-template/sandbox";
 import type { SubAgent } from "deepagents";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
@@ -58,8 +59,8 @@ describe("default subagents", () => {
     ]);
     expect(subagents.map((subagent) => subagent.tools?.map((tool) => tool.name) ?? [])).toEqual([
       [],
-      [],
-      [],
+      ["execute_python"],
+      ["execute_python"],
       [IMAGE_DESIGNER_TOOL_NAME],
       [],
     ]);
@@ -71,6 +72,39 @@ describe("default subagents", () => {
       [],
     ]);
     expect(subagents.every((subagent) => subagent.interruptOn === undefined)).toBe(true);
+  });
+
+  it("shares the configured Python sandbox tool between researcher and analyst", () => {
+    const backend: SandboxBackend = {
+      name: "test",
+      capabilities: {
+        isolation: "none",
+        supportsArtifacts: false,
+        supportsAbort: false,
+      },
+      async execute() {
+        throw new Error("not invoked");
+      },
+    };
+    const [, researcher, analyst] = asDefaultSubagents(
+      createDefaultSubagents({ pythonSandboxBackend: backend }),
+    );
+
+    expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
+    expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
+    expect(researcher?.tools?.[0]).toBe(analyst?.tools?.[0]);
+  });
+
+  it("lets explicit specialist tool overrides replace Python execution", () => {
+    const [, researcher, analyst] = asDefaultSubagents(
+      createDefaultSubagents({
+        researcher: { tools: [] },
+        analyst: { tools: [] },
+      }),
+    );
+
+    expect(researcher?.tools).toEqual([]);
+    expect(analyst?.tools).toEqual([]);
   });
 
   it("uses a custom prompt loader for default subagent prompts", () => {

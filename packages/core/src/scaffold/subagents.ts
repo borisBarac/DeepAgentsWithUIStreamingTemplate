@@ -12,6 +12,7 @@ import {
   DEFAULT_REVIEW_AGENT_NAME,
   reviewReportSchema,
 } from "../review/index.ts";
+import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { CreateDefaultSubagentsOptions } from "./types.ts";
 
@@ -42,6 +43,9 @@ export function createDefaultSubagents(
   const imageDesignerTool = options.imageGenerationService
     ? createImageDesignerTool(options.imageGenerationService)
     : undefined;
+  const pythonTool = createPythonSandboxTool({
+    backend: options.pythonSandboxBackend ?? createDockerSandboxBackend(),
+  });
 
   const clarifier = mergeSubagent(
     {
@@ -63,7 +67,7 @@ export function createDefaultSubagents(
       description: "Gather evidence, collect source-backed notes, and isolate research context.",
       systemPrompt: promptLoader.getResearcherPrompt(),
       model: options.modelRuntime?.getModelForRole("researcher"),
-      tools: [],
+      tools: [pythonTool],
       skills: [],
     },
     options.researcher,
@@ -76,7 +80,7 @@ export function createDefaultSubagents(
         "Turn findings into structured tradeoffs, plans, and implementation-ready analysis.",
       systemPrompt: promptLoader.getAnalystPrompt(),
       model: options.modelRuntime?.getModelForRole("analyst"),
-      tools: [],
+      tools: [pythonTool],
       skills: [],
     },
     options.analyst,

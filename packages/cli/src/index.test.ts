@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { unlink } from "node:fs/promises";
 
-import { createRuntimeScaffold } from "@deep-agent-template/core";
+import { CLARIFY_DEEPLY_SKILL_DIR, createRuntimeScaffold } from "@deep-agent-template/core";
 
 import { runCli } from "./index";
 
@@ -253,6 +253,7 @@ describe("runCli", () => {
       memory: "/memory",
       skills: "/skills",
     });
+    expect(scaffold.interruptOn).toBeUndefined();
     expect(scaffold.backend).toBeUndefined();
     expect(scaffold.clarification.requiredSubagent).toBe("clarifier");
     expect(scaffold.subagents.map((subagent: { name: string }) => subagent.name)).toEqual([
@@ -265,11 +266,13 @@ describe("runCli", () => {
       name: string;
       hasResponseFormat: boolean;
       hasModel: boolean;
+      skills: unknown;
     }>;
     const byName = (name: string) => subagents.find((subagent) => subagent.name === name);
     expect(byName("clarifier")?.hasResponseFormat).toBe(true);
     expect(byName("researcher")?.hasResponseFormat).toBe(false);
     expect(byName("review-agent")?.hasResponseFormat).toBe(true);
+    expect(byName("clarifier")?.skills).toEqual([CLARIFY_DEEPLY_SKILL_DIR]);
     for (const subagent of subagents) {
       expect(subagent.hasModel).toBe(false);
     }

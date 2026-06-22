@@ -129,7 +129,7 @@ Invokes `createRuntimeScaffold()` (honoring `--system-prompt` / `--system-prompt
   "virtualFilesystem": { "scratch": "/scratch", "plans": "/plans", /* ... */ },
   "memoryFilePaths": [ /* ... */ ],
   "memory": { /* ... */ },
-  "interruptOn": [ /* ... */ ],
+  "interruptOn": undefined,
   "permissions": { /* ... */ },
   "clarification": { "requiredSubagent": "clarifier", /* ... */ },
   "systemPrompt": "...",
@@ -140,7 +140,7 @@ Invokes `createRuntimeScaffold()` (honoring `--system-prompt` / `--system-prompt
       "systemPrompt": "...",
       "interruptOn": [ /* ... */ ],
       "tools": [ /* ... */ ],
-      "skills": [ /* ... */ ],
+      "skills": [ "/skills/clarify-deeply/" ],
       "hasResponseFormat": true,   // boolean projection of responseFormat
       "hasModel": false            // boolean projection of model
     }

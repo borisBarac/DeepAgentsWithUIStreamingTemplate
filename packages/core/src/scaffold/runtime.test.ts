@@ -194,11 +194,13 @@ describe("runtime scaffold defaults", () => {
     ]);
   });
 
-  it("assigns only the image generation tool to the image designer by default", () => {
-    const [, , , imageDesigner] = createRuntimeScaffold({
+  it("assigns specialist execution tools by default", () => {
+    const [, researcher, analyst, imageDesigner] = createRuntimeScaffold({
       imageGenerationService: testImageGenerationService,
     }).subagents as SubAgent[];
 
+    expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
+    expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(imageDesigner?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
   });
 });

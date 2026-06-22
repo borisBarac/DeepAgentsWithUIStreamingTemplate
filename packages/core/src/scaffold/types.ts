@@ -11,6 +11,7 @@ import type { ImageGenerationServiceContract } from "../../../image-gen/src/inde
 import type { ClarificationConfig } from "../clarification/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
+import type { SandboxBackend } from "../sandbox/index.ts";
 
 export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier" | "image-designer";
 
@@ -41,6 +42,7 @@ export type CreateDefaultPermissionsOptions = {
 export type CreateDefaultSubagentsOptions = {
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
+  pythonSandboxBackend?: SandboxBackend;
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
   reviewer?: Partial<SubAgent>;

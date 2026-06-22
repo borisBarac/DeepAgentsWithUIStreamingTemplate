@@ -100,7 +100,7 @@ export function createPythonSandboxTool(options: CreatePythonSandboxToolOptions)
 
 /**
  * Build a ready-to-register {@link SpecializedToolDefinition} for the
- * `analyst` specialist role. The definition carries the metadata the existing
+ * `researcher` and `analyst` specialist roles. The definition carries the metadata the existing
  * `SpecializedToolStore` was designed for:
  *   - `riskLevel: "restricted"` — `roleHasRestrictedTools("analyst")` returns true.
  *   - `evidenceMode: "execution"` — flags this as a code-execution tool.
@@ -111,18 +111,16 @@ export function createPythonSandboxTool(options: CreatePythonSandboxToolOptions)
  *   });
  *   const store = createSpecializedToolStore({
  *     tools: [definition],
- *     roles: createDefaultSpecialistRoleToolsets().map((r) =>
- *       r.role === "analyst" ? { ...r, toolIds: ["python-sandbox"] } : r,
- *     ),
+ *     roles: createDefaultSpecialistRoleToolsets(),
  *   });
  */
 export function createPythonSandboxToolDefinition(
   options: CreatePythonSandboxToolOptions,
-): SpecializedToolDefinition<"analyst"> {
-  const definition: SpecializedToolDefinition<"analyst"> = {
+): SpecializedToolDefinition<"researcher" | "analyst"> {
+  const definition: SpecializedToolDefinition<"researcher" | "analyst"> = {
     id: "python-sandbox",
     tool: createPythonSandboxTool(options),
-    specialists: ["analyst"],
+    specialists: ["researcher", "analyst"],
     riskLevel: "restricted",
     evidenceMode: "execution",
   };

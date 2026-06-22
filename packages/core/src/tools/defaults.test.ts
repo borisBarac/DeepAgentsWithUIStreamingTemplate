@@ -12,12 +12,12 @@ describe("default specialist role toolsets", () => {
       },
       {
         role: "researcher",
-        toolIds: [],
+        toolIds: ["python-sandbox"],
         purpose: "Evidence gathering, retrieval, search, and source collection.",
       },
       {
         role: "analyst",
-        toolIds: [],
+        toolIds: ["python-sandbox"],
         purpose: "Computation, extraction, transformation, and file-based analysis.",
       },
       {

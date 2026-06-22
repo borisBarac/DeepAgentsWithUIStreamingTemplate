@@ -116,18 +116,23 @@ describe("createPythonSandboxToolDefinition", () => {
     expect(definition.id).toBe("python-sandbox");
     expect(definition.riskLevel).toBe("restricted");
     expect(definition.evidenceMode).toBe("execution");
-    expect(definition.specialists).toEqual(["analyst"]);
+    expect(definition.specialists).toEqual(["researcher", "analyst"]);
     expect(definition.tool.name).toBe("execute_python");
   });
 
-  it("registers cleanly with the SpecializedToolStore and flags analyst as restricted", () => {
+  it("registers cleanly with the SpecializedToolStore and flags both roles as restricted", () => {
     const definition = createPythonSandboxToolDefinition({ backend: makeFakeBackend({}) });
-    const roles = [{ role: "analyst", toolIds: ["python-sandbox"] }] as const;
+    const roles = [
+      { role: "researcher", toolIds: ["python-sandbox"] },
+      { role: "analyst", toolIds: ["python-sandbox"] },
+    ] as const;
     const store = createSpecializedToolStore({ tools: [definition], roles });
     expect(store.hasTool("python-sandbox")).toBe(true);
     expect(store.roleHasRestrictedTools("analyst")).toBe(true);
-    expect(store.roleHasRestrictedTools("researcher")).toBe(false);
-    const resolved = store.resolveRoleTools("analyst");
-    expect(resolved.map((t) => t.name)).toEqual(["execute_python"]);
+    expect(store.roleHasRestrictedTools("researcher")).toBe(true);
+    expect(store.resolveRoleTools("researcher").map((tool) => tool.name)).toEqual([
+      "execute_python",
+    ]);
+    expect(store.resolveRoleTools("analyst").map((tool) => tool.name)).toEqual(["execute_python"]);
   });
 });

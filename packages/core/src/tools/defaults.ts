@@ -33,12 +33,12 @@ export function createDefaultSpecialistRoleToolsets(): readonly SpecializedRoleT
     },
     {
       role: "researcher",
-      toolIds: [],
+      toolIds: ["python-sandbox"],
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.researcher,
     },
     {
       role: "analyst",
-      toolIds: [],
+      toolIds: ["python-sandbox"],
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES.analyst,
     },
     {

@@ -431,7 +431,17 @@ The store is static and explicit by design. It does not inherit tools across rol
 
 ## Sandbox (Python execution)
 
-The `sandbox` module ships an `execute` tool that runs Python in an isolated environment. The Docker backend is injected at construction time:
+The default researcher and analyst subagents receive an `execute_python` tool backed by Docker.
+Pass `pythonSandboxBackend` to use another sandbox implementation:
+
+```ts
+const agent = createScaffoldedAgent({
+  modelRuntime,
+  pythonSandboxBackend: customSandboxBackend,
+});
+```
+
+The `sandbox` module also exposes the tool definition for custom specialist stores:
 
 ```ts
 import {
@@ -447,11 +457,9 @@ const definition = createPythonSandboxToolDefinition({
 
 const store = createSpecializedToolStore({
   tools: [definition],
-  roles: createDefaultSpecialistRoleToolsets().map((r) =>
-    r.role === "analyst" ? { ...r, toolIds: ["python-sandbox"] } : r,
-  ),
+  roles: createDefaultSpecialistRoleToolsets(),
 });
-// store.resolveRoleTools("analyst") === [executeTool]
+// researcher and analyst both resolve execute_python
 // store.roleHasRestrictedTools("analyst") === true
 ```
 
