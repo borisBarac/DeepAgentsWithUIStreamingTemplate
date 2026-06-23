@@ -67,7 +67,7 @@ export function createDefaultSubagents(
       description: "Gather evidence, collect source-backed notes, and isolate research context.",
       systemPrompt: promptLoader.getResearcherPrompt(),
       model: options.modelRuntime?.getModelForRole("researcher"),
-      tools: [pythonTool],
+      tools: [pythonTool, ...(options.additionalResearcherTools ?? [])],
       skills: [],
     },
     options.researcher,

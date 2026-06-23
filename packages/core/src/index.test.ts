@@ -4,6 +4,7 @@ import * as agent from "./agent/index.ts";
 import * as clarification from "./clarification/index.ts";
 import * as guardrails from "./guardrails/index.ts";
 import * as index from "./index";
+import * as mcp from "./mcp/index.ts";
 import * as models from "./models/index.ts";
 import * as observability from "./observability/index.ts";
 import * as prompts from "./prompts/index.ts";
@@ -22,6 +23,12 @@ describe("index barrel exports", () => {
   it("re-exports model helpers from the models module", () => {
     expect(index.createModelRuntime).toBe(models.createModelRuntime);
     expect(index.MODEL_ROLES).toBe(models.MODEL_ROLES);
+  });
+
+  it("re-exports Linkloom MCP helpers from the MCP module", () => {
+    expect(index.connectLinkloomResearchTools).toBe(mcp.connectLinkloomResearchTools);
+    expect(index.createLinkloomMcpClient).toBe(mcp.createLinkloomMcpClient);
+    expect(index.LINKLOOM_MCP_TOOL_NAMES).toBe(mcp.LINKLOOM_MCP_TOOL_NAMES);
   });
 
   it("re-exports observability helpers from the observability module", () => {

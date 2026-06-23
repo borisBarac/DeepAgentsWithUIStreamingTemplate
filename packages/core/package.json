@@ -5,17 +5,20 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "test:e2e": "RUN_LIVE_E2E=1 bun test e2e"
+    "test:e2e": "RUN_LIVE_E2E=1 bun test e2e",
+    "setup:browser": "cd node_modules/@boris.barac/linkloom && bun run setup:browser"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
+    "@boris.barac/linkloom": "^0.1.3",
     "@deep-agent-template/image-gen": "workspace:*",
     "@deep-agent-template/sandbox": "workspace:*",
     "@langchain/core": "^1.1.49",
     "@langchain/langgraph": "^1.4.2",
+    "@langchain/mcp-adapters": "^1.1.3",
     "@langchain/openai": "^1.4.7",
     "@langchain/openrouter": "^0.3.0",
     "deepagents": "^1.10.2",

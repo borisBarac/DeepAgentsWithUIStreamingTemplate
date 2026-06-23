@@ -165,6 +165,62 @@ connections, assignments that reference unknown profiles, and assignments for un
 `subagentOverrides.<role>.model` only when one specialist instance needs to bypass the runtime's
 standard assignment.
 
+## Linkloom MCP research tools
+
+Linkloom runs as a local stdio MCP server. Connect it before creating the scaffolded agent, pass the
+loaded LangChain tools through `additionalResearcherTools`, and close the connection when the agent
+is no longer needed:
+
+```ts
+import {
+  connectLinkloomResearchTools,
+  createModelRuntime,
+  createScaffoldedAgent,
+} from "@deep-agent-template/core";
+
+const modelRuntime = createModelRuntime({
+  // Your connections, model profiles, and role assignments.
+});
+const linkloom = await connectLinkloomResearchTools();
+const agent = createScaffoldedAgent({
+  modelRuntime,
+  additionalResearcherTools: linkloom.tools,
+});
+
+try {
+  const response = await agent.invoke({
+    messages: [
+      {
+        role: "user",
+        content: "Research the linked sources and return source-backed findings.",
+      },
+    ],
+  });
+  console.log(response);
+} finally {
+  await linkloom.close();
+}
+```
+
+The helper resolves the installed `@boris.barac/linkloom` package and launches its MCP entry point
+with Bun. It exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`,
+`extract_links`, and `extract_tables` only to the researcher. The existing `execute_python` tool
+remains available.
+
+The child process inherits the application's environment by default; any `env` passed to
+`connectLinkloomResearchTools(...)` is merged on top of `process.env` rather than replacing it, so
+inherited variables such as `HOME` and the LangSmith tracing variables still reach the server.
+Linkloom supports `PAGE_LOAD_TIMEOUT`, `FRAME_TIMEOUT`, `PDF_DOWNLOAD_TIMEOUT`, and `PROXY_URL`; its
+scraping tools do not require an API key. Pass `command`, `args`, `cwd`, `env`, restart settings, or
+a tool timeout to `connectLinkloomResearchTools(...)` when the default process configuration is
+unsuitable.
+
+The Linkloom `scrape` and `render_page` tools drive a Camoufox browser engine, whose install location
+`createAppConfig()` publishes to `process.env.CAMOUFOX_INSTALL_DIR` (default `~/.cache/camoufox`;
+install it with `bun run setup`). `connectLinkloomResearchTools(...)` propagates that location to the
+child: pass `camoufoxInstallDir` explicitly, or set `CAMOUFOX_INSTALL_DIR` in the environment, and the
+value reaches the spawned server.
+
 ## Usage
 
 ```ts

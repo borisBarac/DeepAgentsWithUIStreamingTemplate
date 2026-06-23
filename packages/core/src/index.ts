@@ -1,4 +1,9 @@
 export {
+  type AppConfig,
+  type AppConfigOptions,
+  createAppConfig,
+} from "./app/index.ts";
+export {
   type CreateBaselineAgentOptions,
   type CreateScaffoldedAgentOptions,
   createBaselineAgent,
@@ -68,6 +73,14 @@ export {
   imageDesignerToolInputSchema,
   imageDesignerToolResultSchema,
 } from "./image-designer/index.ts";
+export {
+  connectLinkloomResearchTools,
+  createLinkloomMcpClient,
+  LINKLOOM_MCP_SERVER_NAME,
+  LINKLOOM_MCP_TOOL_NAMES,
+  type LinkloomMcpOptions,
+  type LinkloomResearchConnection,
+} from "./mcp/index.ts";
 export {
   BucketMemoryStore,
   type BucketMemoryStoreOptions,

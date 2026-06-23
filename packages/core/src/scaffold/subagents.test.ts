@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { SandboxBackend } from "@deep-agent-template/sandbox";
+import { tool } from "@langchain/core/tools";
 import type { SubAgent } from "deepagents";
+import { z } from "zod";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
 import { IMAGE_DESIGNER_TOOL_NAME, imageDesignerResponseSchema } from "../image-designer/index.ts";
@@ -93,6 +95,23 @@ describe("default subagents", () => {
     expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(researcher?.tools?.[0]).toBe(analyst?.tools?.[0]);
+  });
+
+  it("adds external research tools without removing Python execution", () => {
+    const scrapeTool = tool(async ({ url }) => url, {
+      name: "scrape",
+      description: "Scrape a URL.",
+      schema: z.object({ url: z.string().url() }),
+    });
+    const [, researcher, analyst] = asDefaultSubagents(
+      createDefaultSubagents({ additionalResearcherTools: [scrapeTool] }),
+    );
+
+    expect(researcher?.tools?.map((researcherTool) => researcherTool.name)).toEqual([
+      "execute_python",
+      "scrape",
+    ]);
+    expect(analyst?.tools?.map((analystTool) => analystTool.name)).toEqual(["execute_python"]);
   });
 
   it("lets explicit specialist tool overrides replace Python execution", () => {

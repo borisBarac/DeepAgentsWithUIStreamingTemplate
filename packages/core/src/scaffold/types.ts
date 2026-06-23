@@ -40,6 +40,7 @@ export type CreateDefaultPermissionsOptions = {
 };
 
 export type CreateDefaultSubagentsOptions = {
+  additionalResearcherTools?: NonNullable<SubAgent["tools"]>;
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
   pythonSandboxBackend?: SandboxBackend;
