@@ -387,12 +387,12 @@ export async function collectArtifacts(
  * spawned process (or `docker run` CLI) from inheriting platform secrets.
  */
 export function sanitizeEnvForHost(allowList: readonly string[]): NodeJS.ProcessEnv {
-  const safe: NodeJS.ProcessEnv = {};
+  const safe: Partial<NodeJS.ProcessEnv> = {};
   for (const key of allowList) {
     const value = process.env[key];
     if (value !== undefined) safe[key] = value;
   }
-  return safe;
+  return safe as NodeJS.ProcessEnv;
 }
 
 /** Remove a directory tree, swallowing errors. */

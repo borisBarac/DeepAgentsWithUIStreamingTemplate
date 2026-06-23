@@ -168,8 +168,9 @@ standard assignment.
 ## Linkloom MCP research tools
 
 Linkloom runs as a local stdio MCP server. Connect it before creating the scaffolded agent, pass the
-loaded LangChain tools through `additionalResearcherTools`, and close the connection when the agent
-is no longer needed:
+loaded LangChain tools through `additionalResearcherTools`, and dispose of the connection when the
+agent is no longer needed. The connection is an `AsyncDisposable`, so `await using` closes it
+deterministically at the end of the enclosing scope:
 
 ```ts
 import {
@@ -181,26 +182,30 @@ import {
 const modelRuntime = createModelRuntime({
   // Your connections, model profiles, and role assignments.
 });
-const linkloom = await connectLinkloomResearchTools();
+await using linkloom = await connectLinkloomResearchTools();
 const agent = createScaffoldedAgent({
   modelRuntime,
   additionalResearcherTools: linkloom.tools,
 });
 
-try {
-  const response = await agent.invoke({
-    messages: [
-      {
-        role: "user",
-        content: "Research the linked sources and return source-backed findings.",
-      },
-    ],
-  });
-  console.log(response);
-} finally {
-  await linkloom.close();
-}
+const response = await agent.invoke({
+  messages: [
+    {
+      role: "user",
+      content: "Research the linked sources and return source-backed findings.",
+    },
+  ],
+});
+console.log(response);
+// linkloom.close() runs automatically here when the scope exits.
 ```
+
+You can also call `await linkloom.close()` explicitly (it is idempotent, so repeated calls are safe),
+or keep the `try { ... } finally { await linkloom.close(); }` form. As a safety net, the connection
+also registers a `FinalizationRegistry` that closes the underlying MCP client if the connection is
+garbage-collected without an explicit disposal; finalizer delivery is best-effort per the JavaScript
+spec, so prefer explicit disposal (`await using` or `close()`) whenever the connection has a clear
+owner scope.
 
 The helper resolves the installed `@boris.barac/linkloom` package and launches its MCP entry point
 with Bun. It exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`,

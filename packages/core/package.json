@@ -9,7 +9,11 @@
     "setup:browser": "cd node_modules/@boris.barac/linkloom && bun run setup:browser"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./agent": "./src/agent/index.ts",
+    "./agent/baseline": "./src/agent/baseline.ts",
+    "./models": "./src/models/index.ts",
+    "./prompts": "./src/prompts/index.ts"
   },
   "types": "./src/index.ts",
   "dependencies": {
