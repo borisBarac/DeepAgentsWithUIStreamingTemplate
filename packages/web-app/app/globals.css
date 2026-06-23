@@ -1,0 +1,295 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f7f4;
+  --panel: #ffffff;
+  --panel-soft: #f0f4f8;
+  --ink: #17202a;
+  --muted: #62717f;
+  --line: #d9e0e6;
+  --accent: #116466;
+  --accent-dark: #0b484a;
+  --danger: #9b2c2c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.app-shell {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(360px, 0.86fr) minmax(420px, 1.14fr);
+  min-height: 100vh;
+}
+
+.chat-pane,
+.preview-pane {
+  min-width: 0;
+  padding: 28px;
+}
+
+.chat-pane {
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.app-header p,
+.preview-header p {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+}
+
+.app-header h1 {
+  font-size: 2.2rem;
+  line-height: 1.05;
+  margin: 0 0 24px;
+}
+
+.message-list {
+  align-content: start;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.empty-state,
+.preview-empty {
+  color: var(--muted);
+  display: grid;
+  min-height: 180px;
+  place-content: center;
+  text-align: center;
+}
+
+.empty-state h2 {
+  color: var(--ink);
+  font-size: 1.3rem;
+  margin: 0 0 8px;
+}
+
+.empty-state p,
+.preview-empty {
+  margin: 0;
+}
+
+.message {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px 14px;
+}
+
+.message span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.message p {
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.message-user {
+  background: #eaf5f1;
+  border-color: #c9dfd8;
+}
+
+.message-error {
+  border-color: #e8b4b4;
+  color: var(--danger);
+}
+
+.composer {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+  padding-top: 20px;
+}
+
+.composer input,
+.jr-field input {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 42px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.composer input:focus,
+.jr-field input:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(17, 100, 102, 0.16);
+}
+
+.composer button,
+.jr-button {
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 42px;
+  padding: 10px 16px;
+}
+
+.composer button:disabled {
+  background: #a9b8b8;
+  cursor: not-allowed;
+}
+
+.preview-pane {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.preview-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.preview-header span {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.preview-surface {
+  align-content: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  min-height: 420px;
+  padding: 22px;
+}
+
+.jr-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  max-width: 560px;
+  padding: 20px;
+  width: 100%;
+}
+
+.jr-card h3 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.jr-stack {
+  display: flex;
+}
+
+.jr-stack-column {
+  flex-direction: column;
+}
+
+.jr-stack-row {
+  align-items: center;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.jr-gap-xs {
+  gap: 6px;
+}
+
+.jr-gap-sm {
+  gap: 10px;
+}
+
+.jr-gap-md {
+  gap: 14px;
+}
+
+.jr-gap-lg {
+  gap: 20px;
+}
+
+.jr-text {
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.jr-text-title {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.jr-text-muted,
+.jr-text-caption {
+  color: var(--muted);
+}
+
+.jr-text-caption {
+  font-size: 0.85rem;
+}
+
+.jr-field {
+  display: grid;
+  gap: 7px;
+}
+
+.jr-field span {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-pane {
+    border-bottom: 1px solid var(--line);
+    border-right: 0;
+    min-height: 58vh;
+  }
+
+  .chat-pane,
+  .preview-pane {
+    padding: 20px;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
+  }
+}
