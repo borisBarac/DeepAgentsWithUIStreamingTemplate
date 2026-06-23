@@ -10,6 +10,7 @@ import {
   createScaffoldedAgent,
   type RuntimeScaffold,
 } from "@deep-agent-template/core";
+import { createImageGenerationServiceFromEnv } from "@deep-agent-template/image-gen";
 
 export type CliResult = {
   exitCode: number;
@@ -97,6 +98,9 @@ Environment:
   LLM_BASE_URL        Required. Your OpenAI-compatible endpoint
                       (e.g. https://api.deepseek.com).
   LLM_API_KEY         Required. Authenticates against the LLM_BASE_URL endpoint.
+  USE_FAKE_IMAGE_PROVIDER  Optional (scaffold only). "true" (default) uses a fake
+                      image provider; "false" uses the real Replicate provider.
+  REPLICATE_API_TOKEN  Required only when USE_FAKE_IMAGE_PROVIDER="false".
 
 Examples:
   deep-agent-template baseline "Explain this project in one sentence"
@@ -122,10 +126,18 @@ const defaultDependencies: CliDependencies = {
       assignments: { default: "default" },
     });
     return runtime === "scaffolded"
-      ? createScaffoldedAgent({ modelRuntime, systemPrompt })
+      ? createScaffoldedAgent({
+          modelRuntime,
+          imageGenerationService: createImageGenerationServiceFromEnv(),
+          systemPrompt,
+        })
       : createBaselineAgent({ modelRuntime });
   },
-  createScaffold: (options) => createRuntimeScaffold(options),
+  createScaffold: (options) =>
+    createRuntimeScaffold({
+      imageGenerationService: createImageGenerationServiceFromEnv(),
+      ...options,
+    }),
   createLineReader: () =>
     readline.createInterface({ input: process.stdin, output: process.stdout }),
   print: (text) => console.log(text),
