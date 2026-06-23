@@ -4,4 +4,5 @@ export { createScaffoldedAgent } from "./scaffolded.ts";
 export type {
   CreateBaselineAgentOptions,
   CreateScaffoldedAgentOptions,
+  GenerativeUiOptions,
 } from "./types.ts";

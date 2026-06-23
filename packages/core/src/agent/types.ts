@@ -22,12 +22,25 @@ type DeepAgentScaffoldOptions = Pick<
   | "tools"
 >;
 
+/**
+ * Opt-in generative-UI support for {@link createBaselineAgent}.
+ *
+ * When set, the agent appends a generative-UI prompt fragment (NDJSON framing
+ * + the provided `catalogPrompt`) to its system prompt so it streams one
+ * `UiUpdate` per line. Parse the stream with `StreamingLineBuffer` /
+ * `parseUpdateLine` (or `normalizeUiUpdate` for full validation).
+ */
+export type GenerativeUiOptions = {
+  catalogPrompt: string;
+};
+
 export type CreateBaselineAgentOptions = DeepAgentScaffoldOptions &
   ModelRuntimeOptions & {
     guardrails?: false | CreateGuardrailDecisionOptions;
     name?: string;
     promptLoader?: PromptLoader;
     langSmith?: LangSmithTracingOptions;
+    generativeUi?: GenerativeUiOptions;
   };
 
 export type CreateScaffoldedAgentOptions = Omit<

@@ -1,15 +1,16 @@
 import { createBaselineAgent } from "@deep-agent-template/core/agent/baseline";
+import {
+  extractUpdateObjects,
+  normalizeUiUpdate,
+  StreamingLineBuffer,
+  type UiUpdate,
+} from "@deep-agent-template/core/generative-ui";
 import { createModelRuntime } from "@deep-agent-template/core/models";
-import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "@deep-agent-template/core/prompts";
 import { NextResponse } from "next/server";
 
-import {
-  extractEnvelopeUpdates,
-  UiUpdateScanner,
-} from "../../../src/streaming/ui-update-scanner.ts";
+import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
 import { catalogPrompt } from "../../../src/ui/schema.ts";
-import type { ChatMessage, UiUpdate } from "../../../src/ui/types.ts";
-import { normalizeUiUpdate } from "../../../src/ui/updates.ts";
+import type { ChatMessage } from "../../../src/ui/types.ts";
 
 export const runtime = "nodejs";
 
@@ -36,17 +37,28 @@ type StreamableAgent = Agent & {
   }>;
 };
 
+const MAX_SESSIONS = 100;
 const sessions = new Map<string, ChatMessage[]>();
 
-const uiPromptLoader: PromptLoader = {
-  getAnalystPrompt: () => DEFAULT_PROMPT_LOADER.getAnalystPrompt(),
-  getBaselinePrompt: () => `${DEFAULT_PROMPT_LOADER.getBaselinePrompt()}\n\n${catalogPrompt}`,
-  getClarifierPrompt: (config) => DEFAULT_PROMPT_LOADER.getClarifierPrompt(config),
-  getImageDesignerPrompt: () => DEFAULT_PROMPT_LOADER.getImageDesignerPrompt(),
-  getResearcherPrompt: () => DEFAULT_PROMPT_LOADER.getResearcherPrompt(),
-  getReviewAgentPrompt: () => DEFAULT_PROMPT_LOADER.getReviewAgentPrompt(),
-  getSupervisorPrompt: (config) => DEFAULT_PROMPT_LOADER.getSupervisorPrompt(config),
-};
+function getHistory(sessionId: string): ChatMessage[] {
+  const history = sessions.get(sessionId);
+  if (!history) {
+    return [];
+  }
+  sessions.delete(sessionId);
+  sessions.set(sessionId, history);
+  return history;
+}
+
+function saveHistory(sessionId: string, history: ChatMessage[]): void {
+  sessions.delete(sessionId);
+  sessions.set(sessionId, history);
+  while (sessions.size > MAX_SESSIONS) {
+    const oldest = sessions.keys().next().value;
+    if (oldest === undefined) break;
+    sessions.delete(oldest);
+  }
+}
 
 function createAgent(): Agent {
   const baseURL = process.env.LLM_BASE_URL?.trim();
@@ -65,25 +77,28 @@ function createAgent(): Agent {
       default: { provider: "openai-compatible", apiKey, baseURL },
     },
     models: {
-      default: {
-        connection: "default",
-        model,
-        providerOptions: {
-          responseFormat: { type: "json_object" },
-        },
-      },
+      // Model emits raw NDJSON (one UiUpdate per line); no response_format
+      // constraint needed. See packages/core/src/generative-ui/prompt.ts.
+      default: { connection: "default", model },
     },
     assignments: { default: "default" },
   });
 
-  const options = {
+  return createBaselineAgent({
     guardrails: false,
+    generativeUi: { catalogPrompt },
     modelRuntime,
-    promptLoader: uiPromptLoader,
     tools: [],
-  } as const;
+  });
+}
 
-  return createBaselineAgent(options);
+let agentCache: Agent | null = null;
+
+function getAgent(): Agent {
+  if (agentCache === null) {
+    agentCache = createAgent();
+  }
+  return agentCache;
 }
 
 function extractTextContent(content: unknown): string | undefined {
@@ -135,8 +150,10 @@ function toInputMessages(history: ChatMessage[], message: string): AgentInputMes
   return [...history, { role: "user", content: message }];
 }
 
+const encoder = new TextEncoder();
+
 function encodeUpdate(update: UiUpdate): Uint8Array {
-  return new TextEncoder().encode(`${JSON.stringify(update)}\n`);
+  return encoder.encode(`${JSON.stringify(update)}\n`);
 }
 
 function parseRequestBody(body: unknown): { message: string; sessionId: string } {
@@ -155,16 +172,26 @@ function parseRequestBody(body: unknown): { message: string; sessionId: string }
   return { sessionId: sessionId.trim(), message: message.trim() };
 }
 
-function emitParsedUpdates(
+function emitParsedLines(
   controller: ReadableStreamDefaultController<Uint8Array>,
-  rawUpdates: unknown[],
+  lines: string[],
+  stats?: { valid: number },
 ): void {
-  for (const rawUpdate of rawUpdates) {
-    const update = normalizeUiUpdate(rawUpdate);
-    if (update) {
-      controller.enqueue(encodeUpdate(update));
-    } else {
-      controller.enqueue(encodeUpdate({ type: "error", message: "Ignored invalid UI update." }));
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    for (const candidate of extractUpdateObjects(parsed)) {
+      const update = normalizeUiUpdate(candidate, normalizeStreamingSpec);
+      if (update) {
+        controller.enqueue(encodeUpdate(update));
+        if (stats) stats.valid += 1;
+      }
     }
   }
 }
@@ -213,25 +240,51 @@ export async function POST(request: Request): Promise<Response> {
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const scanner = new UiUpdateScanner();
-      const history = sessions.get(parsedRequest.sessionId) ?? [];
+      const history = getHistory(parsedRequest.sessionId);
       const input = { messages: toInputMessages(history, parsedRequest.message) };
+      const agent = getAgent() as StreamableAgent;
+      const stats = { valid: 0 };
 
-      try {
-        const agent = createAgent() as StreamableAgent;
+      async function runAttempt(): Promise<string> {
+        const lineBuffer = new StreamingLineBuffer();
         const { finalText, streamedText } = await streamWithEvents(
           agent,
           input,
           parsedRequest.sessionId,
           (token) => {
-            emitParsedUpdates(controller, scanner.push(token));
+            emitParsedLines(controller, lineBuffer.push(token), stats);
           },
         );
 
-        if (!streamedText) {
-          emitParsedUpdates(controller, extractEnvelopeUpdates(finalText));
+        if (streamedText) {
+          // The final line often lacks a trailing newline; flush whatever
+          // remains buffered so it isn't dropped.
+          emitParsedLines(controller, lineBuffer.flush(), stats);
+        } else {
+          emitParsedLines(controller, finalText.split("\n"), stats);
         }
-        sessions.set(parsedRequest.sessionId, [
+        return finalText;
+      }
+
+      try {
+        let finalText = await runAttempt();
+
+        // If the model ignored the NDJSON prompt entirely (zero valid updates),
+        // retry once — it often cooperates on the second attempt.
+        if (stats.valid === 0) {
+          finalText = await runAttempt();
+        }
+
+        if (stats.valid === 0) {
+          controller.enqueue(
+            encodeUpdate({
+              type: "error",
+              message: "The model did not produce any valid UI updates.",
+            }),
+          );
+        }
+
+        saveHistory(parsedRequest.sessionId, [
           ...history,
           { role: "user", content: parsedRequest.message },
           { role: "assistant", content: finalText },

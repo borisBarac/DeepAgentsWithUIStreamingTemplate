@@ -1,6 +1,6 @@
 import { InMemoryStore } from "@langchain/langgraph";
 import { createDeepAgent, type DeepAgent } from "deepagents";
-
+import { composeGenerativeUiPrompt } from "../generative-ui/prompt.ts";
 import { createGuardrailDecision } from "../guardrails/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
@@ -15,6 +15,7 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions): DeepAg
     modelRuntime,
     promptLoader = DEFAULT_PROMPT_LOADER,
     store = new InMemoryStore(),
+    generativeUi,
     ...agentOptions
   } = options;
 
@@ -32,11 +33,16 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions): DeepAg
       : { ...guardrails, taskScopeModel: chatModel, middleware },
   );
 
+  const baselinePrompt = promptLoader.getBaselinePrompt();
+  const systemPrompt = generativeUi
+    ? `${baselinePrompt}\n\n${composeGenerativeUiPrompt(generativeUi.catalogPrompt)}`
+    : baselinePrompt;
+
   return createDeepAgent({
     name: DEFAULT_AGENT_NAME,
     ...agentOptions,
     store,
-    systemPrompt: promptLoader.getBaselinePrompt(),
+    systemPrompt,
     middleware: guardrailDecision.middleware,
     model: chatModel,
   });

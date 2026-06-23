@@ -1,15 +1,16 @@
 export {
-  type AppConfig,
-  type AppConfigOptions,
-  createAppConfig,
-} from "./app/index.ts";
-export {
   type CreateBaselineAgentOptions,
   type CreateScaffoldedAgentOptions,
   createBaselineAgent,
   createScaffoldedAgent,
   DEFAULT_AGENT_NAME,
+  type GenerativeUiOptions,
 } from "./agent/index.ts";
+export {
+  type AppConfig,
+  type AppConfigOptions,
+  createAppConfig,
+} from "./app/index.ts";
 export {
   type ArchivedClarificationState,
   applyClarificationResult,
@@ -40,6 +41,18 @@ export {
   resolveClarificationGate,
   selectUserFacingQuestions,
 } from "./clarification/index.ts";
+export {
+  applyUiUpdate,
+  composeGenerativeUiPrompt,
+  GENERATIVE_UI_NDJSON_PROMPT,
+  type NormalizeSpec,
+  normalizeUiUpdate,
+  parseUpdateLine,
+  parseUpdateText,
+  StreamingLineBuffer,
+  type UiUpdate,
+  type UpdateHandlers,
+} from "./generative-ui/index.ts";
 export {
   type CreateGuardrailDecisionOptions,
   createGuardrailDecision,

@@ -101,9 +101,11 @@ export const registry: ComponentRegistry = {
   },
 };
 
+const INITIAL_DATA: Record<string, unknown> = {};
+
 export function JsonRenderPreview({ loading, spec }: { loading: boolean; spec: Spec | null }) {
   return (
-    <JSONUIProvider initialData={{}} registry={registry}>
+    <JSONUIProvider initialData={INITIAL_DATA} registry={registry}>
       <Renderer loading={loading} registry={registry} spec={spec} />
     </JSONUIProvider>
   );

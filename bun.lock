@@ -30,6 +30,7 @@
         "@boris.barac/linkloom": "^0.1.3",
         "@deep-agent-template/image-gen": "workspace:*",
         "@deep-agent-template/sandbox": "workspace:*",
+        "@json-render/core": "^0.4.0",
         "@langchain/core": "^1.1.49",
         "@langchain/langgraph": "^1.4.2",
         "@langchain/mcp-adapters": "^1.1.3",

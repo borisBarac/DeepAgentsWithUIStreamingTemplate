@@ -37,15 +37,16 @@ export const componentPropsSchemas = {
   TextInput: textInputPropsSchema,
 } satisfies Record<ComponentTypeName, z.ZodType<Record<string, unknown>>>;
 
-export const catalogPrompt = `Return only JSON. The JSON must have this exact top-level shape:
-{"updates":[...]}
-
-Each update must be one of:
-{"type":"message","text":"short assistant message"}
-{"type":"ui","spec":<JsonRenderSpec>}
-{"type":"error","message":"short error message"}
-
-JsonRenderSpec is:
+/**
+ * Catalog-specific portion of the generative-UI prompt.
+ *
+ * The NDJSON framing (`<JsonRenderSpec>` update kinds, one object per line) is
+ * owned by core (`GENERATIVE_UI_NDJSON_PROMPT`) and prepended automatically when
+ * passed to `createBaselineAgent({ generativeUi: { catalogPrompt } })`. This
+ * constant only describes the `<JsonRenderSpec>` shape and the allowed
+ * components, so it stays paired with the catalog schemas above.
+ */
+export const catalogPrompt = `JsonRenderSpec is:
 {
   "root": "elementKey",
   "elements": {
@@ -68,6 +69,4 @@ Rules:
 - Use unique element keys.
 - Every element must include props and children, even when empty.
 - Every child key must exist in elements.
-- Never use component types outside the allowed catalog.
-- Prefer streaming several small updates: first a message, then one ui spec.
-- Do not wrap the JSON in Markdown or prose.`;
+- Never use component types outside the allowed catalog.`;

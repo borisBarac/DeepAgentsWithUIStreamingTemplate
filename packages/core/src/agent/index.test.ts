@@ -166,6 +166,29 @@ describe("createBaselineAgent", () => {
 
     expect((agent.options.model as { model?: string }).model).toBe("baseline-model");
   });
+
+  it("appends the generative-UI prompt when generativeUi is set", () => {
+    const agent = createBaselineAgent({
+      modelRuntime: createTestModelRuntime(),
+      promptLoader: testPromptLoader,
+      generativeUi: { catalogPrompt: "CATALOG PROMPT FOR BUTTONS" },
+    });
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
+    expectSystemPromptToContain(agent.options.systemPrompt, "CATALOG PROMPT FOR BUTTONS");
+    expectSystemPromptToContain(agent.options.systemPrompt, "newline-delimited JSON");
+    expectSystemPromptToContain(agent.options.systemPrompt, "JsonRenderSpec");
+  });
+
+  it("does not append the generative-UI prompt when generativeUi is absent", () => {
+    const agent = createBaselineAgent({
+      modelRuntime: createTestModelRuntime(),
+      promptLoader: testPromptLoader,
+    });
+
+    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("JsonRenderSpec");
+    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("NDJSON");
+  });
 });
 
 async function writeAgentMemory(
