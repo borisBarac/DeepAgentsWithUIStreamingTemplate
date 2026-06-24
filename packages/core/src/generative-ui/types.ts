@@ -14,6 +14,22 @@ export type UiUpdate =
       text: string;
     }
   | {
+      type: "question";
+      question:
+        | {
+            id: string;
+            prompt: string;
+            kind: "multiple_choice";
+            options: string[];
+          }
+        | {
+            id: string;
+            prompt: string;
+            kind: "open_text";
+            placeholder?: string;
+          };
+    }
+  | {
       type: "ui";
       spec: Spec;
     }

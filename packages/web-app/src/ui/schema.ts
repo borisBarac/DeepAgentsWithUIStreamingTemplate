@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-export const componentTypes = ["Card", "Stack", "Text", "TextInput", "Button"] as const;
+export const componentTypes = [
+  "Button",
+  "Card",
+  "ImagePlaceholder",
+  "ProductCard",
+  "ProductGrid",
+  "Stack",
+  "Text",
+  "TextInput",
+] as const;
 export type ComponentTypeName = (typeof componentTypes)[number];
 
 export const cardPropsSchema = z.object({
@@ -29,9 +38,28 @@ export const buttonPropsSchema = z.object({
   action: z.string().optional(),
 });
 
+export const productGridPropsSchema = z.object({
+  heading: z.string().optional(),
+});
+
+export const productCardPropsSchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  imageAlt: z.string().optional(),
+  imagePrompt: z.string().optional(),
+});
+
+export const imagePlaceholderPropsSchema = z.object({
+  alt: z.string().optional(),
+  prompt: z.string().optional(),
+});
+
 export const componentPropsSchemas = {
   Button: buttonPropsSchema,
   Card: cardPropsSchema,
+  ImagePlaceholder: imagePlaceholderPropsSchema,
+  ProductCard: productCardPropsSchema,
+  ProductGrid: productGridPropsSchema,
   Stack: stackPropsSchema,
   Text: textPropsSchema,
   TextInput: textInputPropsSchema,
@@ -51,7 +79,7 @@ export const catalogPrompt = `JsonRenderSpec is:
   "root": "elementKey",
   "elements": {
     "elementKey": {
-      "type": "Card" | "Stack" | "Text" | "TextInput" | "Button",
+      "type": "Button" | "Card" | "ImagePlaceholder" | "ProductCard" | "ProductGrid" | "Stack" | "Text" | "TextInput",
       "props": {},
       "children": ["childElementKey"]
     }
@@ -59,14 +87,21 @@ export const catalogPrompt = `JsonRenderSpec is:
 }
 
 Allowed component props:
+- Button: {"label": string, "action"?: string}
 - Card: {"title"?: string}
+- ImagePlaceholder: {"alt"?: string, "prompt"?: string}
+- ProductCard: {"title": string, "description": string, "imageAlt"?: string, "imagePrompt"?: string}
+- ProductGrid: {"heading"?: string}
 - Stack: {"direction"?: "row" | "column", "gap"?: "xs" | "sm" | "md" | "lg"}
 - Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
 - TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
-- Button: {"label": string, "action"?: string}
 
 Rules:
 - Use unique element keys.
 - Every element must include props and children, even when empty.
 - Every child key must exist in elements.
-- Never use component types outside the allowed catalog.`;
+- Never use component types outside the allowed catalog.
+- Qualification questions must be emitted as {"type":"question",...} updates, not as JsonRenderSpec UI.
+- Product details belong in JsonRenderSpec UI updates. Use ProductGrid as the root when showing multiple products.
+- A product card must include a clear title, description, and either imagePrompt or a child ImagePlaceholder.
+- When streaming more than one product over time, emit a complete ProductGrid spec each time with the previous products preserved plus the new product.`;

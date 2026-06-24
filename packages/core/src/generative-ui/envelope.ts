@@ -8,6 +8,24 @@ const rawMessageUpdateSchema = z.object({
   text: z.string(),
 });
 
+const rawQuestionUpdateSchema = z.object({
+  type: z.literal("question"),
+  question: z.discriminatedUnion("kind", [
+    z.object({
+      id: z.string().min(1),
+      prompt: z.string().min(1),
+      kind: z.literal("multiple_choice"),
+      options: z.array(z.string().min(1)).min(2).max(4),
+    }),
+    z.object({
+      id: z.string().min(1),
+      prompt: z.string().min(1),
+      kind: z.literal("open_text"),
+      placeholder: z.string().optional(),
+    }),
+  ]),
+});
+
 const rawErrorUpdateSchema = z.object({
   type: z.literal("error"),
   message: z.string(),
@@ -20,6 +38,7 @@ const rawUiUpdateSchema = z.object({
 
 const rawUpdateSchema = z.discriminatedUnion("type", [
   rawMessageUpdateSchema,
+  rawQuestionUpdateSchema,
   rawUiUpdateSchema,
   rawErrorUpdateSchema,
 ]);
@@ -39,18 +58,15 @@ export type NormalizeSpec = (spec: unknown) => Spec | null;
  */
 export function parseUpdateLine(line: string): UiUpdate | null {
   try {
-    const update = JSON.parse(line) as UiUpdate;
-    if (update.type === "message" || update.type === "ui" || update.type === "error") {
-      return update;
-    }
+    return normalizeUiUpdate(JSON.parse(line));
   } catch {
     return null;
   }
-  return null;
 }
 
 export type UpdateHandlers = {
   onMessage: (text: string) => void;
+  onQuestion?: (question: Extract<UiUpdate, { type: "question" }>["question"]) => void;
   onSpec: (spec: Spec) => void;
   onError: (message: string) => void;
 };
@@ -62,6 +78,9 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
   switch (update.type) {
     case "message":
       handlers.onMessage(update.text);
+      break;
+    case "question":
+      handlers.onQuestion?.(update.question);
       break;
     case "ui":
       handlers.onSpec(update.spec);

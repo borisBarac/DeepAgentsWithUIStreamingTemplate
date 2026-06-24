@@ -1,11 +1,79 @@
 "use client";
 
+import { useState } from "react";
+
 import { JsonRenderPreview } from "../src/ui/catalog.tsx";
+import type { DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 
+function QuestionControls({
+  disabled,
+  message,
+  onAnswer,
+}: {
+  disabled: boolean;
+  message: DisplayMessage;
+  onAnswer: (questionId: string, answer: string) => Promise<void>;
+}) {
+  const [answer, setAnswer] = useState("");
+  const question = message.question;
+  if (!question) {
+    return null;
+  }
+
+  if (question.kind === "multiple_choice") {
+    return (
+      <div className="question-options">
+        {question.options.map((option) => (
+          <button
+            disabled={disabled || message.answered}
+            key={option}
+            type="button"
+            onClick={() => onAnswer(question.id, option)}
+          >
+            {option}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="question-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onAnswer(question.id, answer);
+        setAnswer("");
+      }}
+    >
+      <input
+        aria-label={question.prompt}
+        disabled={disabled || message.answered}
+        name={`question-${question.id}`}
+        onChange={(event) => setAnswer(event.target.value)}
+        placeholder={question.placeholder ?? "Type your answer"}
+        value={answer}
+      />
+      <button disabled={disabled || message.answered || !answer.trim()} type="submit">
+        Reply
+      </button>
+    </form>
+  );
+}
+
 export default function Home() {
-  const { visibleMessages, input, latestSpec, error, loading, canSubmit, setInput, submitMessage } =
-    useAgentChat();
+  const {
+    visibleMessages,
+    input,
+    latestSpec,
+    error,
+    loading,
+    canSubmit,
+    setInput,
+    submitAnswer,
+    submitMessage,
+  } = useAgentChat();
 
   return (
     <main className="app-shell">
@@ -18,14 +86,15 @@ export default function Home() {
         <div className="message-list">
           {visibleMessages.length === 0 ? (
             <div className="empty-state">
-              <h2>Ask for an interface</h2>
-              <p>Try: Create a login form.</p>
+              <h2>Describe a product idea</h2>
+              <p>Try: I want to launch a lightweight planning tool for design teams.</p>
             </div>
           ) : (
             visibleMessages.map((message) => (
               <article className={`message message-${message.role}`} key={message.id}>
                 <span>{message.role}</span>
                 <p>{message.content}</p>
+                <QuestionControls disabled={loading} message={message} onAnswer={submitAnswer} />
               </article>
             ))
           )}
@@ -40,8 +109,9 @@ export default function Home() {
         <form className="composer" onSubmit={submitMessage}>
           <input
             aria-label="Message"
+            name="message"
             onChange={(event) => setInput(event.target.value)}
-            placeholder="Describe the UI to generate"
+            placeholder="Describe the product you want to create"
             value={input}
           />
           <button disabled={!canSubmit} type="submit">
@@ -52,14 +122,14 @@ export default function Home() {
 
       <section className="preview-pane" aria-label="Generated UI preview">
         <div className="preview-header">
-          <p>Rendered JSON</p>
+          <p>Interaction Zone</p>
           <span>{loading ? "Streaming" : "Idle"}</span>
         </div>
         <div className="preview-surface">
           {latestSpec ? (
             <JsonRenderPreview loading={loading} spec={latestSpec} />
           ) : (
-            <div className="preview-empty">Generated UI appears here.</div>
+            <div className="preview-empty">Product details appear here.</div>
           )}
         </div>
       </section>

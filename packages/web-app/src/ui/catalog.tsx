@@ -9,6 +9,9 @@ import type { z } from "zod";
 import {
   buttonPropsSchema,
   cardPropsSchema,
+  imagePlaceholderPropsSchema,
+  productCardPropsSchema,
+  productGridPropsSchema,
   stackPropsSchema,
   textInputPropsSchema,
   textPropsSchema,
@@ -23,6 +26,18 @@ export const uiCatalog = defineCatalog(schema, {
     Card: {
       props: cardPropsSchema,
       description: "A bordered content container. Optional title appears above children.",
+    },
+    ImagePlaceholder: {
+      props: imagePlaceholderPropsSchema,
+      description: "A visual placeholder for a product image that can later be rendered.",
+    },
+    ProductCard: {
+      props: productCardPropsSchema,
+      description: "A product concept card with title, description, and image prompt.",
+    },
+    ProductGrid: {
+      props: productGridPropsSchema,
+      description: "A responsive container for one or more product concept cards.",
     },
     Stack: {
       props: stackPropsSchema,
@@ -63,6 +78,42 @@ export const registry: ComponentRegistry = {
       <section className="jr-card">
         {props.title ? <h3>{props.title}</h3> : null}
         {children}
+      </section>
+    );
+  },
+  ImagePlaceholder: ({ element }) => {
+    const props = getProps(element) as z.infer<typeof imagePlaceholderPropsSchema>;
+    return (
+      <div
+        aria-label={props.alt ?? "Product image placeholder"}
+        className="product-image"
+        role="img"
+      >
+        <span>{props.prompt ?? props.alt ?? "Image concept"}</span>
+      </div>
+    );
+  },
+  ProductCard: ({ element, children }) => {
+    const props = getProps(element) as z.infer<typeof productCardPropsSchema>;
+    return (
+      <article className="product-card">
+        <div aria-label={props.imageAlt ?? props.title} className="product-image" role="img">
+          <span>{props.imagePrompt ?? props.imageAlt ?? "Image concept"}</span>
+        </div>
+        <div className="product-card-body">
+          <h3>{props.title}</h3>
+          <p>{props.description}</p>
+          {children}
+        </div>
+      </article>
+    );
+  },
+  ProductGrid: ({ element, children }) => {
+    const props = getProps(element) as z.infer<typeof productGridPropsSchema>;
+    return (
+      <section className="product-grid-shell">
+        {props.heading ? <h2>{props.heading}</h2> : null}
+        <div className="product-grid">{children}</div>
       </section>
     );
   },

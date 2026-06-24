@@ -8,6 +8,8 @@
   --line: #d9e0e6;
   --accent: #116466;
   --accent-dark: #0b484a;
+  --accent-soft: #dff0ea;
+  --gold: #b8872f;
   --danger: #9b2c2c;
 }
 
@@ -124,6 +126,38 @@ input {
   color: var(--danger);
 }
 
+.question-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  margin-top: 12px;
+}
+
+.question-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+  margin-top: 12px;
+}
+
+.question-options button,
+.question-form button {
+  background: var(--ink);
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.question-options button:disabled,
+.question-form button:disabled {
+  background: #a9b8b8;
+  cursor: not-allowed;
+}
+
 .composer {
   display: grid;
   gap: 10px;
@@ -132,6 +166,7 @@ input {
 }
 
 .composer input,
+.question-form input,
 .jr-field input {
   background: #ffffff;
   border: 1px solid var(--line);
@@ -143,6 +178,7 @@ input {
 }
 
 .composer input:focus,
+.question-form input:focus,
 .jr-field input:focus {
   border-color: var(--accent);
   outline: 2px solid rgba(17, 100, 102, 0.16);
@@ -195,6 +231,74 @@ input {
   display: grid;
   min-height: 420px;
   padding: 22px;
+}
+
+.product-grid-shell {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.product-grid-shell h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.product-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.product-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.product-image {
+  align-items: end;
+  aspect-ratio: 16 / 10;
+  background:
+    linear-gradient(135deg, rgba(17, 100, 102, 0.17), rgba(184, 135, 47, 0.2)), var(--panel-soft);
+  color: var(--accent-dark);
+  display: flex;
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-height: 140px;
+  padding: 12px;
+}
+
+.product-image span {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 6px;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 7px 9px;
+}
+
+.product-card-body {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.product-card-body h3 {
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.product-card-body p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .jr-card {
@@ -290,6 +394,10 @@ input {
   }
 
   .composer {
+    grid-template-columns: 1fr;
+  }
+
+  .question-form {
     grid-template-columns: 1fr;
   }
 }

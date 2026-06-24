@@ -29,6 +29,22 @@ describe("parseUpdateLine", () => {
     });
   });
 
+  it("parses question updates", () => {
+    expect(
+      parseUpdateLine(
+        '{"type":"question","question":{"id":"audience","prompt":"Who is this for?","kind":"multiple_choice","options":["Founders","Designers"]}}',
+      ),
+    ).toEqual({
+      type: "question",
+      question: {
+        id: "audience",
+        prompt: "Who is this for?",
+        kind: "multiple_choice",
+        options: ["Founders", "Designers"],
+      },
+    });
+  });
+
   it("returns null for malformed JSON", () => {
     expect(parseUpdateLine("not json")).toBeNull();
   });
@@ -45,6 +61,7 @@ describe("applyUiUpdate", () => {
       calls,
       handlers: {
         onMessage: (text: string) => calls.push(`message:${text}`),
+        onQuestion: (question: { prompt: string }) => calls.push(`question:${question.prompt}`),
         onSpec: () => calls.push("spec"),
         onError: (message: string) => calls.push(`error:${message}`),
       },
@@ -63,6 +80,22 @@ describe("applyUiUpdate", () => {
     expect(calls).toEqual(["spec"]);
   });
 
+  it("routes question updates to onQuestion", () => {
+    const { calls, handlers } = recorder();
+    applyUiUpdate(
+      {
+        type: "question",
+        question: {
+          id: "constraints",
+          prompt: "Any constraints?",
+          kind: "open_text",
+        },
+      },
+      handlers,
+    );
+    expect(calls).toEqual(["question:Any constraints?"]);
+  });
+
   it("routes error updates to onError", () => {
     const { calls, handlers } = recorder();
     applyUiUpdate({ type: "error", message: "boom" }, handlers);
@@ -75,6 +108,64 @@ describe("normalizeUiUpdate", () => {
     expect(normalizeUiUpdate({ type: "message", text: "hi" })).toEqual({
       type: "message",
       text: "hi",
+    });
+  });
+
+  it("validates multiple-choice question updates", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "question",
+        question: {
+          id: "audience",
+          prompt: "Who is this for?",
+          kind: "multiple_choice",
+          options: ["Founders", "Designers"],
+        },
+      }),
+    ).toEqual({
+      type: "question",
+      question: {
+        id: "audience",
+        prompt: "Who is this for?",
+        kind: "multiple_choice",
+        options: ["Founders", "Designers"],
+      },
+    });
+  });
+
+  it("rejects multiple-choice questions with too many options", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "question",
+        question: {
+          id: "audience",
+          prompt: "Who is this for?",
+          kind: "multiple_choice",
+          options: ["A", "B", "C", "D", "E"],
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("validates open-text question updates", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "question",
+        question: {
+          id: "constraints",
+          prompt: "Any constraints?",
+          kind: "open_text",
+          placeholder: "Budget, deadline, platform",
+        },
+      }),
+    ).toEqual({
+      type: "question",
+      question: {
+        id: "constraints",
+        prompt: "Any constraints?",
+        kind: "open_text",
+        placeholder: "Budget, deadline, platform",
+      },
     });
   });
 

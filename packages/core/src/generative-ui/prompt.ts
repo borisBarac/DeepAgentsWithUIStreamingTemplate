@@ -14,10 +14,13 @@ export const GENERATIVE_UI_NDJSON_PROMPT = `Respond using newline-delimited JSON
 
 Each line must be exactly one of:
 - {"type":"message","text":"short assistant message"}
+- {"type":"question","question":{"id":"stable-question-id","prompt":"question text","kind":"multiple_choice","options":["option 1","option 2"]}}
+- {"type":"question","question":{"id":"stable-question-id","prompt":"question text","kind":"open_text","placeholder":"optional placeholder"}}
 - {"type":"ui","spec":<JsonRenderSpec>}
 - {"type":"error","message":"short error message"}
 
-Prefer streaming several small updates: first a message line, then one ui line.`;
+Use question updates only when the user must answer before useful product details can be generated.
+Prefer streaming several small updates: a short message line, then either a question line or one ui line.`;
 
 /**
  * Composes the full generative-UI prompt fragment: the core NDJSON framing

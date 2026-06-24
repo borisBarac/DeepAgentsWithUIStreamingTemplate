@@ -21,6 +21,56 @@ describe("normalizeStreamingSpec", () => {
     });
   });
 
+  it("accepts product grids with product cards", () => {
+    expect(
+      normalizeStreamingSpec({
+        root: "products",
+        elements: {
+          products: { type: "ProductGrid", props: { heading: "Concepts" }, children: ["card"] },
+          card: {
+            type: "ProductCard",
+            props: {
+              title: "Launch Map",
+              description: "A planning workspace for design teams.",
+              imagePrompt: "Kanban board with product milestones",
+            },
+            children: [],
+          },
+        },
+      }),
+    ).toEqual({
+      root: "products",
+      elements: {
+        products: { type: "ProductGrid", props: { heading: "Concepts" }, children: ["card"] },
+        card: {
+          type: "ProductCard",
+          props: {
+            title: "Launch Map",
+            description: "A planning workspace for design teams.",
+            imagePrompt: "Kanban board with product milestones",
+          },
+          children: [],
+        },
+      },
+    });
+  });
+
+  it("rejects product cards without required details", () => {
+    expect(
+      normalizeStreamingSpec({
+        root: "products",
+        elements: {
+          products: { type: "ProductGrid", props: {}, children: ["card"] },
+          card: {
+            type: "ProductCard",
+            props: { title: "Missing description" },
+            children: [],
+          },
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("rejects unknown component types", () => {
     expect(
       normalizeStreamingSpec({

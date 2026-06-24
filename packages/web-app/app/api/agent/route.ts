@@ -1,15 +1,13 @@
-import { createBaselineAgent } from "@deep-agent-template/core/agent/baseline";
 import {
   extractUpdateObjects,
   normalizeUiUpdate,
   StreamingLineBuffer,
   type UiUpdate,
 } from "@deep-agent-template/core/generative-ui";
-import { createModelRuntime } from "@deep-agent-template/core/models";
 import { NextResponse } from "next/server";
 
 import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
-import { catalogPrompt } from "../../../src/ui/schema.ts";
+import { createAgentProvider } from "../../../src/server/agent-provider.ts";
 import type { ChatMessage } from "../../../src/ui/types.ts";
 
 export const runtime = "nodejs";
@@ -23,7 +21,7 @@ type AgentResult = {
   messages?: unknown[];
 };
 
-type Agent = ReturnType<typeof createBaselineAgent>;
+type Agent = Extract<ReturnType<typeof createAgentProvider>, { mode: "simple" }>["agent"];
 
 type StreamableAgent = Agent & {
   streamEvents?: (
@@ -61,35 +59,11 @@ function saveHistory(sessionId: string, history: ChatMessage[]): void {
 }
 
 function createAgent(): Agent {
-  const baseURL = process.env.LLM_BASE_URL?.trim();
-  const apiKey = process.env.LLM_API_KEY?.trim();
-  const model = process.env.LLM_MODEL?.trim() || "deepseek-v4-flash";
-
-  if (!baseURL) {
-    throw new Error("LLM_BASE_URL is required.");
+  const provider = createAgentProvider();
+  if (provider.mode === "advanced") {
+    throw new Error(provider.note);
   }
-  if (!apiKey) {
-    throw new Error("LLM_API_KEY is required.");
-  }
-
-  const modelRuntime = createModelRuntime({
-    connections: {
-      default: { provider: "openai-compatible", apiKey, baseURL },
-    },
-    models: {
-      // Model emits raw NDJSON (one UiUpdate per line); no response_format
-      // constraint needed. See packages/core/src/generative-ui/prompt.ts.
-      default: { connection: "default", model },
-    },
-    assignments: { default: "default" },
-  });
-
-  return createBaselineAgent({
-    guardrails: false,
-    generativeUi: { catalogPrompt },
-    modelRuntime,
-    tools: [],
-  });
+  return provider.agent;
 }
 
 let agentCache: Agent | null = null;
@@ -176,6 +150,7 @@ function emitParsedLines(
   controller: ReadableStreamDefaultController<Uint8Array>,
   lines: string[],
   stats?: { valid: number },
+  onUpdate?: (update: UiUpdate) => void,
 ): void {
   for (const line of lines) {
     const trimmed = line.trim();
@@ -191,6 +166,7 @@ function emitParsedLines(
       if (update) {
         controller.enqueue(encodeUpdate(update));
         if (stats) stats.valid += 1;
+        onUpdate?.(update);
       }
     }
   }
@@ -244,6 +220,23 @@ export async function POST(request: Request): Promise<Response> {
       const input = { messages: toInputMessages(history, parsedRequest.message) };
       const agent = getAgent() as StreamableAgent;
       const stats = { valid: 0 };
+      const assistantHistory: string[] = [];
+
+      function recordAssistantUpdate(update: UiUpdate): void {
+        switch (update.type) {
+          case "message":
+            assistantHistory.push(update.text);
+            break;
+          case "question":
+            assistantHistory.push(update.question.prompt);
+            break;
+          case "ui":
+            assistantHistory.push("Shared product details in the interaction zone.");
+            break;
+          case "error":
+            break;
+        }
+      }
 
       async function runAttempt(): Promise<string> {
         const lineBuffer = new StreamingLineBuffer();
@@ -252,16 +245,16 @@ export async function POST(request: Request): Promise<Response> {
           input,
           parsedRequest.sessionId,
           (token) => {
-            emitParsedLines(controller, lineBuffer.push(token), stats);
+            emitParsedLines(controller, lineBuffer.push(token), stats, recordAssistantUpdate);
           },
         );
 
         if (streamedText) {
           // The final line often lacks a trailing newline; flush whatever
           // remains buffered so it isn't dropped.
-          emitParsedLines(controller, lineBuffer.flush(), stats);
+          emitParsedLines(controller, lineBuffer.flush(), stats, recordAssistantUpdate);
         } else {
-          emitParsedLines(controller, finalText.split("\n"), stats);
+          emitParsedLines(controller, finalText.split("\n"), stats, recordAssistantUpdate);
         }
         return finalText;
       }
@@ -287,7 +280,7 @@ export async function POST(request: Request): Promise<Response> {
         saveHistory(parsedRequest.sessionId, [
           ...history,
           { role: "user", content: parsedRequest.message },
-          { role: "assistant", content: finalText },
+          { role: "assistant", content: assistantHistory.join("\n") || finalText },
         ]);
       } catch (error) {
         controller.enqueue(
