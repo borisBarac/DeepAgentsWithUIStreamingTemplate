@@ -1,12 +1,34 @@
 import type { Spec } from "@json-render/core";
 import { z } from "zod";
 
-import type { UiUpdate } from "./types.ts";
+import type { ClarificationResult } from "../clarification/index.ts";
+import type {
+  ProductCard,
+  ProductCardBatch,
+  UiQuestion,
+  UiQuestionOption,
+  UiUpdate,
+  UiZone,
+} from "./types.ts";
 
 const rawMessageUpdateSchema = z.object({
   type: z.literal("message"),
   text: z.string(),
 });
+
+/**
+ * Accepts either a plain string or a structured option object so catalogs that
+ * only need simple labels keep working, while the clarifier's richer
+ * `{label, description, recommended}` options survive the stream intact.
+ */
+const uiQuestionOptionSchema = z.union([
+  z.string().min(1),
+  z.object({
+    label: z.string().min(1),
+    description: z.string().optional(),
+    recommended: z.boolean().optional(),
+  }),
+]);
 
 const rawQuestionUpdateSchema = z.object({
   type: z.literal("question"),
@@ -15,7 +37,7 @@ const rawQuestionUpdateSchema = z.object({
       id: z.string().min(1),
       prompt: z.string().min(1),
       kind: z.literal("multiple_choice"),
-      options: z.array(z.string().min(1)).min(2).max(4),
+      options: z.array(uiQuestionOptionSchema).min(2).max(4),
     }),
     z.object({
       id: z.string().min(1),
@@ -44,6 +66,39 @@ const rawUpdateSchema = z.discriminatedUnion("type", [
 ]);
 
 /**
+ * The json-render component type used for streamed product cards.
+ */
+export const PRODUCT_CARD_COMPONENT_NAME = "product-card";
+
+/**
+ * Validates a single product card's props.
+ */
+export const productCardSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  imageUrl: z.string().url().optional(),
+  status: z.enum(["streaming", "complete"]).optional(),
+});
+
+/**
+ * Validates a batch of product cards returned by a product-generator specialist.
+ */
+export const productCardBatchSchema = z.object({
+  products: z.array(productCardSchema).min(1),
+}) satisfies z.ZodType<ProductCardBatch>;
+
+/**
+ * A `question` {@link UiUpdate}, extracted for converters and handlers.
+ */
+export type QuestionUpdate = Extract<UiUpdate, { type: "question" }>;
+
+/**
+ * A `ui` {@link UiUpdate}, extracted for converters.
+ */
+export type UiSpecUpdate = Extract<UiUpdate, { type: "ui" }>;
+
+/**
  * Validates a streamed spec against a component catalog. Consumers that own a
  * catalog (e.g. a `json-render` catalog) pass this into {@link normalizeUiUpdate}
  * so catalog-specific validation stays out of the core protocol layer.
@@ -66,7 +121,7 @@ export function parseUpdateLine(line: string): UiUpdate | null {
 
 export type UpdateHandlers = {
   onMessage: (text: string) => void;
-  onQuestion?: (question: Extract<UiUpdate, { type: "question" }>["question"]) => void;
+  onQuestion?: (question: UiQuestion) => void;
   onSpec: (spec: Spec) => void;
   onError: (message: string) => void;
 };
@@ -92,6 +147,42 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
 }
 
 /**
+ * Returns the UI zone an update belongs to.
+ *
+ * `ui` updates (product cards) route to the dedicated interaction zone; all
+ * other updates (messages, questions, errors) route to the chat history.
+ */
+export function uiUpdateZone(update: UiUpdate): UiZone {
+  return update.type === "ui" ? "interaction" : "chat";
+}
+
+/**
+ * Normalizes a {@link UiQuestionOption} (which may be a plain string or a
+ * structured object) into a stable `{label, description?, recommended?}` shape
+ * so renderers handle both wire forms uniformly.
+ */
+export function normalizeQuestionOption(option: UiQuestionOption): {
+  label: string;
+  description?: string;
+  recommended?: boolean;
+} {
+  if (typeof option === "string") {
+    return { label: option };
+  }
+
+  const normalized: { label: string; description?: string; recommended?: boolean } = {
+    label: option.label,
+  };
+  if (option.description) {
+    normalized.description = option.description;
+  }
+  if (option.recommended) {
+    normalized.recommended = option.recommended;
+  }
+  return normalized;
+}
+
+/**
  * Validates a raw streamed object into a {@link UiUpdate}.
  *
  * The envelope shape (message/ui/error) is always validated. For `ui` updates,
@@ -114,6 +205,126 @@ export function normalizeUiUpdate(value: unknown, normalizeSpec?: NormalizeSpec)
 
   const spec = normalizeSpec ? normalizeSpec(parsed.data.spec) : (parsed.data.spec as Spec);
   return spec ? { type: "ui", spec } : null;
+}
+
+/**
+ * Validates a streamed spec as a single product-card component and returns it
+ * unchanged when valid, or `null` otherwise.
+ *
+ * Use as a {@link NormalizeSpec} to restrict a stream to product cards:
+ *
+ * ```ts
+ * normalizeUiUpdate(line, normalizeProductCardSpec);
+ * ```
+ */
+export function normalizeProductCardSpec(spec: unknown): Spec | null {
+  if (!spec || typeof spec !== "object") {
+    return null;
+  }
+
+  const candidate = spec as Spec;
+  if (
+    typeof candidate.root !== "string" ||
+    candidate.root === "" ||
+    !candidate.elements ||
+    typeof candidate.elements !== "object"
+  ) {
+    return null;
+  }
+
+  const rootElement = candidate.elements[candidate.root];
+  if (!rootElement || rootElement.type !== PRODUCT_CARD_COMPONENT_NAME) {
+    return null;
+  }
+
+  const parsed = productCardSchema.safeParse(rootElement.props);
+  return parsed.success ? (candidate as Spec) : null;
+}
+
+/**
+ * Converts a clarifier {@link ClarificationResult} into streamed `question`
+ * updates. Questions with options become multiple-choice updates (preserving
+ * label/description/recommended); questions without options become open-text.
+ *
+ * Returns an empty array unless the result still needs clarification.
+ */
+export function clarificationResultToQuestionUpdates(
+  result: ClarificationResult,
+): QuestionUpdate[] {
+  if (result.status !== "needs_clarification") {
+    return [];
+  }
+
+  return result.questions.map((question) => {
+    const options = question.options ?? [];
+    if (options.length > 0) {
+      return {
+        type: "question",
+        question: {
+          id: question.id,
+          prompt: question.question,
+          kind: "multiple_choice",
+          options: options.map((option) => {
+            const structured: {
+              label: string;
+              description?: string;
+              recommended?: boolean;
+            } = { label: option.label };
+            if (option.description) {
+              structured.description = option.description;
+            }
+            if (option.recommended) {
+              structured.recommended = option.recommended;
+            }
+            return structured;
+          }) satisfies UiQuestionOption[],
+        },
+      };
+    }
+
+    return {
+      type: "question",
+      question: {
+        id: question.id,
+        prompt: question.question,
+        kind: "open_text",
+      },
+    };
+  });
+}
+
+/**
+ * Wraps each product card as a separate `ui` update carrying a json-render spec
+ * rooted at a single `product-card` element. Streaming one update per card lets
+ * the interaction zone render cards incrementally.
+ */
+export function productCardsToUiUpdates(cards: readonly ProductCard[]): UiSpecUpdate[] {
+  return cards.map((card) => {
+    const props: Record<string, unknown> = {
+      id: card.id,
+      title: card.title,
+      description: card.description,
+    };
+    if (card.imageUrl) {
+      props.imageUrl = card.imageUrl;
+    }
+    if (card.status) {
+      props.status = card.status;
+    }
+
+    return {
+      type: "ui",
+      spec: {
+        root: card.id,
+        elements: {
+          [card.id]: {
+            type: PRODUCT_CARD_COMPONENT_NAME,
+            props,
+          },
+        },
+      },
+    };
+  });
 }
 
 /**

@@ -27,6 +27,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     subagentOverrides,
     systemPrompt,
     clarificationOptions,
+    generativeUi,
     store = new InMemoryStore(),
     ...agentOptions
   } = options;
@@ -44,6 +45,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
       memoryUserId: memoryUserId ?? backendOptions?.memoryUserId,
     },
     clarificationOptions,
+    generativeUi,
     imageGenerationService,
     interruptOn,
     memory,

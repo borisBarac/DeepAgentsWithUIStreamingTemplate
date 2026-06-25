@@ -12,6 +12,7 @@ const testPromptLoader: PromptLoader = {
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
+  getProductGeneratorPrompt: () => "custom product generator prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 
@@ -126,6 +127,19 @@ describe("createScaffoldedAgent", () => {
     });
 
     expect(typeof agent.invoke).toBe("function");
+  });
+
+  it("threads generativeUi into the supervisor prompt", () => {
+    const agent = createScaffoldedAgent({
+      modelRuntime: createTestModelRuntime(),
+      promptLoader: testPromptLoader,
+      imageGenerationService: testImageGenerationService,
+      generativeUi: { catalogPrompt: "APP CATALOG" },
+    });
+
+    expectSystemPromptToContain(agent.options.systemPrompt, "custom supervisor prompt");
+    expectSystemPromptToContain(agent.options.systemPrompt, "product-card");
+    expectSystemPromptToContain(agent.options.systemPrompt, "APP CATALOG");
   });
 });
 

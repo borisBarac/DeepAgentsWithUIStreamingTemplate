@@ -1,7 +1,7 @@
 "use client";
 
+import { normalizeQuestionOption } from "@deep-agent-template/core";
 import { useState } from "react";
-
 import { JsonRenderPreview } from "../src/ui/catalog.tsx";
 import type { DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
@@ -24,16 +24,21 @@ function QuestionControls({
   if (question.kind === "multiple_choice") {
     return (
       <div className="question-options">
-        {question.options.map((option) => (
-          <button
-            disabled={disabled || message.answered}
-            key={option}
-            type="button"
-            onClick={() => onAnswer(question.id, option)}
-          >
-            {option}
-          </button>
-        ))}
+        {question.options.map((option) => {
+          const normalized = normalizeQuestionOption(option);
+          return (
+            <button
+              disabled={disabled || message.answered}
+              key={normalized.label}
+              type="button"
+              onClick={() => onAnswer(question.id, normalized.label)}
+            >
+              <span>{normalized.label}</span>
+              {normalized.recommended ? <em> (recommended)</em> : null}
+              {normalized.description ? <small> — {normalized.description}</small> : null}
+            </button>
+          );
+        })}
       </div>
     );
   }

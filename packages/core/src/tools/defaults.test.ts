@@ -27,6 +27,12 @@ describe("default specialist role toolsets", () => {
           "Design production-ready image prompts and execute one generate-or-edit image operation.",
       },
       {
+        role: "product-generator",
+        toolIds: ["generate_image"],
+        purpose:
+          "Turn clarified product requests into a batch of structured product cards for the interaction zone.",
+      },
+      {
         role: "reviewer",
         toolIds: [],
         purpose: "Final quality review, approval decisions, and required-change verification.",

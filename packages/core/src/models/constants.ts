@@ -10,6 +10,7 @@ export const MODEL_ROLES = [
   "researcher",
   "analyst",
   "image-designer",
+  "product-generator",
   "reviewer",
   "coder",
   "finalizer",

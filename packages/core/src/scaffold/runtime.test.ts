@@ -15,6 +15,7 @@ const testPromptLoader: PromptLoader = {
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
+  getProductGeneratorPrompt: () => "custom product generator prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 
@@ -202,5 +203,33 @@ describe("runtime scaffold defaults", () => {
     expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(imageDesigner?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
+  });
+
+  it("leaves the supervisor prompt and subagents unchanged when generativeUi is absent", () => {
+    const scaffold = createRuntimeScaffold({ promptLoader: testPromptLoader });
+
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("NDJSON");
+    expect(scaffold.generativeUi).toBeUndefined();
+    expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).not.toContain(
+      "product-generator",
+    );
+  });
+
+  it("appends the product-generator NDJSON prompt and adds the product-generator subagent when generativeUi is enabled", () => {
+    const scaffold = createRuntimeScaffold({
+      promptLoader: testPromptLoader,
+      imageGenerationService: testImageGenerationService,
+      generativeUi: { catalogPrompt: "EXTRA CATALOG" },
+    });
+
+    expect(scaffold.generativeUi).toEqual({ catalogPrompt: "EXTRA CATALOG" });
+    expect(JSON.stringify(scaffold.systemPrompt)).toContain("supervisor prompt");
+    expect(JSON.stringify(scaffold.systemPrompt)).toContain("newline-delimited JSON");
+    expect(JSON.stringify(scaffold.systemPrompt)).toContain("product-card");
+    expect(JSON.stringify(scaffold.systemPrompt)).toContain("EXTRA CATALOG");
+    expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).toContain(
+      "product-generator",
+    );
   });
 });

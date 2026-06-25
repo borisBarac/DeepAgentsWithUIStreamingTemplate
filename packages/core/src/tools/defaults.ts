@@ -8,6 +8,8 @@ const DEFAULT_SPECIALIST_ROLE_PURPOSES: Record<SpecialistRole, string> = {
   analyst: "Computation, extraction, transformation, and file-based analysis.",
   "image-designer":
     "Design production-ready image prompts and execute one generate-or-edit image operation.",
+  "product-generator":
+    "Turn clarified product requests into a batch of structured product cards for the interaction zone.",
   reviewer: "Final quality review, approval decisions, and required-change verification.",
 };
 
@@ -45,6 +47,11 @@ export function createDefaultSpecialistRoleToolsets(): readonly SpecializedRoleT
       role: "image-designer",
       toolIds: ["generate_image"],
       purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES["image-designer"],
+    },
+    {
+      role: "product-generator",
+      toolIds: ["generate_image"],
+      purpose: DEFAULT_SPECIALIST_ROLE_PURPOSES["product-generator"],
     },
     {
       role: "reviewer",

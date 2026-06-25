@@ -23,13 +23,49 @@ Use question updates only when the user must answer before useful product detail
 Prefer streaming several small updates: a short message line, then either a question line or one ui line.`;
 
 /**
+ * The product-card catalog fragment. Describes the `product-card` json-render
+ * component that streamed product details must use, plus the multi-product
+ * streaming rule. Core-owned because the product-card component contract is
+ * part of the product-generator scaffold, not the caller's app catalog.
+ */
+export const PRODUCT_CARD_CATALOG_PROMPT = `Product details stream as "product-card" ui specs. Emit one ui update per product card:
+
+{"type":"ui","spec":{"root":"<unique-card-id>","elements":{"<unique-card-id>":{"type":"product-card","props":{"id":"<unique-card-id>","title":"<concise title>","description":"<clear description>","imageUrl":"<optional https url>"}}}}}
+
+Product-card rules:
+- Each card needs a unique id, a concise title, and a clear description.
+- imageUrl is optional. Omit it (rendering a placeholder) until a real image is available.
+- Stream multiple products as separate ui lines, sequentially, so the interaction zone renders them incrementally.
+- Product cards belong only in the ui stream. Never put product details in message or question lines.
+- Clarification questions belong only in question lines (routed to the chat history), never in ui specs.`;
+
+/**
  * Composes the full generative-UI prompt fragment: the core NDJSON framing
  * followed by the caller's catalog prompt (which defines `<JsonRenderSpec>`
- * and the allowed components).
+ * and the allowed components). When `catalogPrompt` is omitted or empty, only
+ * the NDJSON framing is returned.
  *
  * {@link createBaselineAgent} appends this to the baseline system prompt when
  * its `generativeUi` option is set.
  */
-export function composeGenerativeUiPrompt(catalogPrompt: string): string {
-  return `${GENERATIVE_UI_NDJSON_PROMPT}\n\n${catalogPrompt}`;
+export function composeGenerativeUiPrompt(catalogPrompt?: string): string {
+  const trimmed = catalogPrompt?.trim();
+  return trimmed ? `${GENERATIVE_UI_NDJSON_PROMPT}\n\n${trimmed}` : GENERATIVE_UI_NDJSON_PROMPT;
+}
+
+/**
+ * Composes the generative-UI prompt for the product-generator context: the core
+ * NDJSON framing, the product-card catalog (always included), and an optional
+ * caller-provided catalog for any additional app components.
+ *
+ * {@link createRuntimeScaffold} appends this to the supervisor system prompt
+ * when its `generativeUi` option is enabled.
+ */
+export function composeProductGeneratorPrompt(catalogPrompt?: string): string {
+  const sections = [GENERATIVE_UI_NDJSON_PROMPT, PRODUCT_CARD_CATALOG_PROMPT];
+  const trimmed = catalogPrompt?.trim();
+  if (trimmed) {
+    sections.push(trimmed);
+  }
+  return sections.join("\n\n");
 }

@@ -5,6 +5,7 @@ import {
   clarificationResultSchema,
   createClarificationConfig,
 } from "../clarification/index.ts";
+import { productCardBatchSchema } from "../generative-ui/index.ts";
 import { createImageDesignerTool, imageDesignerResponseSchema } from "../image-designer/index.ts";
 import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "../prompts/index.ts";
 import {
@@ -99,23 +100,42 @@ export function createDefaultSubagents(
     options.reviewer,
   );
 
-  if (!imageDesignerTool) {
-    return [clarifier, researcher, analyst, reviewer];
+  const subagents: SubAgent[] = [clarifier, researcher, analyst];
+
+  if (imageDesignerTool) {
+    const imageDesigner = mergeSubagent(
+      {
+        name: "image-designer",
+        description:
+          "Turn image requests into production-ready prompts, generate or edit exactly once, and return the prompt plus final image result.",
+        systemPrompt: promptLoader.getImageDesignerPrompt(),
+        responseFormat: imageDesignerResponseSchema,
+        model: options.modelRuntime?.getModelForRole("image-designer"),
+        tools: [imageDesignerTool],
+        skills: [],
+      },
+      options.imageDesigner,
+    );
+    subagents.push(imageDesigner);
   }
 
-  const imageDesigner = mergeSubagent(
-    {
-      name: "image-designer",
-      description:
-        "Turn image requests into production-ready prompts, generate or edit exactly once, and return the prompt plus final image result.",
-      systemPrompt: promptLoader.getImageDesignerPrompt(),
-      responseFormat: imageDesignerResponseSchema,
-      model: options.modelRuntime?.getModelForRole("image-designer"),
-      tools: [imageDesignerTool],
-      skills: [],
-    },
-    options.imageDesigner,
-  );
+  if (options.generativeUi) {
+    const productGenerator = mergeSubagent(
+      {
+        name: "product-generator",
+        description:
+          "Turn clarified product requests into a batch of structured product cards (title, description, image) for the streaming interaction zone.",
+        systemPrompt: promptLoader.getProductGeneratorPrompt(),
+        responseFormat: productCardBatchSchema,
+        model: options.modelRuntime?.getModelForRole("product-generator"),
+        tools: imageDesignerTool ? [imageDesignerTool] : [],
+        skills: [],
+      },
+      options.productGenerator,
+    );
+    subagents.push(productGenerator);
+  }
 
-  return [clarifier, researcher, analyst, imageDesigner, reviewer];
+  subagents.push(reviewer);
+  return subagents;
 }

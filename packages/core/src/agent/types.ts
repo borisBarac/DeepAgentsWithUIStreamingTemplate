@@ -1,5 +1,6 @@
 import type { CreateDeepAgentParams } from "deepagents";
 
+import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { CreateGuardrailDecisionOptions } from "../guardrails/index.ts";
 import type { ModelRuntimeOptions } from "../models/index.ts";
 import type { LangSmithTracingOptions } from "../observability/index.ts";
@@ -23,16 +24,10 @@ type DeepAgentScaffoldOptions = Pick<
 >;
 
 /**
- * Opt-in generative-UI support for {@link createBaselineAgent}.
- *
- * When set, the agent appends a generative-UI prompt fragment (NDJSON framing
- * + the provided `catalogPrompt`) to its system prompt so it streams one
- * `UiUpdate` per line. Parse the stream with `StreamingLineBuffer` /
- * `parseUpdateLine` (or `normalizeUiUpdate` for full validation).
+ * Re-exported from the generative-ui module so the public agent API keeps a
+ * stable import path for `GenerativeUiOptions`.
  */
-export type GenerativeUiOptions = {
-  catalogPrompt: string;
-};
+export type { GenerativeUiOptions } from "../generative-ui/index.ts";
 
 export type CreateBaselineAgentOptions = DeepAgentScaffoldOptions &
   ModelRuntimeOptions & {
@@ -49,11 +44,17 @@ export type CreateScaffoldedAgentOptions = Omit<
 > &
   Omit<
     CreateRuntimeScaffoldOptions,
-    "promptLoader" | "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"
+    | "promptLoader"
+    | "researcher"
+    | "analyst"
+    | "reviewer"
+    | "clarifier"
+    | "imageDesigner"
+    | "productGenerator"
   > & {
     memoryUserId?: string;
     subagentOverrides?: Pick<
       CreateRuntimeScaffoldOptions,
-      "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"
+      "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner" | "productGenerator"
     >;
   };

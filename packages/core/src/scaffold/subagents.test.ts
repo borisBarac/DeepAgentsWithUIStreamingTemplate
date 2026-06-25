@@ -5,6 +5,7 @@ import type { SubAgent } from "deepagents";
 import { z } from "zod";
 
 import { clarificationResultSchema } from "../clarification/index.ts";
+import { productCardBatchSchema } from "../generative-ui/index.ts";
 import { IMAGE_DESIGNER_TOOL_NAME, imageDesignerResponseSchema } from "../image-designer/index.ts";
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
@@ -19,6 +20,7 @@ const testPromptLoader: PromptLoader = {
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
+  getProductGeneratorPrompt: () => "custom product generator prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 
@@ -226,5 +228,65 @@ describe("default subagents", () => {
     expect(imageDesigner?.model).toBe(runtime.getModelForRole("image-designer"));
     expect(reviewer?.model).toBe(runtime.getModelForRole("reviewer"));
     expect(overriddenReviewer?.model).toBe(explicitReviewerModel);
+  });
+
+  it("omits the product generator when generativeUi is not enabled", () => {
+    const subagents = asDefaultSubagents(
+      createDefaultSubagents({ imageGenerationService: testImageGenerationService }),
+    );
+
+    expect(subagents.map((subagent) => subagent.name)).not.toContain("product-generator");
+  });
+
+  it("includes the product generator after the image designer when generativeUi is enabled", () => {
+    const subagents = asDefaultSubagents(
+      createDefaultSubagents({
+        imageGenerationService: testImageGenerationService,
+        generativeUi: {},
+      }),
+    );
+
+    expect(subagents.map((subagent) => subagent.name)).toEqual([
+      "clarifier",
+      "researcher",
+      "analyst",
+      "image-designer",
+      "product-generator",
+      "review-agent",
+    ]);
+
+    const productGenerator = subagents.find((subagent) => subagent.name === "product-generator");
+    expect(productGenerator?.responseFormat).toBe(productCardBatchSchema);
+    expect(productGenerator?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
+  });
+
+  it("includes the product generator without an image tool when no image service is configured", () => {
+    const subagents = asDefaultSubagents(createDefaultSubagents({ generativeUi: {} }));
+
+    const productGenerator = subagents.find((subagent) => subagent.name === "product-generator");
+    expect(productGenerator?.tools).toEqual([]);
+  });
+
+  it("uses the prompt loader for the product generator prompt and lets overrides win", () => {
+    const defaultSubagents = asDefaultSubagents(
+      createDefaultSubagents({ generativeUi: {} }, {}, testPromptLoader),
+    );
+    expect(
+      defaultSubagents.find((subagent) => subagent.name === "product-generator")?.systemPrompt,
+    ).toBe("custom product generator prompt");
+
+    const overriddenSubagents = asDefaultSubagents(
+      createDefaultSubagents(
+        {
+          generativeUi: {},
+          productGenerator: { systemPrompt: "explicit product generator prompt" },
+        },
+        {},
+        testPromptLoader,
+      ),
+    );
+    expect(
+      overriddenSubagents.find((subagent) => subagent.name === "product-generator")?.systemPrompt,
+    ).toBe("explicit product generator prompt");
   });
 });

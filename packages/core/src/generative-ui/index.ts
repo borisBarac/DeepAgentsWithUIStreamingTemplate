@@ -1,12 +1,38 @@
 export {
   applyUiUpdate,
+  clarificationResultToQuestionUpdates,
   extractUpdateObjects,
   type NormalizeSpec,
+  normalizeProductCardSpec,
+  normalizeQuestionOption,
   normalizeUiUpdate,
+  PRODUCT_CARD_COMPONENT_NAME,
   parseUpdateLine,
   parseUpdateText,
+  productCardBatchSchema,
+  productCardSchema,
+  productCardsToUiUpdates,
+  type QuestionUpdate,
   StreamingLineBuffer,
+  type UiSpecUpdate,
   type UpdateHandlers,
+  uiUpdateZone,
 } from "./envelope.ts";
-export { composeGenerativeUiPrompt, GENERATIVE_UI_NDJSON_PROMPT } from "./prompt.ts";
-export type { UiUpdate } from "./types.ts";
+export {
+  composeGenerativeUiPrompt,
+  composeProductGeneratorPrompt,
+  GENERATIVE_UI_NDJSON_PROMPT,
+  PRODUCT_CARD_CATALOG_PROMPT,
+} from "./prompt.ts";
+export type {
+  GenerativeUiOptions,
+  MultipleChoiceQuestion,
+  OpenTextQuestion,
+  ProductCard,
+  ProductCardBatch,
+  ProductCardStatus,
+  UiQuestion,
+  UiQuestionOption,
+  UiUpdate,
+  UiZone,
+} from "./types.ts";

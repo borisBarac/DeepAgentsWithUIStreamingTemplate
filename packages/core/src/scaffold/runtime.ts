@@ -1,4 +1,5 @@
 import { createClarificationConfig } from "../clarification/index.ts";
+import { composeProductGeneratorPrompt } from "../generative-ui/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createDefaultCompositeBackend } from "./backend.ts";
 import { DEFAULT_MEMORY_FILE_PATHS } from "./constants.ts";
@@ -12,6 +13,11 @@ export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}
   const clarification = createClarificationConfig(options.clarificationOptions);
   const memoryFilePaths = options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS;
 
+  const baseSystemPrompt = options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification);
+  const systemPrompt = options.generativeUi
+    ? `${baseSystemPrompt}\n\n${composeProductGeneratorPrompt(options.generativeUi.catalogPrompt)}`
+    : baseSystemPrompt;
+
   return {
     architecture: "supervisor-specialists",
     virtualFilesystem: createVirtualFilesystemLayout(),
@@ -21,10 +27,11 @@ export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}
     memory: options.memory ?? [...memoryFilePaths],
     permissions: options.permissions ?? createDefaultPermissions(options.permissionOptions),
     subagents: options.subagents ?? createDefaultSubagents(options, clarification, promptLoader),
-    systemPrompt: options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification),
+    systemPrompt,
     clarification: {
       config: clarification,
       requiredSubagent: "clarifier",
     },
+    generativeUi: options.generativeUi,
   };
 }

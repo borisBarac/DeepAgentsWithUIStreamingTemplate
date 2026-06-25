@@ -9,11 +9,18 @@ import type {
 import type { ImageGenerationServiceContract } from "../../../image-gen/src/index.ts";
 
 import type { ClarificationConfig } from "../clarification/index.ts";
+import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { SandboxBackend } from "../sandbox/index.ts";
 
-export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier" | "image-designer";
+export type SpecialistRole =
+  | "researcher"
+  | "analyst"
+  | "reviewer"
+  | "clarifier"
+  | "image-designer"
+  | "product-generator";
 
 export type VirtualFilesystemLayout = {
   scratch: string;
@@ -44,11 +51,13 @@ export type CreateDefaultSubagentsOptions = {
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
   pythonSandboxBackend?: SandboxBackend;
+  generativeUi?: GenerativeUiOptions;
   researcher?: Partial<SubAgent>;
   analyst?: Partial<SubAgent>;
   reviewer?: Partial<SubAgent>;
   clarifier?: Partial<SubAgent>;
   imageDesigner?: Partial<SubAgent>;
+  productGenerator?: Partial<SubAgent>;
 };
 
 export type DeepAgentBlueprint = {
@@ -62,6 +71,7 @@ export type DeepAgentBlueprint = {
     config: ClarificationConfig;
     requiredSubagent: "clarifier";
   };
+  generativeUi?: GenerativeUiOptions;
 };
 
 export type RuntimeScaffold = DeepAgentBlueprint & {
