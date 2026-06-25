@@ -2,6 +2,7 @@ import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
 import baselinePromptText from "../../prompts/baseline.md" with { type: "text" };
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
 import imageDesignerPromptText from "../../prompts/image-designer.md" with { type: "text" };
+import productGeneratorPromptText from "../../prompts/product-generator.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
 import supervisorPromptText from "../../prompts/supervisor.md" with { type: "text" };
@@ -19,6 +20,7 @@ export interface PromptLoader {
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
   getImageDesignerPrompt(): string;
+  getProductGeneratorPrompt(): string;
   getReviewAgentPrompt(): string;
 }
 
@@ -29,9 +31,29 @@ function renderPromptTemplate(template: string, values: Record<string, string | 
   );
 }
 
+function getCurrentDateTimeContext(): { currentDateTime: string; timezone: string } {
+  const now = new Date();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const humanReadable = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZoneName: "shortOffset",
+    timeZone: timezone,
+  }).format(now);
+
+  return {
+    currentDateTime: `${humanReadable}; ${now.toISOString()}`,
+    timezone,
+  };
+}
+
 export class MarkdownPromptLoader implements PromptLoader {
   getBaselinePrompt(): string {
-    return baselinePromptText;
+    return renderPromptTemplate(baselinePromptText, getCurrentDateTimeContext());
   }
 
   getSupervisorPrompt(config: Partial<ClarificationConfig> = {}): string {
@@ -39,6 +61,7 @@ export class MarkdownPromptLoader implements PromptLoader {
 
     return renderPromptTemplate(supervisorPromptText, {
       maxRounds: clarification.maxRounds,
+      ...getCurrentDateTimeContext(),
     });
   }
 
@@ -61,6 +84,10 @@ export class MarkdownPromptLoader implements PromptLoader {
 
   getImageDesignerPrompt(): string {
     return imageDesignerPromptText;
+  }
+
+  getProductGeneratorPrompt(): string {
+    return productGeneratorPromptText;
   }
 
   getReviewAgentPrompt(): string {
@@ -93,6 +120,9 @@ export const DEFAULT_RESEARCHER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getResearc
 export const DEFAULT_ANALYST_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getAnalystPrompt();
 
 export const DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getImageDesignerPrompt();
+
+export const DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT =
+  DEFAULT_PROMPT_LOADER.getProductGeneratorPrompt();
 
 export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
 

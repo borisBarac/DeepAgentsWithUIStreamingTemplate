@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
+  DEFAULT_BASELINE_SYSTEM_PROMPT,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
   DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
@@ -41,6 +42,20 @@ describe("prompt defaults", () => {
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
       "When a question omits `options`, ask it directly",
+    );
+  });
+
+  it("tells the supervisor to use memory, filesystem layout, and specialist routing", () => {
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("Read `/memory/project-facts.md`");
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "Write only explicit user preferences and stable project facts",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("Put plans in `/plans`");
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "Route evidence gathering to the researcher",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "Submit the candidate final answer to the reviewer",
     );
   });
 
@@ -104,11 +119,54 @@ describe("prompt defaults", () => {
   });
 
   it("uses the default markdown loader for compatibility exports", () => {
-    expect(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 })).toBe(
-      DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+    const stripDateTime = (prompt: string): string =>
+      prompt.replace(/Current date and time \([^)]*\): [^\n]*\n?/g, "");
+
+    expect(stripDateTime(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 }))).toBe(
+      stripDateTime(DEFAULT_SUPERVISOR_SYSTEM_PROMPT),
     );
     expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ maxRounds: 2, questionsPerRound: 3 })).toBe(
       DEFAULT_CLARIFIER_SYSTEM_PROMPT,
     );
+  });
+
+  it("injects the current date, time, and timezone into the baseline and supervisor prompts", () => {
+    const before = Date.now();
+    const baseline = DEFAULT_PROMPT_LOADER.getBaselinePrompt();
+    const supervisor = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 });
+    const after = Date.now();
+
+    const extractIsoMs = (prompt: string): number => {
+      const match = prompt.match(/Current date and time \([^)]*\): .*; (\S+)/);
+      expect(match).not.toBeNull();
+      return new Date(match?.[1] as string).getTime();
+    };
+
+    for (const prompt of [baseline, supervisor]) {
+      expect(prompt).not.toContain("{{currentDateTime}}");
+      expect(prompt).not.toContain("{{timezone}}");
+      expect(prompt).toContain("Current date and time (");
+
+      const ts = extractIsoMs(prompt);
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(after);
+    }
+
+    expect(supervisor).toContain("If clarification remains unresolved after 2 rounds");
+  });
+
+  it("renders the timestamp at call time rather than freezing it at module load", async () => {
+    const constantIso = DEFAULT_BASELINE_SYSTEM_PROMPT.match(
+      /Current date and time \([^)]*\): .*; (\S+)/,
+    )?.[1] as string;
+
+    do {
+      await Bun.sleep(0);
+    } while (Date.now() <= new Date(constantIso).getTime());
+
+    const fresh = DEFAULT_PROMPT_LOADER.getBaselinePrompt();
+    const freshIso = fresh.match(/Current date and time \([^)]*\): .*; (\S+)/)?.[1] as string;
+
+    expect(new Date(freshIso).getTime()).toBeGreaterThan(new Date(constantIso).getTime());
   });
 });
