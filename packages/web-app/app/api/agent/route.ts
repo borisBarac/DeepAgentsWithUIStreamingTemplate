@@ -6,8 +6,8 @@ import {
 } from "@deep-agent-template/core/generative-ui";
 import { NextResponse } from "next/server";
 
-import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
 import { createAgentProvider } from "../../../src/server/agent-provider.ts";
+import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
 import type { ChatMessage } from "../../../src/ui/types.ts";
 
 export const runtime = "nodejs";

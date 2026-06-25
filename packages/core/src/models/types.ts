@@ -1,7 +1,7 @@
 import type { ChatOpenAI, ChatOpenAIFields } from "@langchain/openai";
 import type { ChatOpenRouter, ChatOpenRouterInput } from "@langchain/openrouter";
 
-import type { ModelRole } from "./constants.ts";
+import type { ModelCategory, ModelRole } from "./constants.ts";
 
 export type OpenRouterConnectionConfig = {
   provider: "openrouter";
@@ -32,18 +32,26 @@ export type ModelProfileConfig = {
   providerOptions?: Record<string, unknown>;
 };
 
+/**
+ * A concrete model per category. All three categories (fast/normal/pro) must be
+ * defined; multiple categories may point at the same connection + model ID when
+ * no differentiation is desired.
+ */
+export type ModelCategoryConfigs = Record<ModelCategory, ModelProfileConfig>;
+
 export type ModelRuntimeConfig = {
   connections: Record<string, ModelConnectionConfig>;
-  models: Record<string, ModelProfileConfig>;
+  categories: ModelCategoryConfigs;
   assignments: {
-    default?: string;
-  } & Partial<Record<ModelRole, string>>;
+    default?: ModelCategory;
+  } & Partial<Record<ModelRole, ModelCategory>>;
 };
 
 export type RuntimeChatModel = ChatOpenRouter | ChatOpenAI;
 
 export type ModelRuntime = {
-  getModel(profile: string): RuntimeChatModel;
+  getModelForCategory(category: ModelCategory): RuntimeChatModel;
+  getCategoryForRole(role: ModelRole): ModelCategory;
   getModelForRole(role: ModelRole): RuntimeChatModel;
   hasModelForRole(role: ModelRole): boolean;
 };

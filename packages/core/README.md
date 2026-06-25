@@ -19,11 +19,25 @@ The default export path is intentionally a scaffold, not a finished product. It 
 
 ## Environment
 
-Required for live agent calls:
+Required for live agent calls (OpenAI-compatible endpoint such as DeepSeek, OpenAI, Ollama, or vLLM):
 
 ```sh
+LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=...
+LLM_MODEL=deepseek-v4-flash
 ```
+
+`LLM_MODEL` is the **normal** tier. Two optional tiers let you route cheap or
+heavy-reasoning roles to different models on the same endpoint. Each falls back
+to `LLM_MODEL` when unset, so leaving them blank runs every role on one model:
+
+```sh
+FAST_MODEL=deepseek-v4-flash   # clarifier, guardrail classifier
+PRO_MODEL=deepseek-v4-flash    # supervisor, analyst, reviewer, finalizer
+```
+
+Core does not load `.env` files; applications pass keys and endpoints from their
+own configuration or rely on the provider SDK's environment-variable conventions.
 
 Required when the default safety guardrail is enabled:
 
@@ -75,12 +89,61 @@ The smoke script uses an intentionally invalid OpenRouter key, catches the expec
 and prints a unique marker that can be searched in the configured LangSmith project. It sets
 `LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
 
-## Centralized model configuration
+## Model configuration
 
-Models are configured exclusively through `createModelRuntime(...)`, which wires named
-OpenAI-compatible connections to reusable model profiles and assigns them by agent role. Core does
-not load `.env` files; pass keys and endpoints from the application or leave them undefined to use
-the provider SDK's environment-variable conventions.
+Models are organized around three **categories** — `fast`, `normal`, and `pro` —
+and every agent role resolves to exactly one category. A category maps to one
+concrete model (a connection plus a model id); roles map to categories.
+
+```
+role ──(assignments)──▶ category ──(categories)──▶ concrete model
+```
+
+### From environment variables
+
+The simplest path: `createModelRuntimeFromEnv()` reads `LLM_BASE_URL`,
+`LLM_API_KEY`, `LLM_MODEL` (normal), and the optional `FAST_MODEL` / `PRO_MODEL`
+from `process.env`, and applies the default role→category table below. With no
+optional vars set, every role runs on `LLM_MODEL`.
+
+```ts
+import {
+  createModelRuntimeFromEnv,
+  createScaffoldedAgent,
+} from "@deep-agent-template/core";
+
+const modelRuntime = createModelRuntimeFromEnv();
+const agent = createScaffoldedAgent({ modelRuntime });
+```
+
+The CLI and web app both use this factory. The CLI's `--model` flag (and a
+`normalModel` option) override the normal tier; pass `profiles` to set
+per-category options like `temperature` or `providerOptions`, and `assignments`
+to override the default role→category mapping.
+
+### Default role → category table
+
+| Category | Roles |
+|----------|-------|
+| `fast`   | `clarifier`, *(task-scope guardrail classifier)* |
+| `normal` | `baseline`, `researcher`, `image-designer`, `product-generator`, `coder` |
+| `pro`    | `supervisor`, `analyst`, `reviewer`, `finalizer` |
+
+`assignments.default` resolves to `normal`. The guardrail task-scope classifier
+always uses the `fast` category (cheap structured-output classification).
+
+Explicit `subagentOverrides.<role>.model` values still win over the runtime's
+category resolution for a single specialist instance.
+
+### `createModelRuntime(config)`
+
+For full control — multiple connections, per-category tuning, or a custom
+role→category mapping — build the runtime directly with `createModelRuntime`.
+The config has three parts:
+
+- `connections`: named provider endpoints. Supported providers are `openai-compatible` and `openrouter`.
+- `categories`: one `ModelProfileConfig` per category (`fast`, `normal`, `pro`). Each points at one connection and sets the concrete model id plus optional runtime settings like `temperature`, `maxTokens`, `maxRetries`, `timeout`, and `providerOptions`. All three categories are required; point several at the same model when no differentiation is desired.
+- `assignments`: maps roles (and `default`) to categories. `assignments.default` falls back to `normal`.
 
 ```ts
 import { createModelRuntime, createScaffoldedAgent } from "@deep-agent-template/core";
@@ -92,78 +155,42 @@ const modelRuntime = createModelRuntime({
       apiKey: process.env.LLM_API_KEY,
       baseURL: "https://api.deepseek.com",
     },
-    local: {
-      provider: "openai-compatible",
-      apiKey: process.env.LOCAL_API_KEY,
-      baseURL: "http://localhost:11434/v1",
-    },
   },
-  models: {
-    default: {
-      connection: "primary",
-      model: "deepseek-v4-flash",
-    },
-    fast: {
-      connection: "primary",
-      model: "deepseek-v4-flash",
-      temperature: 0,
-    },
-    localQwen: {
-      connection: "local",
-      model: "qwen3",
-      temperature: 0,
-      maxTokens: 4096,
-    },
+  categories: {
+    fast: { connection: "primary", model: "deepseek-v4-flash", temperature: 0 },
+    normal: { connection: "primary", model: "deepseek-v4-flash" },
+    pro: { connection: "primary", model: "deepseek-v4-flash", maxTokens: 8192 },
   },
   assignments: {
-    default: "default",
+    default: "normal",
     clarifier: "fast",
-    researcher: "fast",
-    reviewer: "default",
+    reviewer: "pro",
   },
 });
 
 const agent = createScaffoldedAgent({ modelRuntime });
 
-modelRuntime.getModel("fast");
+modelRuntime.getModelForCategory("fast");
+modelRuntime.getCategoryForRole("reviewer"); // "pro"
 modelRuntime.getModelForRole("researcher");
 ```
 
-Supported roles are `baseline`, `supervisor`, `clarifier`, `researcher`, `analyst`,
-`reviewer`, `coder`, and `finalizer`. A role-specific assignment wins over `assignments.default`.
-Models are constructed on first lookup and cached by profile.
-
-Explicit `subagentOverrides.<role>.model` values still win over runtime assignments.
-
-### `createModelRuntime(config)`
-
-`createModelRuntime` creates the model registry used by baseline, scaffolded, and specialist
-agents. The registry separates provider connectivity from model selection so applications can define
-one set of credentials and then assign different model profiles to different agent roles.
-
-The config has three parts:
-
-- `connections`: named provider endpoints. Supported providers are `openai-compatible` and `openrouter`.
-- `models`: named model profiles. Each profile points at one connection and sets the concrete model id plus optional runtime settings like `temperature`, `maxTokens`, `maxRetries`, `timeout`, and `providerOptions`.
-- `assignments`: maps roles to model profile names. `assignments.default` is the fallback for any role without an explicit assignment.
-
 The returned runtime exposes:
 
-- `getModel(profile)`: returns the chat model for a named profile.
-- `getModelForRole(role)`: resolves the role assignment, falling back to `assignments.default`.
-- `hasModelForRole(role)`: reports whether a role can resolve through an explicit assignment or the default.
+- `getModelForCategory(category)`: returns the chat model for a category.
+- `getCategoryForRole(role)`: resolves the role assignment (or `default`, then `normal`) to a category.
+- `getModelForRole(role)`: `getModelForCategory(getCategoryForRole(role))`.
+- `hasModelForRole(role)`: reports whether a role has an explicit assignment or a `default`.
 
-Models are lazy and cached by profile name. The first lookup constructs the underlying LangChain chat
-model; later lookups for the same profile return the same instance.
+Models are lazy and cached by category. The first lookup constructs the
+underlying LangChain chat model; later lookups for the same category return the
+same instance.
 
-Validation happens when the runtime is created. The runtime rejects empty connection/profile names,
-unknown providers, invalid OpenAI-compatible `baseURL` values, profiles that reference unknown
-connections, assignments that reference unknown profiles, and assignments for unsupported roles.
-
-`getModelForRole(role)` throws if the role is unsupported, or if the role has no assignment and no
-`assignments.default` exists. Use role assignments for normal scaffold wiring, and use
-`subagentOverrides.<role>.model` only when one specialist instance needs to bypass the runtime's
-standard assignment.
+Validation happens when the runtime is created. It rejects empty connection
+names, unknown providers, invalid OpenAI-compatible `baseURL` values, categories
+that reference unknown connections, missing categories, assignments that
+reference unknown categories, and assignments for unsupported roles.
+`getModelForRole(role)` throws if the role is unsupported.
 
 ## Linkloom MCP research tools
 
@@ -175,13 +202,11 @@ deterministically at the end of the enclosing scope:
 ```ts
 import {
   connectLinkloomResearchTools,
-  createModelRuntime,
+  createModelRuntimeFromEnv,
   createScaffoldedAgent,
 } from "@deep-agent-template/core";
 
-const modelRuntime = createModelRuntime({
-  // Your connections, model profiles, and role assignments.
-});
+const modelRuntime = createModelRuntimeFromEnv();
 await using linkloom = await connectLinkloomResearchTools();
 const agent = createScaffoldedAgent({
   modelRuntime,
@@ -320,7 +345,7 @@ The scaffolded and baseline factories install two LangChain middleware guardrail
 `guardrails: false` only when a caller explicitly needs to opt out:
 
 - `OpenAIContentSafetyGuardrail` runs before the agent and uses OpenAI moderation (`omni-moderation-latest`) to block unsafe user requests.
-- `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope.
+- `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope. The scaffolded and baseline factories default this classifier to the `fast` model category.
 
 Task-scope policy is controlled by markdown files under `packages/core/guardrails/`. These files are
 loaded by `DEFAULT_GUARDRAIL_POLICY_LOADER` and passed into `TaskScopeGuardrailMiddleware` before the

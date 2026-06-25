@@ -1,5 +1,5 @@
 import { createBaselineAgent } from "@deep-agent-template/core/agent/baseline";
-import { createModelRuntime } from "@deep-agent-template/core/models";
+import { createModelRuntimeFromEnv } from "@deep-agent-template/core/models";
 
 import { catalogPrompt } from "../ui/schema.ts";
 
@@ -34,28 +34,7 @@ export function getAgentProviderMode(): AgentProviderMode {
 }
 
 function createSimpleAgent() {
-  const baseURL = process.env.LLM_BASE_URL?.trim();
-  const apiKey = process.env.LLM_API_KEY?.trim();
-  const model = process.env.LLM_MODEL?.trim() || "deepseek-v4-flash";
-
-  if (!baseURL) {
-    throw new Error("LLM_BASE_URL is required.");
-  }
-  if (!apiKey) {
-    throw new Error("LLM_API_KEY is required.");
-  }
-
-  const modelRuntime = createModelRuntime({
-    connections: {
-      default: { provider: "openai-compatible", apiKey, baseURL },
-    },
-    models: {
-      // Model emits raw NDJSON (one UiUpdate per line); no response_format
-      // constraint needed. See packages/core/src/generative-ui/prompt.ts.
-      default: { connection: "default", model },
-    },
-    assignments: { default: "default" },
-  });
+  const modelRuntime = createModelRuntimeFromEnv();
 
   return createBaselineAgent({
     guardrails: false,

@@ -63,7 +63,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
   const guardrailDecision = createGuardrailDecision(
     guardrails === false
       ? { enabled: false, middleware }
-      : { ...guardrails, taskScopeModel: chatModel, middleware },
+      : { ...guardrails, taskScopeModel: modelRuntime.getModelForCategory("fast"), middleware },
   );
 
   return createDeepAgent({

@@ -30,7 +30,7 @@ export function createBaselineAgent(options: CreateBaselineAgentOptions): DeepAg
   const guardrailDecision = createGuardrailDecision(
     guardrails === false
       ? { enabled: false, middleware }
-      : { ...guardrails, taskScopeModel: chatModel, middleware },
+      : { ...guardrails, taskScopeModel: modelRuntime.getModelForCategory("fast"), middleware },
   );
 
   const baselinePrompt = promptLoader.getBaselinePrompt();

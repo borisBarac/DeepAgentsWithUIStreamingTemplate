@@ -2,8 +2,12 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatOpenRouter } from "@langchain/openrouter";
 
 import {
+  DEFAULT_MODEL_CATEGORY,
   DEFAULT_SITE_NAME,
+  MODEL_CATEGORIES,
   MODEL_ROLES,
+  type ModelCategory,
+  type ModelRole,
   OPENAI_COMPATIBLE_PROVIDER,
   OPENROUTER_PROVIDER,
 } from "./constants.ts";
@@ -53,55 +57,52 @@ function createRuntimeModel(
 }
 
 /**
- * Creates a lazy model registry for named profiles and role-based assignments.
+ * Creates a lazy model registry organized around three categories
+ * (fast/normal/pro). Connections describe provider credentials and endpoints,
+ * `categories` selects a concrete model per category on one connection, and
+ * `assignments` map agent roles to categories. Models are constructed on first
+ * lookup and then cached by category, so repeated calls return the same chat
+ * model instance.
  *
- * Connections describe provider credentials and endpoints, model profiles select
- * a concrete model on one connection, and assignments map agent roles to those
- * profiles. Models are constructed on first lookup and then cached by profile
- * name, so repeated `getModel(...)` or `getModelForRole(...)` calls return the
- * same chat model instance.
- *
- * Role-specific assignments take precedence over `assignments.default`. If a
- * role has no explicit assignment and no default is configured,
- * `getModelForRole(...)` throws.
+ * Role resolution: `assignments[role] ?? assignments.default ?? "normal"`, then
+ * the resolved category is turned into a chat model via `categories[category]`.
  */
 export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
   validateRuntimeConfig(config);
-  const cache = new Map<string, RuntimeChatModel>();
+  const cache = new Map<ModelCategory, RuntimeChatModel>();
 
-  const getModel = (profileName: string): RuntimeChatModel => {
-    const profile = config.models[profileName];
-    if (!profile) {
-      throw new Error(`Unknown model profile "${profileName}".`);
+  const getModelForCategory = (category: ModelCategory): RuntimeChatModel => {
+    if (!MODEL_CATEGORIES.includes(category)) {
+      throw new Error(`Unknown model category "${String(category)}".`);
     }
-    const cached = cache.get(profileName);
+    const cached = cache.get(category);
     if (cached !== undefined) {
       return cached;
     }
+    const profile = config.categories[category];
     const connection = config.connections[profile.connection];
     if (!connection) {
       throw new Error(
-        `Model profile "${profileName}" references unknown connection "${profile.connection}".`,
+        `Category "${category}" references unknown connection "${profile.connection}".`,
       );
     }
     const model = createRuntimeModel(connection, profile);
-    cache.set(profileName, model);
+    cache.set(category, model);
     return model;
   };
 
+  const getCategoryForRole = (role: ModelRole): ModelCategory => {
+    if (!MODEL_ROLES.includes(role)) {
+      throw new Error(`Unknown model role "${String(role)}".`);
+    }
+    return config.assignments[role] ?? config.assignments.default ?? DEFAULT_MODEL_CATEGORY;
+  };
+
   return {
-    getModel,
+    getModelForCategory,
+    getCategoryForRole,
     getModelForRole(role) {
-      if (!MODEL_ROLES.includes(role)) {
-        throw new Error(`Unknown model role "${String(role)}".`);
-      }
-      const profileName = config.assignments[role] ?? config.assignments.default;
-      if (!profileName) {
-        throw new Error(
-          `No model assignment configured for role "${role}" and no default assignment is available.`,
-        );
-      }
-      return getModel(profileName);
+      return getModelForCategory(getCategoryForRole(role));
     },
     hasModelForRole(role) {
       if (!MODEL_ROLES.includes(role)) {

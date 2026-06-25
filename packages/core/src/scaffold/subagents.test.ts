@@ -196,18 +196,19 @@ describe("default subagents", () => {
           baseURL: "https://api.openai.com/v1",
         },
       },
-      models: {
-        primary: { connection: "default", model: "primary-model" },
+      categories: {
         fast: { connection: "default", model: "fast-model" },
+        normal: { connection: "default", model: "normal-model" },
+        pro: { connection: "default", model: "pro-model" },
       },
       assignments: {
-        default: "primary",
+        default: "normal",
         clarifier: "fast",
         analyst: "fast",
         "image-designer": "fast",
       },
     });
-    const explicitReviewerModel = runtime.getModel("fast");
+    const explicitReviewerModel = runtime.getModelForCategory("fast");
     const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
       createDefaultSubagents({
         imageGenerationService: testImageGenerationService,

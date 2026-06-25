@@ -79,7 +79,7 @@ describe("createScaffoldedAgent", () => {
       modelRuntime,
     });
 
-    expect((agent.options.model as { model?: string }).model).toBe("supervisor-model");
+    expect((agent.options.model as { model?: string }).model).toBe("pro-model");
   });
 
   it("uses the agent store for the default memory backend", async () => {
@@ -178,7 +178,7 @@ describe("createBaselineAgent", () => {
       modelRuntime: createTestModelRuntime(),
     });
 
-    expect((agent.options.model as { model?: string }).model).toBe("baseline-model");
+    expect((agent.options.model as { model?: string }).model).toBe("normal-model");
   });
 
   it("appends the generative-UI prompt when generativeUi is set", () => {

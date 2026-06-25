@@ -5,15 +5,15 @@ export function createTestModelRuntime() {
     connections: {
       openrouter: { provider: "openrouter", apiKey: "test-key" },
     },
-    models: {
-      baseline: { connection: "openrouter", model: "baseline-model" },
-      supervisor: { connection: "openrouter", model: "supervisor-model" },
-      specialist: { connection: "openrouter", model: "specialist-model" },
+    categories: {
+      fast: { connection: "openrouter", model: "fast-model" },
+      normal: { connection: "openrouter", model: "normal-model" },
+      pro: { connection: "openrouter", model: "pro-model" },
     },
     assignments: {
-      default: "specialist",
-      baseline: "baseline",
-      supervisor: "supervisor",
+      default: "normal",
+      baseline: "normal",
+      supervisor: "pro",
     },
   });
 }

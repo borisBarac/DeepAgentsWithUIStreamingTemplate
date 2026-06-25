@@ -159,9 +159,18 @@ export {
   type UserMemoryNamespace,
 } from "./memory/index.ts";
 export {
+  type CreateModelRuntimeFromEnvOptions,
   createModelRuntime,
+  createModelRuntimeFromEnv,
+  createModelRuntimeFromEnvValues,
+  DEFAULT_MODEL_CATEGORY,
+  DEFAULT_ROLE_CATEGORY_ASSIGNMENTS,
+  MODEL_CATEGORIES,
   MODEL_ROLES,
+  type ModelCategory,
+  type ModelCategoryConfigs,
   type ModelConnectionConfig,
+  type ModelEnv,
   type ModelProfileConfig,
   type ModelRole,
   type ModelRuntime,

@@ -7,7 +7,7 @@ import readline from "node:readline/promises";
 import {
   type CreateRuntimeScaffoldOptions,
   createBaselineAgent,
-  createModelRuntime,
+  createModelRuntimeFromEnvValues,
   createRuntimeScaffold,
   createScaffoldedAgent,
   type RuntimeScaffold,
@@ -100,6 +100,11 @@ Environment:
   LLM_BASE_URL        Required. Your OpenAI-compatible endpoint
                       (e.g. https://api.deepseek.com).
   LLM_API_KEY         Required. Authenticates against the LLM_BASE_URL endpoint.
+  LLM_MODEL           Model ID for the "normal" tier (default: deepseek-v4-flash).
+  FAST_MODEL          Optional. Model ID for the "fast" tier (clarifier, guardrail).
+                      Falls back to LLM_MODEL when unset.
+  PRO_MODEL           Optional. Model ID for the "pro" tier (supervisor, analyst,
+                      reviewer, finalizer). Falls back to LLM_MODEL when unset.
   USE_FAKE_IMAGE_PROVIDER  Optional (scaffold only). "true" (default) uses a fake
                       image provider; "false" uses the real Replicate provider.
   REPLICATE_API_TOKEN  Required only when USE_FAKE_IMAGE_PROVIDER="false".
@@ -112,21 +117,25 @@ Examples:
 
 const defaultDependencies: CliDependencies = {
   createAgent: ({ apiKey, baseURL, model, runtime, systemPrompt }) => {
-    const modelRuntime = createModelRuntime({
-      connections: {
-        default: { provider: "openai-compatible", apiKey, baseURL },
+    const normalModel = model ?? process.env.LLM_MODEL?.trim() ?? DEFAULT_MODEL_ID;
+    const modelRuntime = createModelRuntimeFromEnvValues(
+      {
+        baseURL,
+        apiKey,
+        normalModel,
+        fastModel: process.env.FAST_MODEL?.trim() || normalModel,
+        proModel: process.env.PRO_MODEL?.trim() || normalModel,
       },
-      models: {
-        default: {
-          connection: "default",
-          model: model ?? DEFAULT_MODEL_ID,
-          providerOptions: {
-            modelKwargs: { thinking: { type: "disabled" } },
-          },
+      {
+        // Disable extended thinking on every category to match the prior
+        // single-model behavior; pass per-category overrides here if desired.
+        profiles: {
+          fast: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
+          normal: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
+          pro: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
         },
       },
-      assignments: { default: "default" },
-    });
+    );
     return runtime === "scaffolded"
       ? createScaffoldedAgent({
           modelRuntime,

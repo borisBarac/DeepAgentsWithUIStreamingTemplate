@@ -1,5 +1,7 @@
 import {
+  MODEL_CATEGORIES,
   MODEL_ROLES,
+  type ModelCategory,
   type ModelRole,
   OPENAI_COMPATIBLE_PROVIDER,
   OPENROUTER_PROVIDER,
@@ -27,13 +29,9 @@ export function validateBaseURL(connectionName: string, baseURL: string): void {
 
 export function validateRuntimeConfig(config: ModelRuntimeConfig): void {
   const connectionNames = Object.keys(config.connections);
-  const profileNames = Object.keys(config.models);
 
   if (connectionNames.length === 0) {
     throw new Error("Model runtime requires at least one named connection.");
-  }
-  if (profileNames.length === 0) {
-    throw new Error("Model runtime requires at least one named model profile.");
   }
 
   for (const name of connectionNames) {
@@ -52,27 +50,37 @@ export function validateRuntimeConfig(config: ModelRuntimeConfig): void {
     }
   }
 
-  for (const name of profileNames) {
-    assertValidName(name, "Model profile");
-    const profile = config.models[name];
-    if (!profile) continue;
+  for (const category of MODEL_CATEGORIES) {
+    const profile = config.categories[category];
+    if (!profile) {
+      throw new Error(`Model runtime must define a "${category}" category.`);
+    }
     if (profile.model.trim() === "") {
-      throw new Error(`Model profile "${name}" must provide a non-empty model ID.`);
+      throw new Error(`Category "${category}" must provide a non-empty model ID.`);
     }
     if (!config.connections[profile.connection]) {
       throw new Error(
-        `Model profile "${name}" references unknown connection "${profile.connection}".`,
+        `Category "${category}" references unknown connection "${profile.connection}".`,
       );
     }
   }
 
-  for (const [role, profileName] of Object.entries(config.assignments)) {
+  const extraCategories = Object.keys(config.categories).filter(
+    (name): name is ModelCategory => !MODEL_CATEGORIES.includes(name as ModelCategory),
+  );
+  if (extraCategories.length > 0) {
+    throw new Error(
+      `Unknown model categories: ${extraCategories.join(", ")}. Allowed: ${MODEL_CATEGORIES.join(", ")}.`,
+    );
+  }
+
+  for (const [role, category] of Object.entries(config.assignments)) {
     if (role !== "default" && !MODEL_ROLES.includes(role as ModelRole)) {
       throw new Error(`Model assignment uses unknown role "${role}".`);
     }
-    if (typeof profileName !== "string" || !config.models[profileName]) {
+    if (typeof category !== "string" || !MODEL_CATEGORIES.includes(category as ModelCategory)) {
       throw new Error(
-        `Model assignment "${role}" references unknown model profile "${String(profileName)}".`,
+        `Model assignment "${role}" references unknown model category "${String(category)}".`,
       );
     }
   }

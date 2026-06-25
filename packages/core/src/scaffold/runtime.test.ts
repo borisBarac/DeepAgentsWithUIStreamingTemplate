@@ -164,12 +164,13 @@ describe("runtime scaffold defaults", () => {
           baseURL: "https://api.openai.com/v1",
         },
       },
-      models: {
-        primary: { connection: "default", model: "primary-model" },
+      categories: {
         fast: { connection: "default", model: "fast-model" },
+        normal: { connection: "default", model: "normal-model" },
+        pro: { connection: "default", model: "pro-model" },
       },
       assignments: {
-        default: "primary",
+        default: "normal",
         clarifier: "fast",
         "image-designer": "fast",
       },
@@ -180,7 +181,7 @@ describe("runtime scaffold defaults", () => {
     }).subagents as SubAgent[];
 
     expect((clarifier?.model as { model?: string }).model).toBe("fast-model");
-    expect((researcher?.model as { model?: string }).model).toBe("primary-model");
+    expect((researcher?.model as { model?: string }).model).toBe("normal-model");
     expect((imageDesigner?.model as { model?: string }).model).toBe("fast-model");
   });
 

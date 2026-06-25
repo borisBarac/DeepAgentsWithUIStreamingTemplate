@@ -16,18 +16,16 @@ const modelRuntime = createModelRuntime({
   connections: {
     openrouter: { provider: "openrouter", apiKey: "intentionally-invalid-openrouter-key" },
   },
-  models: {
-    smoke: {
-      connection: "openrouter",
-      model: "openai/gpt-4o-mini",
-      maxRetries: 0,
-    },
+  categories: {
+    fast: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
+    normal: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
+    pro: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
   },
-  assignments: { default: "smoke" },
+  assignments: { default: "normal" },
 });
 
 try {
-  await modelRuntime.getModel("smoke").invoke("Reply with: tracing verified", {
+  await modelRuntime.getModelForCategory("normal").invoke("Reply with: tracing verified", {
     runName: "deep-agent-template-langsmith-error-smoke",
     tags: ["langsmith-smoke", "expected-error"],
     metadata: { verificationId },

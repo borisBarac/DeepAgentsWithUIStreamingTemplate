@@ -21,8 +21,22 @@ export function createDefaultModelRuntime(thinking: boolean) {
         baseURL: LLM_BASE_URL ?? "",
       },
     },
-    models: {
-      default: {
+    categories: {
+      fast: {
+        connection: "default",
+        model: MODEL_ID,
+        providerOptions: {
+          modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
+        },
+      },
+      normal: {
+        connection: "default",
+        model: MODEL_ID,
+        providerOptions: {
+          modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
+        },
+      },
+      pro: {
         connection: "default",
         model: MODEL_ID,
         providerOptions: {
@@ -30,7 +44,7 @@ export function createDefaultModelRuntime(thinking: boolean) {
         },
       },
     },
-    assignments: { default: "default" },
+    assignments: { default: "normal" },
   });
 }
 
