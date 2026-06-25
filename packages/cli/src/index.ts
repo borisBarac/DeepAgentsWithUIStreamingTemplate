@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+// USED FOR DEV TESTING
+
 import readline from "node:readline/promises";
 
 import {

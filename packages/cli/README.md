@@ -1,4 +1,4 @@
-# CLI
+# CLI - USED FOR DEV TESTING
 
 A thin Bun-based command-line frontend for `@deep-agent-template/core`. It exposes two subcommands — `baseline` and `scaffold` — that resolve model credentials from the environment, invoke the corresponding core agent, and print the final text response. Either command can also drop into a stateless REPL when no prompt is supplied.
 
