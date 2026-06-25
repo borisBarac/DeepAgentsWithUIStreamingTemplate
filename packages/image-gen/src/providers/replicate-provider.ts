@@ -48,6 +48,17 @@ function normalizeOutput(output: unknown): string {
   return url;
 }
 
+function createImageInput(
+  request: ImageGenerationGenerateRequest | ImageGenerationEditRequest,
+): Record<string, unknown> {
+  return {
+    prompt: request.prompt,
+    ...(request.width !== undefined && { width: request.width }),
+    ...(request.height !== undefined && { height: request.height }),
+    ...("imageUrl" in request && { input_image: request.imageUrl }),
+  };
+}
+
 export class ReplicateImageGenerationProvider implements ImageGenerationProvider {
   public readonly generationModel: `${string}/${string}` | `${string}/${string}:${string}`;
   public readonly editModel: `${string}/${string}` | `${string}/${string}:${string}`;
@@ -64,7 +75,7 @@ export class ReplicateImageGenerationProvider implements ImageGenerationProvider
 
   public async generate(request: ImageGenerationGenerateRequest): Promise<string> {
     const output = await this.#client.run(this.generationModel, {
-      input: { prompt: request.prompt },
+      input: createImageInput(request),
       signal: request.signal,
     });
     return normalizeOutput(output);
@@ -72,7 +83,7 @@ export class ReplicateImageGenerationProvider implements ImageGenerationProvider
 
   public async edit(request: ImageGenerationEditRequest): Promise<string> {
     const output = await this.#client.run(this.editModel, {
-      input: { prompt: request.prompt, input_image: request.imageUrl },
+      input: createImageInput(request),
       signal: request.signal,
     });
     return normalizeOutput(output);

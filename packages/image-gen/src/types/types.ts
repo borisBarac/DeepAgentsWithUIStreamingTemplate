@@ -1,11 +1,15 @@
 export interface ImageGenerationGenerateRequest {
   prompt: string;
+  width?: number;
+  height?: number;
   signal?: AbortSignal;
 }
 
 export interface ImageGenerationEditRequest {
   prompt: string;
   imageUrl: string;
+  width?: number;
+  height?: number;
   signal?: AbortSignal;
 }
 

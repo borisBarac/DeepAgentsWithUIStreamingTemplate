@@ -40,6 +40,37 @@ describe("ReplicateImageGenerationProvider", () => {
     ]);
   });
 
+  it("passes optional image dimensions through to Replicate", async () => {
+    const calls: Array<{ input: object }> = [];
+    const client: ReplicateCompatibleClient = {
+      async run(_model, options) {
+        calls.push({ input: options.input });
+        return ["https://example.com/output.png"];
+      },
+    };
+    const provider = new ReplicateImageGenerationProvider({ client });
+
+    await provider.generate({ prompt: "Generate", width: 300, height: 300 });
+    await provider.edit({
+      prompt: "Edit",
+      imageUrl: "https://example.com/input.png",
+      width: 300,
+      height: 300,
+    });
+
+    expect(calls).toEqual([
+      { input: { prompt: "Generate", width: 300, height: 300 } },
+      {
+        input: {
+          prompt: "Edit",
+          width: 300,
+          height: 300,
+          input_image: "https://example.com/input.png",
+        },
+      },
+    ]);
+  });
+
   it("supports model overrides and FileOutput values", async () => {
     const models: string[] = [];
     const client: ReplicateCompatibleClient = {
