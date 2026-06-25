@@ -1,7 +1,3 @@
-[agents.web-dev]
-description = "Frontend dev agent. Uses the chrome-devtools MCP to inspect the running app and edit frontend code to fix UI bugs."
-config_file = "agents/web-dev.toml"
-
 [mcp_servers.chrome-devtools]
 command = "npx"
 args = ["-y", "chrome-devtools-mcp@latest"]
