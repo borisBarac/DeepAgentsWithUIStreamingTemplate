@@ -280,10 +280,10 @@ describe("memory backend routing", () => {
     const backend = createDefaultCompositeBackend({ defaultBackend, memoryBackend });
 
     expect(backend).toBeInstanceOf(CompositeBackend);
-    expect(backend.routePrefixes).toEqual([DEFAULT_MEMORY_ROOT]);
+    expect(backend.routePrefixes).toEqual([`${DEFAULT_MEMORY_ROOT}/`]);
     const routes = (backend as unknown as { routes: Record<string, unknown> }).routes;
-    expect(routes[DEFAULT_MEMORY_ROOT]).toBeDefined();
-    expect(routes[DEFAULT_MEMORY_ROOT]).not.toBe(defaultBackend);
+    expect(routes[`${DEFAULT_MEMORY_ROOT}/`]).toBeDefined();
+    expect(routes[`${DEFAULT_MEMORY_ROOT}/`]).not.toBe(defaultBackend);
   });
 
   it("creates a user-scoped StoreBackend", () => {

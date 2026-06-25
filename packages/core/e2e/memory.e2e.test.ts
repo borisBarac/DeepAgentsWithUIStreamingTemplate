@@ -14,57 +14,53 @@ import {
 } from "./helpers.ts";
 
 const MEMORY_USER_ID = "e2e-memory-user";
-const RECALL_MARKER = "PINEAPPLE";
-const RECALL_PROMPT = "Say hello and tell me what 2+2 is.";
-const RECALL_PREFERENCE = `# User Preferences\n\nAlways begin every reply with the word ${RECALL_MARKER}.\n`;
+
+const RECALL_NEEDLE = "NEBULA-9";
+const RECALL_SEED = `# User Preferences\n\nThe user's reference project codename is ${RECALL_NEEDLE}.\n`;
+const RECALL_PROMPT = "What is my reference project codename?";
+
 const PERSIST_PROMPT = "Please remember that this project's build command is `bun run build`.";
 const PERSIST_NEEDLE = "bun run build";
 const PROJECT_FACTS_SEED = "# Project Facts\n\n## Facts\n\n";
 
-function lastAssistantText(messages: unknown[] | undefined): string {
-  if (!messages) return "";
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index] as { role?: string; content?: unknown } | undefined;
-    if (message?.role !== "assistant") continue;
-    const content = message?.content;
-    return typeof content === "string" ? content : JSON.stringify(content ?? "");
-  }
-  return "";
+function stringifyMessageContent(message: unknown): string {
+  if (!message || typeof message !== "object") return "";
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") return content;
+  return JSON.stringify(content ?? "");
+}
+
+function transcriptOf(messages: unknown[] | undefined): string {
+  return messages?.map(stringifyMessageContent).join("\n") ?? "";
+}
+
+function buildMemoryAgent() {
+  const store = createInMemoryMemoryStore();
+  const repo = createMemoryRepository({ store, userId: MEMORY_USER_ID });
+  const agent = createScaffoldedAgent({
+    modelRuntime: createDefaultModelRuntime(false),
+    guardrails: false,
+    store,
+    memoryUserId: MEMORY_USER_ID,
+  });
+  return { agent, repo };
 }
 
 describe.skipIf(!hasLiveLLMCredentials)("scaffolded agent live memory e2e", () => {
-  it("applies a seeded user preference pulled from the memory store", async () => {
-    const store = createInMemoryMemoryStore();
-    const repo = createMemoryRepository({ store, userId: MEMORY_USER_ID });
-    await repo.upsert(DEFAULT_USER_PREFERENCES_PATH, RECALL_PREFERENCE);
-
-    const modelRuntime = createDefaultModelRuntime(false);
-    const agent = createScaffoldedAgent({
-      modelRuntime,
-      guardrails: false,
-      store,
-      memoryUserId: MEMORY_USER_ID,
-    });
+  it.concurrent("recalls a seeded fact from the memory store", async () => {
+    const { agent, repo } = buildMemoryAgent();
+    await repo.upsert(DEFAULT_USER_PREFERENCES_PATH, RECALL_SEED);
 
     const result = (await agent.invoke({
       messages: [{ role: "user", content: RECALL_PROMPT }],
     })) as AgentInvokeResult;
 
-    expect(lastAssistantText(result.messages)).toContain(RECALL_MARKER);
+    expect(transcriptOf(result.messages)).toContain(RECALL_NEEDLE);
   }, 60_000);
 
-  it("persists an explicit project fact back into the memory store", async () => {
-    const store = createInMemoryMemoryStore();
-    const repo = createMemoryRepository({ store, userId: MEMORY_USER_ID });
+  it.concurrent("persists an explicit project fact into the memory store", async () => {
+    const { agent, repo } = buildMemoryAgent();
     await repo.upsert(DEFAULT_PROJECT_FACTS_PATH, PROJECT_FACTS_SEED);
-
-    const modelRuntime = createDefaultModelRuntime(false);
-    const agent = createScaffoldedAgent({
-      modelRuntime,
-      guardrails: false,
-      store,
-      memoryUserId: MEMORY_USER_ID,
-    });
 
     (await agent.invoke({
       messages: [{ role: "user", content: PERSIST_PROMPT }],

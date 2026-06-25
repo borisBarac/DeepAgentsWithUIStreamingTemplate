@@ -1,10 +1,11 @@
 import { type BaseStore, InMemoryStore } from "@langchain/langgraph";
-import { StoreBackend } from "deepagents";
+import type { StoreBackend } from "deepagents";
 
 import { BucketMemoryStore, type BucketMemoryStoreOptions } from "./bucket-store.ts";
 import { FileSystemMemoryStore, type FileSystemMemoryStoreOptions } from "./filesystem-store.ts";
 import { createUserMemoryNamespace } from "./namespace.ts";
 import { MemoryRepository } from "./repository.ts";
+import { MemoryStoreBackend } from "./store-backend.ts";
 
 export type CreateMemoryRepositoryFactoryOptions = {
   store: BaseStore;
@@ -37,7 +38,7 @@ export function createMemoryRepository(
 }
 
 export function createUserMemoryBackend(options: CreateUserMemoryBackendOptions): StoreBackend {
-  return new StoreBackend({
+  return new MemoryStoreBackend({
     store: options.store,
     namespace: createUserMemoryNamespace(options.userId),
   });

@@ -21,6 +21,6 @@ export function createDefaultCompositeBackend(
         }));
 
   return new CompositeBackend(defaultBackend, {
-    [DEFAULT_MEMORY_ROOT]: memoryBackend,
+    [`${DEFAULT_MEMORY_ROOT}/`]: memoryBackend,
   });
 }

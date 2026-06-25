@@ -50,3 +50,4 @@ export {
   DEFAULT_USER_PREFERENCES_SEED,
   type MemorySeedFile,
 } from "./seeds.ts";
+export { MemoryStoreBackend, type MemoryStoreBackendOptions } from "./store-backend.ts";
