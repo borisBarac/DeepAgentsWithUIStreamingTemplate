@@ -17,6 +17,17 @@ import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import type { CreateDefaultSubagentsOptions } from "./types.ts";
 
+const STRUCTURED_JSON_PROMPT = "Respond with a single JSON object matching the requested schema.";
+
+/**
+ * Required for OpenAI-compatible providers that use `response_format:
+ * json_object`: DeepSeek rejects requests whose prompt does not mention "json"
+ * (`400 Prompt must contain the word 'json'`).
+ */
+function withStructuredJsonPrompt(prompt: string): string {
+  return `${prompt}\n\n${STRUCTURED_JSON_PROMPT}`;
+}
+
 function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
   if (!override) {
     return base;
@@ -53,7 +64,7 @@ export function createDefaultSubagents(
       name: "clarifier",
       description:
         "Gate new requests, ask only the missing high-value questions, and return structured readiness decisions.",
-      systemPrompt: promptLoader.getClarifierPrompt(clarification),
+      systemPrompt: withStructuredJsonPrompt(promptLoader.getClarifierPrompt(clarification)),
       responseFormat: clarificationResultSchema,
       model: options.modelRuntime?.getModelForRole("clarifier"),
       tools: [],
@@ -91,7 +102,7 @@ export function createDefaultSubagents(
     {
       name: DEFAULT_REVIEW_AGENT_NAME,
       description: DEFAULT_REVIEW_AGENT_DESCRIPTION,
-      systemPrompt: promptLoader.getReviewAgentPrompt(),
+      systemPrompt: withStructuredJsonPrompt(promptLoader.getReviewAgentPrompt()),
       responseFormat: reviewReportSchema,
       model: options.modelRuntime?.getModelForRole("reviewer"),
       tools: [],
@@ -108,7 +119,7 @@ export function createDefaultSubagents(
         name: "image-designer",
         description:
           "Turn image requests into production-ready prompts, generate or edit exactly once, and return the prompt plus final image result.",
-        systemPrompt: promptLoader.getImageDesignerPrompt(),
+        systemPrompt: withStructuredJsonPrompt(promptLoader.getImageDesignerPrompt()),
         responseFormat: imageDesignerResponseSchema,
         model: options.modelRuntime?.getModelForRole("image-designer"),
         tools: [imageDesignerTool],
@@ -125,7 +136,7 @@ export function createDefaultSubagents(
         name: "product-generator",
         description:
           "Turn clarified product requests into a batch of structured product cards (title, description, image) for the streaming interaction zone.",
-        systemPrompt: promptLoader.getProductGeneratorPrompt(),
+        systemPrompt: withStructuredJsonPrompt(promptLoader.getProductGeneratorPrompt()),
         responseFormat: productCardBatchSchema,
         model: options.modelRuntime?.getModelForRole("product-generator"),
         tools: imageDesignerTool ? [imageDesignerTool] : [],

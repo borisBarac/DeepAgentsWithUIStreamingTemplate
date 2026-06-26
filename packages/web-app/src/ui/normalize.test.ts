@@ -55,6 +55,73 @@ describe("normalizeStreamingSpec", () => {
     });
   });
 
+  it("accepts scaffold product-card specs without explicit children", () => {
+    expect(
+      normalizeStreamingSpec({
+        root: "concept-1",
+        elements: {
+          "concept-1": {
+            type: "product-card",
+            props: {
+              id: "concept-1",
+              title: "Launch Map",
+              description: "A planning workspace for design teams.",
+              status: "complete",
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      root: "concept-1",
+      elements: {
+        "concept-1": {
+          type: "product-card",
+          props: {
+            id: "concept-1",
+            title: "Launch Map",
+            description: "A planning workspace for design teams.",
+            status: "complete",
+          },
+          children: [],
+        },
+      },
+    });
+  });
+
+  it("accepts scaffold product-card specs with generated image URLs", () => {
+    expect(
+      normalizeStreamingSpec({
+        root: "concept-1",
+        elements: {
+          "concept-1": {
+            type: "product-card",
+            props: {
+              id: "concept-1",
+              title: "Launch Map",
+              description: "A planning workspace for design teams.",
+              imageUrl: "https://example.com/launch-map.png",
+            },
+            children: [],
+          },
+        },
+      }),
+    ).toEqual({
+      root: "concept-1",
+      elements: {
+        "concept-1": {
+          type: "product-card",
+          props: {
+            id: "concept-1",
+            title: "Launch Map",
+            description: "A planning workspace for design teams.",
+            imageUrl: "https://example.com/launch-map.png",
+          },
+          children: [],
+        },
+      },
+    });
+  });
+
   it("rejects product cards without required details", () => {
     expect(
       normalizeStreamingSpec({

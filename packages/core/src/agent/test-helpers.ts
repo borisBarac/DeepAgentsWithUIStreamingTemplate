@@ -3,12 +3,16 @@ import { createModelRuntime } from "../models/index.ts";
 export function createTestModelRuntime() {
   return createModelRuntime({
     connections: {
-      openrouter: { provider: "openrouter", apiKey: "test-key" },
+      compat: {
+        provider: "openai-compatible",
+        apiKey: "test-key",
+        baseURL: "https://example.com/v1",
+      },
     },
     categories: {
-      fast: { connection: "openrouter", model: "fast-model" },
-      normal: { connection: "openrouter", model: "normal-model" },
-      pro: { connection: "openrouter", model: "pro-model" },
+      fast: { connection: "compat", model: "fast-model" },
+      normal: { connection: "compat", model: "normal-model" },
+      pro: { connection: "compat", model: "pro-model" },
     },
     assignments: {
       default: "normal",

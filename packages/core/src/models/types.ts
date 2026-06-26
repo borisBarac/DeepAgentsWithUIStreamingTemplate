@@ -1,26 +1,35 @@
 import type { ChatOpenAI, ChatOpenAIFields } from "@langchain/openai";
-import type { ChatOpenRouter, ChatOpenRouterInput } from "@langchain/openrouter";
 
 import type { ModelCategory, ModelRole } from "./constants.ts";
 
-export type OpenRouterConnectionConfig = {
-  provider: "openrouter";
-  apiKey?: string;
-  siteName?: string;
-  siteUrl?: string;
-  options?: Omit<ChatOpenRouterInput, "apiKey" | "model" | "siteName" | "siteUrl">;
-};
+/**
+ * The `method` forwarded to `ChatOpenAI.withStructuredOutput`. Some
+ * OpenAI-compatible providers reject the `@langchain/openai` default
+ * (`"jsonSchema"`): DeepSeek answers `400 This response_format type is
+ * unavailable now`. `"jsonMode"` (`response_format: { type: "json_object" }`)
+ * is accepted and works with thinking enabled, but the prompt must mention
+ * "json". `"functionCalling"` requires disabling thinking (tool_choice is
+ * unsupported while thinking is on).
+ */
+export type StructuredOutputMethod = "jsonSchema" | "jsonMode" | "functionCalling";
 
 export type OpenAICompatibleConnectionConfig = {
   provider: "openai-compatible";
   apiKey?: string;
   baseURL: string;
+  /**
+   * Default `withStructuredOutput` method for this connection. Falls back to
+   * `"jsonMode"` (see {@link DEFAULT_STRUCTURED_OUTPUT_METHOD}) which is the
+   * safest cross-provider default; set `"jsonSchema"` for providers that
+   * support strict structured outputs (e.g. OpenAI `gpt-4o`).
+   */
+  structuredOutputMethod?: StructuredOutputMethod;
   options?: Omit<ChatOpenAIFields, "apiKey" | "configuration" | "model" | "useResponsesApi"> & {
     configuration?: Omit<NonNullable<ChatOpenAIFields["configuration"]>, "apiKey" | "baseURL">;
   };
 };
 
-export type ModelConnectionConfig = OpenRouterConnectionConfig | OpenAICompatibleConnectionConfig;
+export type ModelConnectionConfig = OpenAICompatibleConnectionConfig;
 
 export type ModelProfileConfig = {
   connection: string;
@@ -47,13 +56,14 @@ export type ModelRuntimeConfig = {
   } & Partial<Record<ModelRole, ModelCategory>>;
 };
 
-export type RuntimeChatModel = ChatOpenRouter | ChatOpenAI;
+export type RuntimeChatModel = ChatOpenAI;
 
 export type ModelRuntime = {
   getModelForCategory(category: ModelCategory): RuntimeChatModel;
   getCategoryForRole(role: ModelRole): ModelCategory;
   getModelForRole(role: ModelRole): RuntimeChatModel;
   hasModelForRole(role: ModelRole): boolean;
+  getModelForGuardrails?(): RuntimeChatModel;
 };
 
 export type ModelRuntimeOptions = {

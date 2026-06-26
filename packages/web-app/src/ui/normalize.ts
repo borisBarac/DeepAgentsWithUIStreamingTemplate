@@ -22,8 +22,8 @@ function normalizeElement(value: unknown): UIElement | null {
     return null;
   }
 
-  const children = value.children;
-  if (!Array.isArray(children) || children.some((child) => typeof child !== "string")) {
+  const rawChildren = value.children ?? [];
+  if (!Array.isArray(rawChildren) || rawChildren.some((child) => typeof child !== "string")) {
     return null;
   }
 
@@ -35,7 +35,7 @@ function normalizeElement(value: unknown): UIElement | null {
   return {
     type,
     props: parsedProps.data,
-    children,
+    children: rawChildren,
     ...(value.visible !== undefined ? { visible: value.visible as UIElement["visible"] } : {}),
   };
 }

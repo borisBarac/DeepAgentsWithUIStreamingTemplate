@@ -21,6 +21,5 @@ export type {
   ModelRuntimeConfig,
   ModelRuntimeOptions,
   OpenAICompatibleConnectionConfig,
-  OpenRouterConnectionConfig,
   RuntimeChatModel,
 } from "./types.ts";

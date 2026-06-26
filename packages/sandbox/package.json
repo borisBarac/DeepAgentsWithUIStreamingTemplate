@@ -8,6 +8,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./test": "./src/backend-test-harness.ts",
     "./backend-helpers": "./src/backends/backend-helpers.ts",
     "./envelope": "./src/envelope.ts",
     "./profiles": "./src/profiles.ts"

@@ -31,9 +31,8 @@ describe.skipIf(!hasLiveLLMCredentials)("guardrails live task-scope e2e", () => 
     const taskScopeClassifier = modelRuntime
       .getModelForRole("supervisor")
       .withStructuredOutput(taskScopeDecisionSchema, {
-        name: "task_scope_decision",
-        method: "functionCalling",
-      } as never) as TaskScopeClassifier;
+        method: "jsonMode",
+      }) as TaskScopeClassifier;
     const agent = createScaffoldedAgent({
       modelRuntime,
       guardrails: { safety: false, taskScope: { classifier: taskScopeClassifier } },

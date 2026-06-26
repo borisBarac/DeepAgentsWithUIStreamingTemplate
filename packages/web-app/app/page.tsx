@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeQuestionOption } from "@deep-agent-template/core";
+import { normalizeQuestionOption } from "@deep-agent-template/core/generative-ui";
 import { useState } from "react";
 import { JsonRenderPreview } from "../src/ui/catalog.tsx";
 import type { DisplayMessage } from "../src/ui/use-agent-chat.ts";

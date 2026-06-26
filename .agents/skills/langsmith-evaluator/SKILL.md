@@ -14,7 +14,7 @@ Environment Variables
 LANGSMITH_API_KEY=lsv2_pt_your_api_key_here          # REQUIRED
 LANGSMITH_PROJECT=your-project-name                   # Check this to know which project has traces
 LANGSMITH_WORKSPACE_ID=your-workspace-id              # Optional: for org-scoped keys
-OPENAI_API_KEY=your_openai_key                        # For LLM as Judge
+LLM_API_KEY=your_provider_key                          # For LLM as Judge (your model provider)
 ```
 
 Authentication is REQUIRED: either set the `LANGSMITH_API_KEY` environment variable, or pass the `--api-key` flag to CLI commands (preferred):

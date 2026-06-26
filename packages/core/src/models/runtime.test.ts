@@ -4,8 +4,8 @@ import { MODEL_CATEGORIES } from "./constants.ts";
 import { createModelRuntimeFromEnvValues } from "./env.ts";
 import { createModelRuntime } from "./runtime.ts";
 
-const OPENROUTER_CONNECTION = {
-  openrouter: { provider: "openrouter", apiKey: "test-key" },
+const COMPAT_CONNECTION = {
+  compat: { provider: "openai-compatible", apiKey: "test-key", baseURL: "https://example.com/v1" },
 } as const;
 
 describe("createModelRuntime", () => {
@@ -19,11 +19,11 @@ describe("createModelRuntime", () => {
       },
     });
     const runtime = createModelRuntime({
-      connections: { ...OPENROUTER_CONNECTION },
+      connections: { ...COMPAT_CONNECTION },
       categories: {
-        fast: { connection: "openrouter", model: "fast-model" },
-        normal: { connection: "openrouter", model: "anthropic/claude-sonnet-4", providerOptions },
-        pro: { connection: "openrouter", model: "pro-model" },
+        fast: { connection: "compat", model: "fast-model" },
+        normal: { connection: "compat", model: "anthropic/claude-sonnet-4", providerOptions },
+        pro: { connection: "compat", model: "pro-model" },
       },
       assignments: { default: "normal" },
     });
@@ -35,7 +35,7 @@ describe("createModelRuntime", () => {
     expect(optionReads).toBe(1);
     expect(first).toBe(second);
     expect(first.model).toBe("anthropic/claude-sonnet-4");
-    expect(first._llmType()).toBe("openrouter");
+    expect(first._llmType()).toBe("openai");
   });
 
   it("constructs OpenAI-compatible categories with the configured endpoint", () => {
@@ -67,11 +67,11 @@ describe("createModelRuntime", () => {
 
   it("resolves a role via its category assignment before the default", () => {
     const runtime = createModelRuntime({
-      connections: { ...OPENROUTER_CONNECTION },
+      connections: { ...COMPAT_CONNECTION },
       categories: {
-        fast: { connection: "openrouter", model: "fast-model" },
-        normal: { connection: "openrouter", model: "normal-model" },
-        pro: { connection: "openrouter", model: "pro-model" },
+        fast: { connection: "compat", model: "fast-model" },
+        normal: { connection: "compat", model: "normal-model" },
+        pro: { connection: "compat", model: "pro-model" },
       },
       assignments: {
         default: "normal",
@@ -89,11 +89,11 @@ describe("createModelRuntime", () => {
 
   it("exposes the resolved category for a role, falling back to default then normal", () => {
     const runtime = createModelRuntime({
-      connections: { ...OPENROUTER_CONNECTION },
+      connections: { ...COMPAT_CONNECTION },
       categories: {
-        fast: { connection: "openrouter", model: "fast-model" },
-        normal: { connection: "openrouter", model: "normal-model" },
-        pro: { connection: "openrouter", model: "pro-model" },
+        fast: { connection: "compat", model: "fast-model" },
+        normal: { connection: "compat", model: "normal-model" },
+        pro: { connection: "compat", model: "pro-model" },
       },
       assignments: { clarifier: "fast" },
     });
@@ -104,11 +104,11 @@ describe("createModelRuntime", () => {
 
   it("reports whether a role is resolvable", () => {
     const runtime = createModelRuntime({
-      connections: { ...OPENROUTER_CONNECTION },
+      connections: { ...COMPAT_CONNECTION },
       categories: {
-        fast: { connection: "openrouter", model: "fast-model" },
-        normal: { connection: "openrouter", model: "normal-model" },
-        pro: { connection: "openrouter", model: "pro-model" },
+        fast: { connection: "compat", model: "fast-model" },
+        normal: { connection: "compat", model: "normal-model" },
+        pro: { connection: "compat", model: "pro-model" },
       },
       assignments: { clarifier: "fast" },
     });
@@ -133,11 +133,11 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { openrouter: { provider: "openrouter" } },
+        connections: { ...COMPAT_CONNECTION },
         categories: {
           fast: { connection: "missing", model: "model" },
-          normal: { connection: "openrouter", model: "model" },
-          pro: { connection: "openrouter", model: "model" },
+          normal: { connection: "compat", model: "model" },
+          pro: { connection: "compat", model: "model" },
         },
         assignments: {},
       }),
@@ -159,11 +159,11 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { openrouter: { provider: "openrouter" } },
+        connections: { ...COMPAT_CONNECTION },
         categories: {
-          fast: { connection: "openrouter", model: "model" },
-          normal: { connection: "openrouter", model: " " },
-          pro: { connection: "openrouter", model: "model" },
+          fast: { connection: "compat", model: "model" },
+          normal: { connection: "compat", model: " " },
+          pro: { connection: "compat", model: "model" },
         },
         assignments: {},
       }),
@@ -171,11 +171,11 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { openrouter: { provider: "openrouter" } },
+        connections: { ...COMPAT_CONNECTION },
         categories: {
-          fast: { connection: "openrouter", model: "model" },
-          normal: { connection: "openrouter", model: "model" },
-          pro: { connection: "openrouter", model: "model" },
+          fast: { connection: "compat", model: "model" },
+          normal: { connection: "compat", model: "model" },
+          pro: { connection: "compat", model: "model" },
         },
         assignments: { default: "missing" as never },
       }),
@@ -183,11 +183,11 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { openrouter: { provider: "anthropic" as never } },
+        connections: { conn: { provider: "anthropic" as never } },
         categories: {
-          fast: { connection: "openrouter", model: "model" },
-          normal: { connection: "openrouter", model: "model" },
-          pro: { connection: "openrouter", model: "model" },
+          fast: { connection: "conn", model: "model" },
+          normal: { connection: "conn", model: "model" },
+          pro: { connection: "conn", model: "model" },
         },
         assignments: { default: "normal" },
       } as unknown as Parameters<typeof createModelRuntime>[0]),
@@ -195,11 +195,11 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { openrouter: { provider: "openrouter" } },
+        connections: { ...COMPAT_CONNECTION },
         categories: {
-          fast: { connection: "openrouter", model: "model" },
-          normal: { connection: "openrouter", model: "model" },
-          pro: { connection: "openrouter", model: "model" },
+          fast: { connection: "compat", model: "model" },
+          normal: { connection: "compat", model: "model" },
+          pro: { connection: "compat", model: "model" },
         },
         assignments: { planner: "normal" },
       } as Parameters<typeof createModelRuntime>[0]),
@@ -207,7 +207,7 @@ describe("createModelRuntime", () => {
 
     expect(() =>
       createModelRuntime({
-        connections: { " ": { provider: "openrouter" } },
+        connections: { " ": { provider: "openai-compatible", baseURL: "https://example.com/v1" } },
         categories: {
           fast: { connection: " ", model: "model" },
           normal: { connection: " ", model: "model" },
@@ -220,11 +220,11 @@ describe("createModelRuntime", () => {
 
   it("rejects unknown categories and roles at lookup time", () => {
     const runtime = createModelRuntime({
-      connections: { ...OPENROUTER_CONNECTION },
+      connections: { ...COMPAT_CONNECTION },
       categories: {
-        fast: { connection: "openrouter", model: "model" },
-        normal: { connection: "openrouter", model: "model" },
-        pro: { connection: "openrouter", model: "model" },
+        fast: { connection: "compat", model: "model" },
+        normal: { connection: "compat", model: "model" },
+        pro: { connection: "compat", model: "model" },
       },
       assignments: { default: "normal" },
     });
@@ -258,11 +258,17 @@ describe("createModelRuntime", () => {
     }
 
     const runtime = createModelRuntime({
-      connections: { openrouter: { provider: "openrouter", apiKey: secret } },
+      connections: {
+        compat: {
+          provider: "openai-compatible",
+          apiKey: secret,
+          baseURL: "https://example.com/v1",
+        },
+      },
       categories: {
-        fast: { connection: "openrouter", model: "model" },
-        normal: { connection: "openrouter", model: "model" },
-        pro: { connection: "openrouter", model: "model" },
+        fast: { connection: "compat", model: "model" },
+        normal: { connection: "compat", model: "model" },
+        pro: { connection: "compat", model: "model" },
       },
       assignments: { default: "normal" },
     });

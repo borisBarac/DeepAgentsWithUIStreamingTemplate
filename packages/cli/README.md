@@ -91,9 +91,6 @@ LLM_BASE_URL=https://api.deepseek.com
 
 # Authenticates against the LLM_BASE_URL endpoint.
 LLM_API_KEY=...
-
-# Authenticates the default OpenAI moderation safety guardrail.
-OPENAI_API_KEY=...
 ```
 
 With no explicit `--model`, the model defaults to `deepseek-v4-flash`.
@@ -107,8 +104,9 @@ The default dependency factory picks an agent factory based on the command:
 - `baseline` → `createBaselineAgent({ ... })`
 - `scaffold` → `createScaffoldedAgent({ ... })` (forwarding `systemPrompt` when provided)
 
-Both paths use core's default middleware guardrails: OpenAI moderation safety and markdown-backed
-task-scope policy from `packages/core/guardrails/`.
+Both paths use core's default middleware guardrails: a model-based content-safety classifier and
+markdown-backed task-scope policy from `packages/core/guardrails/`. Both guardrails reuse the
+same `LLM_*` runtime, so no separate credentials are required.
 
 It always builds a `modelRuntime` from `LLM_BASE_URL` + `LLM_API_KEY` with a single connection and passes that, applying the optional `--model` (default `deepseek-v4-flash`). The agent's `messages` array is seeded with a single user message containing the joined prompt.
 

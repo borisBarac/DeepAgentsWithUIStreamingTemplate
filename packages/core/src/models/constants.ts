@@ -1,7 +1,4 @@
-export const OPENROUTER_PROVIDER = "openrouter" as const;
 export const OPENAI_COMPATIBLE_PROVIDER = "openai-compatible" as const;
-
-export const DEFAULT_SITE_NAME = "Deep Agent Template";
 
 /**
  * Every agent role that can be assigned a model category. Roles resolve to a

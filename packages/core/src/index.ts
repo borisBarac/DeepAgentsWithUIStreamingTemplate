@@ -4,6 +4,7 @@ export {
   createBaselineAgent,
   createScaffoldedAgent,
   DEFAULT_AGENT_NAME,
+  type DeepAgent,
 } from "./agent/index.ts";
 export {
   type AppConfig,
@@ -78,8 +79,8 @@ export {
   createGuardrailDecision,
   DEFAULT_GUARDRAIL_POLICY_LOADER,
   DEFAULT_GUARDRAIL_REFUSAL,
-  DEFAULT_OPENAI_MODERATION_MODEL,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
+  DEFAULT_SAFETY_REFUSAL,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
   type DeepAgentMiddleware,
   type GuardrailDecisionRuntime,
@@ -87,8 +88,11 @@ export {
   type GuardrailSafetyOptions,
   type GuardrailTaskScopeOptions,
   MarkdownGuardrailPolicyLoader,
-  type OpenAIContentSafetyClient,
+  type SafetyClassifier,
+  type SafetyDecision,
+  type StructuredSafetyModel,
   type StructuredTaskScopeModel,
+  safetyDecisionSchema,
   type TaskScopeClassifier,
   type TaskScopeDecision,
   type TaskScopePolicyBundle,
@@ -177,7 +181,6 @@ export {
   type ModelRuntimeConfig,
   type ModelRuntimeOptions,
   type OpenAICompatibleConnectionConfig,
-  type OpenRouterConnectionConfig,
   type RuntimeChatModel,
 } from "./models/index.ts";
 export {
@@ -236,7 +239,6 @@ export {
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
   type DockerSandboxBackendOptions,
-  describeSandboxBackend,
   ENTRYPOINT_FILENAME,
   SANDBOX_PROFILES,
   type SandboxArtifact,

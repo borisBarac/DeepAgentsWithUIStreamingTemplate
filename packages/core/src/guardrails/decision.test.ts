@@ -7,7 +7,12 @@ import {
   DEFAULT_SAFETY_GUARDRAIL_NAME,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
 } from "./index.ts";
-import type { OpenAIContentSafetyClient, TaskScopeClassifier } from "./types.ts";
+import type {
+  SafetyClassifier,
+  StructuredSafetyModel,
+  StructuredTaskScopeModel,
+  TaskScopeClassifier,
+} from "./types.ts";
 
 const testImageGenerationService = {
   async generate() {
@@ -18,22 +23,35 @@ const testImageGenerationService = {
   },
 };
 
-function createFakeOpenAI(flagged: boolean): OpenAIContentSafetyClient {
+function createFakeSafetyClassifier(): SafetyClassifier {
   return {
-    moderations: {
-      create: async () => ({
-        id: "modr-test",
-        model: "omni-moderation-latest",
-        results: [
-          {
-            flagged,
-            categories: {},
-            category_scores: {},
-          },
-        ],
-      }),
+    invoke: async () => ({
+      flagged: false,
+      categories: [],
+      reason: "safe",
+    }),
+  };
+}
+
+function createFakeStructuredModel(
+  label: string,
+  calls: string[],
+): StructuredSafetyModel & StructuredTaskScopeModel {
+  return {
+    withStructuredOutput: () => {
+      calls.push(label);
+      return {
+        invoke: async () => ({
+          flagged: false,
+          categories: [],
+          inScope: true,
+          missingContext: [],
+          violatedRules: [],
+          reason: "ok",
+        }),
+      };
     },
-  } as unknown as OpenAIContentSafetyClient;
+  };
 }
 
 describe("createGuardrailDecision", () => {
@@ -50,7 +68,7 @@ describe("createGuardrailDecision", () => {
 
     const decision = createGuardrailDecision({
       safety: {
-        openai: createFakeOpenAI(false),
+        classifier: createFakeSafetyClassifier(),
       },
       taskScope: { classifier },
       middleware: [callerMiddleware],
@@ -77,7 +95,7 @@ describe("createGuardrailDecision", () => {
   it("can be created without a task-scope model", () => {
     const decision = createGuardrailDecision({
       safety: {
-        openai: createFakeOpenAI(false),
+        classifier: createFakeSafetyClassifier(),
       },
     });
 
@@ -99,6 +117,71 @@ describe("createGuardrailDecision", () => {
     expect(decision.policies.requiredContext).toContain("Required Context");
     expect(decision.policies.disallowedTasks).toContain("Disallowed Tasks");
   });
+
+  it("uses taskScopeModel as the custom-runtime default for both guardrails", () => {
+    const calls: string[] = [];
+    const taskScopeModel = createFakeStructuredModel("taskScopeModel", calls);
+
+    const decision = createGuardrailDecision({
+      taskScopeModel,
+    });
+
+    expect(decision.enabled).toEqual({ safety: true, taskScope: true });
+    expect(decision.middleware.map((item) => item.name)).toEqual([
+      DEFAULT_SAFETY_GUARDRAIL_NAME,
+      DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
+    ]);
+    expect(calls).toEqual(["taskScopeModel", "taskScopeModel"]);
+  });
+
+  it("resolves safety models from rail override, top-level safety default, then task-scope default", () => {
+    const nestedSafetyCalls: string[] = [];
+    createGuardrailDecision({
+      safety: { model: createFakeStructuredModel("safety.model", nestedSafetyCalls) },
+      safetyModel: createFakeStructuredModel("safetyModel", nestedSafetyCalls),
+      taskScopeModel: createFakeStructuredModel("taskScopeModel", nestedSafetyCalls),
+    });
+    expect(nestedSafetyCalls).toEqual(["safety.model", "taskScopeModel"]);
+
+    const safetyDefaultCalls: string[] = [];
+    createGuardrailDecision({
+      safetyModel: createFakeStructuredModel("safetyModel", safetyDefaultCalls),
+      taskScopeModel: createFakeStructuredModel("taskScopeModel", safetyDefaultCalls),
+    });
+    expect(safetyDefaultCalls).toEqual(["safetyModel", "taskScopeModel"]);
+
+    const taskScopeDefaultCalls: string[] = [];
+    createGuardrailDecision({
+      taskScopeModel: createFakeStructuredModel("taskScopeModel", taskScopeDefaultCalls),
+    });
+    expect(taskScopeDefaultCalls).toEqual(["taskScopeModel", "taskScopeModel"]);
+  });
+
+  it("disables individual guardrails even when models are provided", () => {
+    const safetyDisabledCalls: string[] = [];
+    const safetyDisabled = createGuardrailDecision({
+      safety: false,
+      safetyModel: createFakeStructuredModel("safetyModel", safetyDisabledCalls),
+      taskScopeModel: createFakeStructuredModel("taskScopeModel", safetyDisabledCalls),
+    });
+    expect(safetyDisabled.enabled).toEqual({ safety: false, taskScope: true });
+    expect(safetyDisabled.middleware.map((item) => item.name)).toEqual([
+      DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
+    ]);
+    expect(safetyDisabledCalls).toEqual(["taskScopeModel"]);
+
+    const taskScopeDisabledCalls: string[] = [];
+    const taskScopeDisabled = createGuardrailDecision({
+      safetyModel: createFakeStructuredModel("safetyModel", taskScopeDisabledCalls),
+      taskScope: false,
+      taskScopeModel: createFakeStructuredModel("taskScopeModel", taskScopeDisabledCalls),
+    });
+    expect(taskScopeDisabled.enabled).toEqual({ safety: true, taskScope: false });
+    expect(taskScopeDisabled.middleware.map((item) => item.name)).toEqual([
+      DEFAULT_SAFETY_GUARDRAIL_NAME,
+    ]);
+    expect(taskScopeDisabledCalls).toEqual(["safetyModel"]);
+  });
 });
 
 describe("agent guardrail integration", () => {
@@ -106,7 +189,7 @@ describe("agent guardrail integration", () => {
     const callerMiddleware = { name: "CallerMiddleware" };
     const agent = createScaffoldedAgent({
       guardrails: {
-        safety: { openai: createFakeOpenAI(false) },
+        safety: { classifier: createFakeSafetyClassifier() },
       },
       imageGenerationService: testImageGenerationService,
       modelRuntime: createTestModelRuntime(),

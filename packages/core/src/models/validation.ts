@@ -4,7 +4,6 @@ import {
   type ModelCategory,
   type ModelRole,
   OPENAI_COMPATIBLE_PROVIDER,
-  OPENROUTER_PROVIDER,
 } from "./constants.ts";
 import type { ModelRuntimeConfig } from "./types.ts";
 
@@ -42,8 +41,6 @@ export function validateRuntimeConfig(config: ModelRuntimeConfig): void {
     switch (connection.provider) {
       case OPENAI_COMPATIBLE_PROVIDER:
         validateBaseURL(name, connection.baseURL);
-        break;
-      case OPENROUTER_PROVIDER:
         break;
       default:
         throw new Error(`Connection "${name}" uses unsupported provider "${rawProvider}".`);

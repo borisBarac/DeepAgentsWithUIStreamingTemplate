@@ -1,23 +1,36 @@
 import type { CreateDeepAgentParams } from "deepagents";
-import type OpenAI from "openai";
 
+import type { StructuredOutputMethod } from "../models/types.ts";
 import type { GuardrailPolicyLoader, TaskScopePolicyBundle } from "./policies.ts";
 
 export type DeepAgentMiddleware = NonNullable<CreateDeepAgentParams["middleware"]>[number];
+
+export type SafetyClassifier = {
+  invoke(input: unknown): Promise<unknown>;
+};
+
+export type StructuredSafetyModel = {
+  withStructuredOutput(
+    schema: unknown,
+    options?: { method?: StructuredOutputMethod },
+  ): SafetyClassifier;
+};
 
 export type TaskScopeClassifier = {
   invoke(input: unknown): Promise<unknown>;
 };
 
 export type StructuredTaskScopeModel = {
-  withStructuredOutput(schema: unknown, options?: { name?: string }): TaskScopeClassifier;
+  withStructuredOutput(
+    schema: unknown,
+    options?: { method?: StructuredOutputMethod },
+  ): TaskScopeClassifier;
 };
 
-export type OpenAIContentSafetyClient = Pick<OpenAI, "moderations">;
-
 export type GuardrailSafetyOptions = {
-  model?: string;
-  openai?: OpenAIContentSafetyClient;
+  classifier?: SafetyClassifier;
+  model?: StructuredSafetyModel;
+  refusalMessage?: string;
 };
 
 export type GuardrailTaskScopeOptions = {
@@ -32,6 +45,7 @@ export type CreateGuardrailDecisionOptions = {
   middleware?: CreateDeepAgentParams["middleware"];
   policyLoader?: GuardrailPolicyLoader;
   safety?: false | GuardrailSafetyOptions;
+  safetyModel?: StructuredSafetyModel;
   taskScopeModel?: StructuredTaskScopeModel;
   taskScope?: false | GuardrailTaskScopeOptions;
 };

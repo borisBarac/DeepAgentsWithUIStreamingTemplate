@@ -1,3 +1,4 @@
+import type { DeepAgent } from "@deep-agent-template/core";
 import {
   extractUpdateObjects,
   normalizeUiUpdate,
@@ -8,7 +9,6 @@ import { NextResponse } from "next/server";
 
 import { createAgentProvider } from "../../../src/server/agent-provider.ts";
 import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
-import type { ChatMessage } from "../../../src/ui/types.ts";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ type AgentResult = {
   messages?: unknown[];
 };
 
-type Agent = Extract<ReturnType<typeof createAgentProvider>, { mode: "simple" }>["agent"];
+type Agent = DeepAgent;
 
 type StreamableAgent = Agent & {
   streamEvents?: (
@@ -36,9 +36,9 @@ type StreamableAgent = Agent & {
 };
 
 const MAX_SESSIONS = 100;
-const sessions = new Map<string, ChatMessage[]>();
+const sessions = new Map<string, unknown[]>();
 
-function getHistory(sessionId: string): ChatMessage[] {
+function getHistory(sessionId: string): unknown[] {
   const history = sessions.get(sessionId);
   if (!history) {
     return [];
@@ -48,7 +48,7 @@ function getHistory(sessionId: string): ChatMessage[] {
   return history;
 }
 
-function saveHistory(sessionId: string, history: ChatMessage[]): void {
+function saveHistory(sessionId: string, history: unknown[]): void {
   sessions.delete(sessionId);
   sessions.set(sessionId, history);
   while (sessions.size > MAX_SESSIONS) {
@@ -59,11 +59,7 @@ function saveHistory(sessionId: string, history: ChatMessage[]): void {
 }
 
 function createAgent(): Agent {
-  const provider = createAgentProvider();
-  if (provider.mode === "advanced") {
-    throw new Error(provider.note);
-  }
-  return provider.agent;
+  return createAgentProvider().agent;
 }
 
 let agentCache: Agent | null = null;
@@ -120,8 +116,8 @@ function extractFinalResponse(result: AgentResult): string {
   throw new Error("Core returned no text response.");
 }
 
-function toInputMessages(history: ChatMessage[], message: string): AgentInputMessage[] {
-  return [...history, { role: "user", content: message }];
+function toInputMessages(history: unknown[], message: string): unknown[] {
+  return [...history, { content: message, role: "user" }];
 }
 
 const encoder = new TextEncoder();
@@ -177,30 +173,28 @@ async function streamWithEvents(
   input: { messages: AgentInputMessage[] },
   sessionId: string,
   onText: (text: string) => void,
-): Promise<{ finalText: string; streamedText: boolean }> {
+): Promise<{ finalText: string; result: AgentResult | null; streamedText: boolean }> {
   if (!agent.streamEvents) {
-    const result = await agent.invoke(input);
-    return { finalText: extractFinalResponse(result as AgentResult), streamedText: false };
+    const result = (await agent.invoke(input)) as AgentResult;
+    return { finalText: extractFinalResponse(result), result, streamedText: false };
   }
 
   const run = await agent.streamEvents(input, {
     configurable: { thread_id: sessionId },
     version: "v3",
   });
-  let finalText = "";
+  let streamedText = "";
 
   for await (const message of run.messages) {
     for await (const token of message.text) {
-      finalText += token;
+      streamedText += token;
       onText(token);
     }
   }
 
-  if (finalText) {
-    return { finalText, streamedText: true };
-  }
-
-  return { finalText: extractFinalResponse(await run.output), streamedText: false };
+  const result = await run.output;
+  const finalText = streamedText || extractFinalResponse(result);
+  return { finalText, result, streamedText: Boolean(streamedText) };
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -217,55 +211,40 @@ export async function POST(request: Request): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const history = getHistory(parsedRequest.sessionId);
-      const input = { messages: toInputMessages(history, parsedRequest.message) };
+      const input = {
+        messages: toInputMessages(history, parsedRequest.message),
+      } as { messages: AgentInputMessage[] };
       const agent = getAgent() as StreamableAgent;
       const stats = { valid: 0 };
-      const assistantHistory: string[] = [];
 
-      function recordAssistantUpdate(update: UiUpdate): void {
-        switch (update.type) {
-          case "message":
-            assistantHistory.push(update.text);
-            break;
-          case "question":
-            assistantHistory.push(update.question.prompt);
-            break;
-          case "ui":
-            assistantHistory.push("Shared product details in the interaction zone.");
-            break;
-          case "error":
-            break;
-        }
-      }
-
-      async function runAttempt(): Promise<string> {
+      async function runAttempt(): Promise<{ finalText: string; result: AgentResult | null }> {
         const lineBuffer = new StreamingLineBuffer();
-        const { finalText, streamedText } = await streamWithEvents(
+        const { finalText, result, streamedText } = await streamWithEvents(
           agent,
           input,
           parsedRequest.sessionId,
           (token) => {
-            emitParsedLines(controller, lineBuffer.push(token), stats, recordAssistantUpdate);
+            emitParsedLines(controller, lineBuffer.push(token), stats);
           },
         );
 
         if (streamedText) {
           // The final line often lacks a trailing newline; flush whatever
           // remains buffered so it isn't dropped.
-          emitParsedLines(controller, lineBuffer.flush(), stats, recordAssistantUpdate);
+          emitParsedLines(controller, lineBuffer.flush(), stats);
         } else {
-          emitParsedLines(controller, finalText.split("\n"), stats, recordAssistantUpdate);
+          emitParsedLines(controller, finalText.split("\n"), stats);
         }
-        return finalText;
+        return { finalText, result };
       }
 
       try {
-        let finalText = await runAttempt();
+        let attempt = await runAttempt();
 
         // If the model ignored the NDJSON prompt entirely (zero valid updates),
         // retry once — it often cooperates on the second attempt.
         if (stats.valid === 0) {
-          finalText = await runAttempt();
+          attempt = await runAttempt();
         }
 
         if (stats.valid === 0) {
@@ -277,11 +256,16 @@ export async function POST(request: Request): Promise<Response> {
           );
         }
 
-        saveHistory(parsedRequest.sessionId, [
-          ...history,
-          { role: "user", content: parsedRequest.message },
-          { role: "assistant", content: assistantHistory.join("\n") || finalText },
-        ]);
+        const outputMessages = attempt.result?.messages;
+        if (Array.isArray(outputMessages) && outputMessages.length > 0) {
+          saveHistory(parsedRequest.sessionId, outputMessages);
+        } else {
+          saveHistory(parsedRequest.sessionId, [
+            ...history,
+            { content: parsedRequest.message, role: "user" },
+            { content: attempt.finalText, role: "assistant" },
+          ]);
+        }
       } catch (error) {
         controller.enqueue(
           encodeUpdate({

@@ -33,12 +33,21 @@ export function createGuardrailDecision(
 
   const guardrails: DeepAgentMiddleware[] = [];
   const safetyEnabled = options.safety !== false;
+  // Nested model options are rail-specific overrides; top-level models are convenience defaults.
+  const taskScopeModel = taskScopeOptions?.model ?? options.taskScopeModel;
 
   if (options.safety !== false) {
-    guardrails.push(createSafetyGuardrail(options.safety));
+    const safetyOptions = options.safety ?? {};
+    const safetyModel = safetyOptions.model ?? options.safetyModel ?? taskScopeModel;
+    guardrails.push(
+      createSafetyGuardrail({
+        classifier: safetyOptions.classifier,
+        model: safetyModel,
+        refusalMessage: safetyOptions.refusalMessage,
+      }),
+    );
   }
 
-  const taskScopeModel = taskScopeOptions?.model ?? options.taskScopeModel;
   const taskScopeClassifier = taskScopeOptions?.classifier;
   const taskScopeEnabled =
     options.taskScope !== false && Boolean(taskScopeClassifier || taskScopeModel);

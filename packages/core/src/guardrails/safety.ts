@@ -1,24 +1,70 @@
 import { AIMessage, createMiddleware } from "langchain";
-import OpenAI from "openai";
+import { z } from "zod";
 
 import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
-import type {
-  DeepAgentMiddleware,
-  GuardrailSafetyOptions,
-  OpenAIContentSafetyClient,
-} from "./types.ts";
+import type { DeepAgentMiddleware, GuardrailSafetyOptions, SafetyClassifier } from "./types.ts";
 
-export const DEFAULT_SAFETY_GUARDRAIL_NAME = "OpenAIContentSafetyGuardrail";
-export const DEFAULT_OPENAI_MODERATION_MODEL = "omni-moderation-latest";
+export const DEFAULT_SAFETY_GUARDRAIL_NAME = "ContentSafetyGuardrail";
+
+export const DEFAULT_SAFETY_REFUSAL =
+  "I cannot help with that request because it failed a safety check.";
+
+export const safetyDecisionSchema = z.object({
+  flagged: z.boolean(),
+  categories: z.array(z.string()).default([]),
+  reason: z.string(),
+});
+
+export type SafetyDecision = z.infer<typeof safetyDecisionSchema>;
 
 const refusal = (reason: string): AIMessage =>
   new AIMessage(`I cannot help with that request because it failed a guardrail check: ${reason}.`);
 
-const contentSafetyGuardrail = (
-  openai?: OpenAIContentSafetyClient,
-  options: Pick<GuardrailSafetyOptions, "model"> = {},
-): DeepAgentMiddleware =>
-  createMiddleware({
+export function createSafetyPrompt(request: string): string {
+  return [
+    "You are a content-safety classifier. Decide whether the user request is unsafe.",
+    "Flag a request when it solicits, describes, or facilitates genuinely harmful content,",
+    "such as hate, harassment, violence, self-harm, sexual content involving minors, or",
+    "illegal activity. Do not flag ordinary software-engineering or research requests.",
+    "",
+    "Return only the requested structured decision as a JSON object.",
+    "",
+    "User request:",
+    request,
+  ].join("\n");
+}
+
+export async function classifySafetyRequest(
+  request: string,
+  classifier: SafetyClassifier,
+): Promise<SafetyDecision> {
+  return safetyDecisionSchema.parse(
+    await classifier.invoke([
+      {
+        role: "system",
+        content:
+          "You are a strict content-safety classifier. Return only the requested structured decision as a JSON object.",
+      },
+      {
+        role: "user",
+        content: createSafetyPrompt(request),
+      },
+    ]),
+  );
+}
+
+export function createSafetyGuardrail(options: GuardrailSafetyOptions = {}): DeepAgentMiddleware {
+  const classifier =
+    options.classifier ??
+    options.model?.withStructuredOutput(safetyDecisionSchema, { method: "jsonMode" });
+
+  if (!classifier) {
+    throw new Error("Safety guardrail requires a classifier or structured-output model.");
+  }
+
+  const refusalMessage = options.refusalMessage ?? DEFAULT_SAFETY_REFUSAL;
+
+  return createMiddleware({
     name: DEFAULT_SAFETY_GUARDRAIL_NAME,
     beforeAgent: {
       hook: async (state: AgentStateLike) => {
@@ -28,15 +74,11 @@ const contentSafetyGuardrail = (
           return;
         }
 
-        const moderation = await (openai ?? new OpenAI()).moderations.create({
-          model: options.model ?? DEFAULT_OPENAI_MODERATION_MODEL,
-          input,
-        });
+        const decision = await classifySafetyRequest(input, classifier);
 
-        const result = moderation.results[0];
-        if (result?.flagged) {
+        if (decision.flagged) {
           return {
-            messages: [refusal("unsafe content")],
+            messages: [refusal(decision.reason || refusalMessage)],
             jumpTo: "end",
           };
         }
@@ -46,9 +88,4 @@ const contentSafetyGuardrail = (
       canJumpTo: ["end"],
     },
   }) as DeepAgentMiddleware;
-
-export function createSafetyGuardrail(options: GuardrailSafetyOptions = {}): DeepAgentMiddleware {
-  return contentSafetyGuardrail(options.openai, {
-    model: options.model,
-  });
 }

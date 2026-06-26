@@ -12,6 +12,7 @@ import {
   imagePlaceholderPropsSchema,
   productCardPropsSchema,
   productGridPropsSchema,
+  scaffoldProductCardPropsSchema,
   stackPropsSchema,
   textInputPropsSchema,
   textPropsSchema,
@@ -34,6 +35,10 @@ export const uiCatalog = defineCatalog(schema, {
     ProductCard: {
       props: productCardPropsSchema,
       description: "A product concept card with title, description, and image prompt.",
+    },
+    "product-card": {
+      props: scaffoldProductCardPropsSchema,
+      description: "A scaffold-generated product card with optional generated image URL.",
     },
     ProductGrid: {
       props: productGridPropsSchema,
@@ -104,6 +109,30 @@ export const registry: ComponentRegistry = {
           <h3>{props.title}</h3>
           <p>{props.description}</p>
           {children}
+        </div>
+      </article>
+    );
+  },
+  "product-card": ({ element }) => {
+    const props = getProps(element) as z.infer<typeof scaffoldProductCardPropsSchema>;
+    return (
+      <article className="product-card">
+        {props.imageUrl ? (
+          <div
+            aria-label={props.title}
+            className="product-image product-image-real"
+            role="img"
+            style={{ backgroundImage: `url("${props.imageUrl}")` }}
+          />
+        ) : (
+          <div aria-label={props.title} className="product-image" role="img">
+            <span>{props.status === "streaming" ? "Image pending" : "Product concept"}</span>
+          </div>
+        )}
+        <div className="product-card-body">
+          <h3>{props.title}</h3>
+          <p>{props.description}</p>
+          {props.status ? <small>{props.status}</small> : null}
         </div>
       </article>
     );

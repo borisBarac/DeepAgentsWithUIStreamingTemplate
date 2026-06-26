@@ -170,7 +170,7 @@ file + one test file. The tool layer never needs to change.
 3. **Add a test file** that calls `describeSandboxBackend()`:
 
    ```ts
-   import { describeSandboxBackend } from "@deep-agent-template/sandbox";
+   import { describeSandboxBackend } from "@deep-agent-template/sandbox/test";
    import { createE2bSandboxBackend } from "./e2b-backend.ts";
 
    describeSandboxBackend("e2b", () => createE2bSandboxBackend(), {

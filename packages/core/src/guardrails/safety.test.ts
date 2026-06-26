@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { createSafetyGuardrail } from "./safety.ts";
-import type { OpenAIContentSafetyClient } from "./types.ts";
+import type { SafetyClassifier, StructuredSafetyModel } from "./types.ts";
 
 type HookableMiddleware = {
   beforeAgent: {
@@ -13,29 +13,21 @@ function asHookable(middleware: unknown): HookableMiddleware {
   return middleware as HookableMiddleware;
 }
 
-function createFakeOpenAI(flagged: boolean): OpenAIContentSafetyClient {
+function createFakeClassifier(flagged: boolean): SafetyClassifier {
   return {
-    moderations: {
-      create: async () => ({
-        id: "modr-test",
-        model: "omni-moderation-latest",
-        results: [
-          {
-            flagged,
-            categories: {},
-            category_scores: {},
-          },
-        ],
-      }),
-    },
-  } as unknown as OpenAIContentSafetyClient;
+    invoke: async () => ({
+      flagged,
+      categories: flagged ? ["violence"] : [],
+      reason: flagged ? "unsafe content" : "safe",
+    }),
+  };
 }
 
 describe("safety guardrail", () => {
-  it("blocks flagged moderation results before the agent runs", async () => {
+  it("blocks flagged requests before the agent runs", async () => {
     const middleware = asHookable(
       createSafetyGuardrail({
-        openai: createFakeOpenAI(true),
+        classifier: createFakeClassifier(true),
       }),
     );
 
@@ -46,10 +38,36 @@ describe("safety guardrail", () => {
     expect(JSON.stringify(result)).toContain("unsafe content");
   });
 
-  it("allows unflagged moderation results", async () => {
+  it("allows unflagged requests", async () => {
     const middleware = asHookable(
       createSafetyGuardrail({
-        openai: createFakeOpenAI(false),
+        classifier: createFakeClassifier(false),
+      }),
+    );
+
+    const result = await middleware.beforeAgent.hook({
+      messages: [{ role: "user", content: "summarize this file" }],
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it("throws when neither a classifier nor a model is provided", () => {
+    expect(() => createSafetyGuardrail()).toThrow(
+      "Safety guardrail requires a classifier or structured-output model.",
+    );
+  });
+
+  it("uses an explicit classifier before any structured-output model", async () => {
+    const model: StructuredSafetyModel = {
+      withStructuredOutput: () => {
+        throw new Error("model should not be used");
+      },
+    };
+    const middleware = asHookable(
+      createSafetyGuardrail({
+        classifier: createFakeClassifier(false),
+        model,
       }),
     );
 

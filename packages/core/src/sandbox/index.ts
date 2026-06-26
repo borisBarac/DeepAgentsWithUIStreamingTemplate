@@ -12,7 +12,6 @@ export {
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
   type DockerSandboxBackendOptions,
-  describeSandboxBackend,
   ENTRYPOINT_FILENAME,
   SANDBOX_PROFILES,
   type SandboxArtifact,

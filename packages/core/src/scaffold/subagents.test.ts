@@ -13,6 +13,12 @@ import { reviewReportSchema } from "../review/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import { createDefaultSubagents } from "./subagents.ts";
 
+function responseFormatSchema(rf: unknown): unknown {
+  return rf != null && typeof rf === "object" && "schema" in rf
+    ? (rf as { schema: unknown }).schema
+    : rf;
+}
+
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "baseline prompt",
   getSupervisorPrompt: () => "supervisor prompt",
@@ -35,6 +41,12 @@ const testImageGenerationService = {
 
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
   return subagents as SubAgent[];
+}
+
+function expectStructuredPrompt(prompt: unknown, basePrompt: string): void {
+  expect(prompt).toBe(
+    `${basePrompt}\n\nRespond with a single JSON object matching the requested schema.`,
+  );
 }
 
 describe("default subagents", () => {
@@ -137,13 +149,11 @@ describe("default subagents", () => {
       ),
     );
 
-    expect(subagents.map((subagent) => subagent.systemPrompt)).toEqual([
-      "custom clarifier prompt",
-      "custom researcher prompt",
-      "custom analyst prompt",
-      "custom image designer prompt",
-      "custom review prompt",
-    ]);
+    expectStructuredPrompt(subagents[0]?.systemPrompt, "custom clarifier prompt");
+    expect(subagents[1]?.systemPrompt).toBe("custom researcher prompt");
+    expect(subagents[2]?.systemPrompt).toBe("custom analyst prompt");
+    expectStructuredPrompt(subagents[3]?.systemPrompt, "custom image designer prompt");
+    expectStructuredPrompt(subagents[4]?.systemPrompt, "custom review prompt");
   });
 
   it("lets explicit subagent prompt overrides win over the prompt loader", () => {
@@ -168,11 +178,11 @@ describe("default subagents", () => {
       createDefaultSubagents({ imageGenerationService: testImageGenerationService }),
     );
 
-    expect(clarifier?.responseFormat).toBe(clarificationResultSchema);
+    expect(responseFormatSchema(clarifier?.responseFormat)).toBe(clarificationResultSchema);
     expect(researcher?.responseFormat).toBeUndefined();
     expect(analyst?.responseFormat).toBeUndefined();
-    expect(imageDesigner?.responseFormat).toBe(imageDesignerResponseSchema);
-    expect(reviewer?.responseFormat).toBe(reviewReportSchema);
+    expect(responseFormatSchema(imageDesigner?.responseFormat)).toBe(imageDesignerResponseSchema);
+    expect(responseFormatSchema(reviewer?.responseFormat)).toBe(reviewReportSchema);
   });
 
   it("lets an explicit reviewer responseFormat override the default schema", () => {
@@ -257,7 +267,7 @@ describe("default subagents", () => {
     ]);
 
     const productGenerator = subagents.find((subagent) => subagent.name === "product-generator");
-    expect(productGenerator?.responseFormat).toBe(productCardBatchSchema);
+    expect(responseFormatSchema(productGenerator?.responseFormat)).toBe(productCardBatchSchema);
     expect(productGenerator?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
   });
 
@@ -274,7 +284,9 @@ describe("default subagents", () => {
     );
     expect(
       defaultSubagents.find((subagent) => subagent.name === "product-generator")?.systemPrompt,
-    ).toBe("custom product generator prompt");
+    ).toBe(
+      "custom product generator prompt\n\nRespond with a single JSON object matching the requested schema.",
+    );
 
     const overriddenSubagents = asDefaultSubagents(
       createDefaultSubagents(

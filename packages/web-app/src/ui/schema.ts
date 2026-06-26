@@ -9,6 +9,7 @@ export const componentTypes = [
   "Stack",
   "Text",
   "TextInput",
+  "product-card",
 ] as const;
 export type ComponentTypeName = (typeof componentTypes)[number];
 
@@ -49,6 +50,14 @@ export const productCardPropsSchema = z.object({
   imagePrompt: z.string().optional(),
 });
 
+export const scaffoldProductCardPropsSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  imageUrl: z.string().url().optional(),
+  status: z.enum(["streaming", "complete"]).optional(),
+});
+
 export const imagePlaceholderPropsSchema = z.object({
   alt: z.string().optional(),
   prompt: z.string().optional(),
@@ -63,6 +72,7 @@ export const componentPropsSchemas = {
   Stack: stackPropsSchema,
   Text: textPropsSchema,
   TextInput: textInputPropsSchema,
+  "product-card": scaffoldProductCardPropsSchema,
 } satisfies Record<ComponentTypeName, z.ZodType<Record<string, unknown>>>;
 
 /**
@@ -79,7 +89,7 @@ export const catalogPrompt = `JsonRenderSpec is:
   "root": "elementKey",
   "elements": {
     "elementKey": {
-      "type": "Button" | "Card" | "ImagePlaceholder" | "ProductCard" | "ProductGrid" | "Stack" | "Text" | "TextInput",
+      "type": "Button" | "Card" | "ImagePlaceholder" | "ProductCard" | "ProductGrid" | "Stack" | "Text" | "TextInput" | "product-card",
       "props": {},
       "children": ["childElementKey"]
     }
@@ -95,6 +105,7 @@ Allowed component props:
 - Stack: {"direction"?: "row" | "column", "gap"?: "xs" | "sm" | "md" | "lg"}
 - Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
 - TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
+- product-card: {"id": string, "title": string, "description": string, "imageUrl"?: string, "status"?: "streaming" | "complete"}
 
 Rules:
 - Use unique element keys.

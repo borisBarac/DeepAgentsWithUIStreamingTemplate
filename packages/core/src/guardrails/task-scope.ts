@@ -69,7 +69,7 @@ export async function classifyTaskScopeRequest(
       {
         role: "system",
         content:
-          "You are a strict task-scope classifier. Return only the requested structured decision.",
+          "You are a strict task-scope classifier. Return only the requested structured decision as a JSON object.",
       },
       {
         role: "user",
@@ -84,9 +84,7 @@ export function createTaskScopeGuardrail(
 ): DeepAgentMiddleware {
   const classifier =
     options.classifier ??
-    options.model?.withStructuredOutput(taskScopeDecisionSchema, {
-      name: "task_scope_decision",
-    });
+    options.model?.withStructuredOutput(taskScopeDecisionSchema, { method: "jsonMode" });
 
   if (!classifier) {
     throw new Error("Task scope guardrail requires a classifier or structured-output model.");

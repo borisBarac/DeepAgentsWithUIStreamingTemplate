@@ -1,15 +1,12 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { ChatOpenRouter } from "@langchain/openrouter";
 
 import {
   DEFAULT_MODEL_CATEGORY,
-  DEFAULT_SITE_NAME,
   MODEL_CATEGORIES,
   MODEL_ROLES,
   type ModelCategory,
   type ModelRole,
   OPENAI_COMPATIBLE_PROVIDER,
-  OPENROUTER_PROVIDER,
 } from "./constants.ts";
 import type {
   ModelConnectionConfig,
@@ -17,8 +14,47 @@ import type {
   ModelRuntime,
   ModelRuntimeConfig,
   RuntimeChatModel,
+  StructuredOutputMethod,
 } from "./types.ts";
 import { validateRuntimeConfig } from "./validation.ts";
+
+/**
+ * Default `withStructuredOutput` method for OpenAI-compatible connections.
+ * `"jsonMode"` (`response_format: { type: "json_object" }`) is chosen over the
+ * `@langchain/openai` default (`"jsonSchema"`) because DeepSeek — and other
+ * compatible providers — reject `json_schema` with
+ * `400 This response_format type is unavailable now`. `json_object` is accepted
+ * and works with thinking enabled (no need to disable it). Override
+ * per-connection via `OpenAICompatibleConnectionConfig.structuredOutputMethod`.
+ *
+ * NOTE: when using `jsonMode`, the prompt MUST mention "json" or the provider
+ * rejects the request (`400 Prompt must contain the word 'json'`). The scaffold
+ * and guardrails ensure this.
+ */
+export const DEFAULT_STRUCTURED_OUTPUT_METHOD: StructuredOutputMethod = "jsonMode";
+
+type WithStructuredOutput = ChatOpenAI["withStructuredOutput"];
+
+/**
+ * Adds a default `withStructuredOutput` method to a concrete model instance.
+ * This avoids subclassing LangChain's overloaded method, whose declaration is
+ * intentionally narrow and changes across minor releases.
+ */
+function withDefaultStructuredOutputMethod(
+  model: ChatOpenAI,
+  defaultStructuredOutputMethod: StructuredOutputMethod,
+): RuntimeChatModel {
+  const original = model.withStructuredOutput.bind(model) as WithStructuredOutput;
+  model.withStructuredOutput = ((schema: unknown, config?: { method?: StructuredOutputMethod }) =>
+    original(
+      schema as never,
+      {
+        ...config,
+        method: config?.method ?? defaultStructuredOutputMethod,
+      } as never,
+    )) as WithStructuredOutput;
+  return model;
+}
 
 function createRuntimeModel(
   connection: ModelConnectionConfig,
@@ -34,25 +70,20 @@ function createRuntimeModel(
   };
 
   switch (connection.provider) {
-    case OPENROUTER_PROVIDER:
-      return new ChatOpenRouter({
-        ...connection.options,
-        ...commonOptions,
-        apiKey: connection.apiKey,
-        siteName: connection.siteName ?? DEFAULT_SITE_NAME,
-        siteUrl: connection.siteUrl,
-      });
     case OPENAI_COMPATIBLE_PROVIDER:
-      return new ChatOpenAI({
-        ...connection.options,
-        ...commonOptions,
-        apiKey: connection.apiKey,
-        useResponsesApi: false,
-        configuration: {
-          ...connection.options?.configuration,
-          baseURL: connection.baseURL,
-        },
-      });
+      return withDefaultStructuredOutputMethod(
+        new ChatOpenAI({
+          ...connection.options,
+          ...commonOptions,
+          apiKey: connection.apiKey,
+          useResponsesApi: false,
+          configuration: {
+            ...connection.options?.configuration,
+            baseURL: connection.baseURL,
+          },
+        }),
+        connection.structuredOutputMethod ?? DEFAULT_STRUCTURED_OUTPUT_METHOD,
+      );
   }
 }
 
@@ -70,6 +101,7 @@ function createRuntimeModel(
 export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
   validateRuntimeConfig(config);
   const cache = new Map<ModelCategory, RuntimeChatModel>();
+  let guardrailsModel: RuntimeChatModel | undefined;
 
   const getModelForCategory = (category: ModelCategory): RuntimeChatModel => {
     if (!MODEL_CATEGORIES.includes(category)) {
@@ -98,6 +130,31 @@ export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
     return config.assignments[role] ?? config.assignments.default ?? DEFAULT_MODEL_CATEGORY;
   };
 
+  const getModelForGuardrails = (): RuntimeChatModel => {
+    if (guardrailsModel) {
+      return guardrailsModel;
+    }
+    const baseProfile = config.categories.fast;
+    const baseProviderOptions = (baseProfile.providerOptions ?? {}) as Record<string, unknown>;
+    const baseModelKwargs = (baseProviderOptions.modelKwargs ?? {}) as Record<string, unknown>;
+    const profile: ModelProfileConfig = {
+      ...baseProfile,
+      providerOptions: {
+        ...baseProviderOptions,
+        modelKwargs: {
+          ...baseModelKwargs,
+          thinking: { type: "disabled" },
+        },
+      },
+    };
+    const connection = config.connections[profile.connection];
+    if (!connection) {
+      throw new Error(`Category "fast" references unknown connection "${profile.connection}".`);
+    }
+    guardrailsModel = createRuntimeModel(connection, profile);
+    return guardrailsModel;
+  };
+
   return {
     getModelForCategory,
     getCategoryForRole,
@@ -110,5 +167,6 @@ export function createModelRuntime(config: ModelRuntimeConfig): ModelRuntime {
       }
       return config.assignments[role] !== undefined || config.assignments.default !== undefined;
     },
+    getModelForGuardrails,
   };
 }

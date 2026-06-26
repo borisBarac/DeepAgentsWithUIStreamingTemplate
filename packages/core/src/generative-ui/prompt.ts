@@ -30,7 +30,7 @@ Prefer streaming several small updates: a short message line, then either a ques
  */
 export const PRODUCT_CARD_CATALOG_PROMPT = `Product details stream as "product-card" ui specs. Emit one ui update per product card:
 
-{"type":"ui","spec":{"root":"<unique-card-id>","elements":{"<unique-card-id>":{"type":"product-card","props":{"id":"<unique-card-id>","title":"<concise title>","description":"<clear description>","imageUrl":"<optional https url>"}}}}}
+{"type":"ui","spec":{"root":"<unique-card-id>","elements":{"<unique-card-id>":{"type":"product-card","props":{"id":"<unique-card-id>","title":"<concise title>","description":"<clear description>","imageUrl":"<optional https url>"},"children":[]}}}}
 
 Product-card rules:
 - Each card needs a unique id, a concise title, and a clear description.

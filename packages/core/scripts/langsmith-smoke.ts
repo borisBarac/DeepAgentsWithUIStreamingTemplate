@@ -14,12 +14,16 @@ configureLangSmithTracing({ enabled: true, projectName });
 
 const modelRuntime = createModelRuntime({
   connections: {
-    openrouter: { provider: "openrouter", apiKey: "intentionally-invalid-openrouter-key" },
+    compat: {
+      provider: "openai-compatible",
+      apiKey: "intentionally-invalid-key",
+      baseURL: "https://invalid-host.example.com/v1",
+    },
   },
   categories: {
-    fast: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
-    normal: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
-    pro: { connection: "openrouter", model: "openai/gpt-4o-mini", maxRetries: 0 },
+    fast: { connection: "compat", model: "gpt-4o-mini", maxRetries: 0 },
+    normal: { connection: "compat", model: "gpt-4o-mini", maxRetries: 0 },
+    pro: { connection: "compat", model: "gpt-4o-mini", maxRetries: 0 },
   },
   assignments: { default: "normal" },
 });

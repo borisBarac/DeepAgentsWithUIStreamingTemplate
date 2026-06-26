@@ -3,7 +3,6 @@
  *
  * Agent-facing tool definitions remain in `@deep-agent-template/core`.
  */
-export { describeSandboxBackend } from "./backend-test-harness.ts";
 export {
   createDockerSandboxBackend,
   type DockerSandboxBackendOptions,

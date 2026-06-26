@@ -35,7 +35,7 @@ For LangChain/LangGraph apps, tracing is automatic. Just set environment variabl
 ```bash
 export LANGSMITH_TRACING=true
 export LANGSMITH_API_KEY=<your-api-key>
-export OPENAI_API_KEY=<your-openai-api-key>  # or your LLM provider's key
+export LLM_API_KEY=<your-llm-provider-key>
 ```
 
 Optional variables:

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@deep-agent-template/core": "workspace:*",
+    "@deep-agent-template/image-gen": "workspace:*",
     "@json-render/core": "^0.4.0",
     "@json-render/react": "^0.4.0",
     "next": "^16.0.0",

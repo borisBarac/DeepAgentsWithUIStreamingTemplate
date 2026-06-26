@@ -8,6 +8,12 @@ import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
 
+function responseFormatSchema(rf: unknown): unknown {
+  return rf != null && typeof rf === "object" && "schema" in rf
+    ? (rf as { schema: unknown }).schema
+    : rf;
+}
+
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "baseline prompt",
   getSupervisorPrompt: () => "supervisor prompt",
@@ -30,6 +36,12 @@ const testImageGenerationService = {
 
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
   return subagents as SubAgent[];
+}
+
+function expectStructuredPrompt(prompt: unknown, basePrompt: string): void {
+  expect(prompt).toBe(
+    `${basePrompt}\n\nRespond with a single JSON object matching the requested schema.`,
+  );
 }
 
 describe("runtime scaffold defaults", () => {
@@ -107,13 +119,11 @@ describe("runtime scaffold defaults", () => {
     });
     const subagents = asDefaultSubagents(scaffold.subagents);
 
-    expect(subagents.map((subagent) => subagent.systemPrompt)).toEqual([
-      "custom clarifier prompt",
-      "custom researcher prompt",
-      "custom analyst prompt",
-      "custom image designer prompt",
-      "custom review prompt",
-    ]);
+    expectStructuredPrompt(subagents[0]?.systemPrompt, "custom clarifier prompt");
+    expect(subagents[1]?.systemPrompt).toBe("custom researcher prompt");
+    expect(subagents[2]?.systemPrompt).toBe("custom analyst prompt");
+    expectStructuredPrompt(subagents[3]?.systemPrompt, "custom image designer prompt");
+    expectStructuredPrompt(subagents[4]?.systemPrompt, "custom review prompt");
     expect(scaffold.systemPrompt).toBe("supervisor prompt");
   });
 
@@ -136,11 +146,11 @@ describe("runtime scaffold defaults", () => {
       createRuntimeScaffold({ imageGenerationService: testImageGenerationService }).subagents,
     );
 
-    expect(clarifier?.responseFormat).toBe(clarificationResultSchema);
+    expect(responseFormatSchema(clarifier?.responseFormat)).toBe(clarificationResultSchema);
     expect(researcher?.responseFormat).toBeUndefined();
     expect(analyst?.responseFormat).toBeUndefined();
-    expect(imageDesigner?.responseFormat).toBe(imageDesignerResponseSchema);
-    expect(reviewer?.responseFormat).toBe(reviewReportSchema);
+    expect(responseFormatSchema(imageDesigner?.responseFormat)).toBe(imageDesignerResponseSchema);
+    expect(responseFormatSchema(reviewer?.responseFormat)).toBe(reviewReportSchema);
   });
 
   it("lets an explicit clarifier responseFormat override the default schema", () => {

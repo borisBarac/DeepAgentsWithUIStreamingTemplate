@@ -39,11 +39,8 @@ PRO_MODEL=deepseek-v4-flash    # supervisor, analyst, reviewer, finalizer
 Core does not load `.env` files; applications pass keys and endpoints from their
 own configuration or rely on the provider SDK's environment-variable conventions.
 
-Required when the default safety guardrail is enabled:
-
-```sh
-OPENAI_API_KEY=...
-```
+The safety guardrail reuses the same model runtime (`LLM_*`), so no additional
+credentials are required.
 
 Optional LangSmith tracing:
 
@@ -85,7 +82,7 @@ To verify error tracing without valid LLM credentials or incurring model cost, r
 bun run smoke:langsmith
 ```
 
-The smoke script uses an intentionally invalid OpenRouter key, catches the expected model error,
+The smoke script uses an intentionally invalid model key/endpoint, catches the expected model error,
 and prints a unique marker that can be searched in the configured LangSmith project. It sets
 `LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
 
@@ -141,7 +138,7 @@ For full control — multiple connections, per-category tuning, or a custom
 role→category mapping — build the runtime directly with `createModelRuntime`.
 The config has three parts:
 
-- `connections`: named provider endpoints. Supported providers are `openai-compatible` and `openrouter`.
+- `connections`: named provider endpoints. The supported provider is `openai-compatible`.
 - `categories`: one `ModelProfileConfig` per category (`fast`, `normal`, `pro`). Each points at one connection and sets the concrete model id plus optional runtime settings like `temperature`, `maxTokens`, `maxRetries`, `timeout`, and `providerOptions`. All three categories are required; point several at the same model when no differentiation is desired.
 - `assignments`: maps roles (and `default`) to categories. `assignments.default` falls back to `normal`.
 
@@ -310,7 +307,7 @@ const seedFiles = createMemorySeedFiles();
 const namespace = createSingleUserMemoryNamespace();
 const policy = createSingleUserMemoryPolicy();
 
-reviewMemoryContent("OPENAI_API_KEY=sk-...").allowed; // false
+reviewMemoryContent("LLM_API_KEY=sk-...").allowed; // false
 ```
 
 Durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
@@ -344,7 +341,7 @@ For scaffolded agents, explicit `systemPrompt` values and
 The scaffolded and baseline factories install two LangChain middleware guardrails by default. Pass
 `guardrails: false` only when a caller explicitly needs to opt out:
 
-- `OpenAIContentSafetyGuardrail` runs before the agent and uses OpenAI moderation (`omni-moderation-latest`) to block unsafe user requests.
+- `ContentSafetyGuardrail` runs before the agent and classifies the latest user message with the configured model runtime, blocking requests the model flags as unsafe.
 - `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope. The scaffolded and baseline factories default this classifier to the `fast` model category.
 
 Task-scope policy is controlled by markdown files under `packages/core/guardrails/`. These files are
@@ -355,7 +352,7 @@ agent runs:
 - `taskScope.allowedTasks.md`
 - `taskScope.disallowedTasks.md`
 
-The default runtime safety decision uses OpenAI moderation; provide `OPENAI_API_KEY` for live invocations.
+The default runtime safety guardrail classifies user input with the fast-category model from the configured runtime, so it needs no credentials beyond `LLM_*`.
 
 Use `createGuardrailDecision` when building a custom runtime. It resolves policy overrides, enabled guardrails, and the final middleware order:
 
@@ -379,13 +376,16 @@ const agent = createScaffoldedAgent({
 });
 ```
 
-Or override one rail while keeping the other:
+Or override one rail while keeping the other. The safety guardrail accepts a custom
+classifier or a structured-output model; when omitted, it uses the fast-category runtime model:
 
 ```ts
 const agent = createScaffoldedAgent({
   guardrails: {
     safety: {
-      model: "omni-moderation-latest",
+      classifier: {
+        invoke: async (input) => ({ flagged: false, categories: [], reason: "safe" }),
+      },
     },
     taskScope: {
       policies: {

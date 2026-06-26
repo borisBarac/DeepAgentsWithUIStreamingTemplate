@@ -6,9 +6,13 @@ export {
   type TaskScopePolicyBundle,
 } from "./policies.ts";
 export {
+  classifySafetyRequest,
   createSafetyGuardrail,
-  DEFAULT_OPENAI_MODERATION_MODEL,
+  createSafetyPrompt,
   DEFAULT_SAFETY_GUARDRAIL_NAME,
+  DEFAULT_SAFETY_REFUSAL,
+  type SafetyDecision,
+  safetyDecisionSchema,
 } from "./safety.ts";
 export {
   classifyTaskScopeRequest,
@@ -26,7 +30,8 @@ export type {
   GuardrailDecisionRuntime,
   GuardrailSafetyOptions,
   GuardrailTaskScopeOptions,
-  OpenAIContentSafetyClient,
+  SafetyClassifier,
+  StructuredSafetyModel,
   StructuredTaskScopeModel,
   TaskScopeClassifier,
 } from "./types.ts";
