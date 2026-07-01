@@ -34,7 +34,8 @@ input {
   display: grid;
   gap: 0;
   grid-template-columns: minmax(360px, 0.86fr) minmax(420px, 1.14fr);
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
 }
 
 .chat-pane,
@@ -47,6 +48,7 @@ input {
   border-right: 1px solid var(--line);
   display: grid;
   grid-template-rows: auto 1fr auto;
+  min-height: 0;
 }
 
 .app-header p,
@@ -66,11 +68,16 @@ input {
 }
 
 .message-list {
-  align-content: start;
+  align-content: end;
   display: grid;
   gap: 14px;
+  min-height: 0;
   overflow: auto;
   padding-right: 4px;
+}
+
+.message-list-anchor {
+  height: 1px;
 }
 
 .empty-state,
@@ -126,6 +133,82 @@ input {
   color: var(--danger);
 }
 
+.subagent-activity {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.subagent-activity summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+}
+
+.subagent-activity summary span {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.subagent-activity summary small {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.subagent-activity-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.subagent-activity-item {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+}
+
+.subagent-activity-item header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.subagent-activity-item strong {
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.subagent-activity-item header span {
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.subagent-activity-item p {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.subagent-event-error {
+  border-color: #e8b4b4;
+}
+
+.subagent-event-error header span {
+  color: var(--danger);
+}
+
 .question-options {
   display: grid;
   gap: 8px;
@@ -165,6 +248,21 @@ input {
   padding-top: 20px;
 }
 
+.composer-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.composer-spinner {
+  animation: composer-spin 0.8s linear infinite;
+  border: 2px solid rgba(17, 100, 102, 0.18);
+  border-radius: 999px;
+  border-top-color: var(--accent);
+  height: 18px;
+  width: 18px;
+}
+
 .composer input,
 .question-form input,
 .jr-field input {
@@ -201,9 +299,28 @@ input {
   cursor: not-allowed;
 }
 
+.sr-only {
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@keyframes composer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .preview-pane {
   display: grid;
   grid-template-rows: auto 1fr;
+  min-height: 0;
 }
 
 .preview-header {
@@ -394,12 +511,14 @@ input {
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
   }
 
   .chat-pane {
     border-bottom: 1px solid var(--line);
     border-right: 0;
-    min-height: 58vh;
+    height: 58vh;
   }
 
   .chat-pane,
@@ -409,6 +528,10 @@ input {
 
   .composer {
     grid-template-columns: 1fr;
+  }
+
+  .composer-actions {
+    justify-content: flex-end;
   }
 
   .question-form {

@@ -3,8 +3,9 @@
 import { normalizeQuestionOption } from "@deep-agent-template/core/generative-ui";
 import { useState } from "react";
 import { JsonRenderPreview } from "../src/ui/catalog.tsx";
-import type { DisplayMessage } from "../src/ui/use-agent-chat.ts";
+import type { DisplayMessage, DisplaySubagentActivity } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
+import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
 
 function QuestionControls({
   disabled,
@@ -67,9 +68,38 @@ function QuestionControls({
   );
 }
 
+function SubagentActivityPanel({ activity }: { activity: DisplaySubagentActivity[] }) {
+  if (activity.length === 0) {
+    return null;
+  }
+
+  return (
+    <details className="subagent-activity" open>
+      <summary>
+        <span>Subagent activity</span>
+        <small>{activity.length}</small>
+      </summary>
+      <div className="subagent-activity-list">
+        {activity.map((item) => (
+          <article className={`subagent-activity-item subagent-event-${item.event}`} key={item.id}>
+            <header>
+              <strong>{item.subagentName}</strong>
+              <span>{item.event}</span>
+            </header>
+            {item.task ? <p>{item.task}</p> : null}
+            {item.text ? <p>{item.text}</p> : null}
+            {item.message ? <p>{item.message}</p> : null}
+          </article>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 export default function Home() {
   const {
     visibleMessages,
+    subagentActivity,
     input,
     latestSpec,
     error,
@@ -79,6 +109,12 @@ export default function Home() {
     submitAnswer,
     submitMessage,
   } = useAgentChat();
+  const { bottomAnchorRef, containerRef: messageListRef } = useStickyBottomScroll([
+    visibleMessages,
+    subagentActivity,
+    latestSpec,
+    error,
+  ]);
 
   return (
     <main className="app-shell">
@@ -88,7 +124,7 @@ export default function Home() {
           <h1>Generative UI</h1>
         </header>
 
-        <div className="message-list">
+        <div className="message-list" ref={messageListRef}>
           {visibleMessages.length === 0 ? (
             <div className="empty-state">
               <h2>Describe a product idea</h2>
@@ -109,6 +145,8 @@ export default function Home() {
               <p>{error}</p>
             </article>
           ) : null}
+          <SubagentActivityPanel activity={subagentActivity} />
+          <div aria-hidden="true" className="message-list-anchor" ref={bottomAnchorRef} />
         </div>
 
         <form className="composer" onSubmit={submitMessage}>
@@ -119,9 +157,15 @@ export default function Home() {
             placeholder="Describe the product you want to create"
             value={input}
           />
-          <button disabled={!canSubmit} type="submit">
-            {loading ? "Running" : "Send"}
-          </button>
+          <div className="composer-actions">
+            {loading ? <span aria-hidden="true" className="composer-spinner" /> : null}
+            <span aria-live="polite" className="sr-only">
+              {loading ? "Processing" : "Ready"}
+            </span>
+            <button disabled={!canSubmit} type="submit">
+              Send
+            </button>
+          </div>
         </form>
       </section>
 

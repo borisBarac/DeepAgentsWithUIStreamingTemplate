@@ -4,15 +4,16 @@ import type { Spec, UIElement } from "@json-render/core";
 import { defineCatalog } from "@json-render/core";
 import type { ComponentRegistry } from "@json-render/react";
 import { JSONUIProvider, Renderer, schema, useDataBinding } from "@json-render/react";
-import type { z } from "zod";
+import { createContext, useContext, useState } from "react";
+import { z } from "zod";
 
 import {
   buttonPropsSchema,
   cardPropsSchema,
   imagePlaceholderPropsSchema,
+  productCardSchema,
   productCardPropsSchema,
   productGridPropsSchema,
-  scaffoldProductCardPropsSchema,
   stackPropsSchema,
   textInputPropsSchema,
   textPropsSchema,
@@ -37,7 +38,7 @@ export const uiCatalog = defineCatalog(schema, {
       description: "A product concept card with title, description, and image prompt.",
     },
     "product-card": {
-      props: scaffoldProductCardPropsSchema,
+      props: productCardSchema,
       description: "A scaffold-generated product card with optional generated image URL.",
     },
     ProductGrid: {
@@ -57,21 +58,62 @@ export const uiCatalog = defineCatalog(schema, {
       description: "A controlled text field. Use name as a stable form field identifier.",
     },
   },
-  actions: {},
+  actions: {
+    demo_action: {
+      params: z.object({}),
+      description: "Shows local preview feedback for a generated demo action.",
+    },
+    submit_demo: {
+      params: z.object({}),
+      description: "Shows local preview feedback for a generated submit action.",
+    },
+  },
 });
 
 function getProps<P>(element: UIElement<string, P>): P {
   return element.props;
 }
 
+const DEFAULT_ACTION_LABELS: Record<string, string> = {
+  demo_action: "Demo action ran.",
+  submit_demo: "Demo submitted.",
+};
+
+export function getActionFeedbackMessage(actionName: string): string {
+  return DEFAULT_ACTION_LABELS[actionName] ?? `Action "${actionName}" is not wired yet.`;
+}
+
+export function getTextInputAutoComplete(
+  props: z.infer<typeof textInputPropsSchema>,
+): string | undefined {
+  if (props.inputType === "password") {
+    return props.name.toLowerCase().includes("new") ? "new-password" : "current-password";
+  }
+  if (props.inputType === "email" || props.name.toLowerCase().includes("email")) {
+    return "email";
+  }
+  return undefined;
+}
+
+type PreviewActionFeedback = {
+  message: string | null;
+  runAction: (actionName: string) => void;
+};
+
+const PreviewActionContext = createContext<PreviewActionFeedback>({
+  message: null,
+  runAction: () => undefined,
+});
+
 export const registry: ComponentRegistry = {
-  Button: ({ element, onAction }) => {
+  Button: ({ element }) => {
     const props = getProps(element) as z.infer<typeof buttonPropsSchema>;
+    const { runAction } = useContext(PreviewActionContext);
     return (
       <button
         className="jr-button"
         type="button"
-        onClick={() => props.action && onAction?.({ name: props.action })}
+        onClick={() => props.action && runAction(props.action)}
       >
         {props.label}
       </button>
@@ -114,7 +156,7 @@ export const registry: ComponentRegistry = {
     );
   },
   "product-card": ({ element }) => {
-    const props = getProps(element) as z.infer<typeof scaffoldProductCardPropsSchema>;
+    const props = getProps(element) as z.infer<typeof productCardSchema>;
     return (
       <article className="product-card">
         {props.imageUrl ? (
@@ -170,6 +212,7 @@ export const registry: ComponentRegistry = {
       <label className="jr-field">
         <span>{props.label}</span>
         <input
+          autoComplete={getTextInputAutoComplete(props)}
           name={props.name}
           onChange={(event) => setValue(event.target.value)}
           placeholder={props.placeholder ?? ""}
@@ -184,9 +227,31 @@ export const registry: ComponentRegistry = {
 const INITIAL_DATA: Record<string, unknown> = {};
 
 export function JsonRenderPreview({ loading, spec }: { loading: boolean; spec: Spec | null }) {
+  const [message, setMessage] = useState<string | null>(null);
+
   return (
-    <JSONUIProvider initialData={INITIAL_DATA} registry={registry}>
-      <Renderer loading={loading} registry={registry} spec={spec} />
-    </JSONUIProvider>
+    <PreviewActionContext.Provider
+      value={{
+        message,
+        runAction: (actionName) => setMessage(getActionFeedbackMessage(actionName)),
+      }}
+    >
+      <JSONUIProvider initialData={INITIAL_DATA} registry={registry}>
+        <form
+          className="jr-preview-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setMessage(getActionFeedbackMessage("submit_demo"));
+          }}
+        >
+          <Renderer loading={loading} registry={registry} spec={spec} />
+        </form>
+        {message ? (
+          <p aria-live="polite" className="jr-action-feedback">
+            {message}
+          </p>
+        ) : null}
+      </JSONUIProvider>
+    </PreviewActionContext.Provider>
   );
 }
