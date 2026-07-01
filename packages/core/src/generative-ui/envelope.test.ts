@@ -29,6 +29,16 @@ describe("parseUpdateLine", () => {
     });
   });
 
+  it("parses main agent activity updates", () => {
+    expect(
+      parseUpdateLine('{"type":"main_agent_activity","event":"delta","text":"Thinking"}'),
+    ).toEqual({
+      type: "main_agent_activity",
+      event: "delta",
+      text: "Thinking",
+    });
+  });
+
   it("parses question updates", () => {
     expect(
       parseUpdateLine(
@@ -77,6 +87,7 @@ describe("applyUiUpdate", () => {
         onQuestion: (question: { prompt: string }) => calls.push(`question:${question.prompt}`),
         onSpec: () => calls.push("spec"),
         onError: (message: string) => calls.push(`error:${message}`),
+        onMainAgentActivity: (update: { event: string }) => calls.push(`main:${update.event}`),
         onSubagentActivity: (update: { subagentName: string; event: string }) =>
           calls.push(`subagent:${update.subagentName}:${update.event}`),
       },
@@ -115,6 +126,12 @@ describe("applyUiUpdate", () => {
     const { calls, handlers } = recorder();
     applyUiUpdate({ type: "error", message: "boom" }, handlers);
     expect(calls).toEqual(["error:boom"]);
+  });
+
+  it("routes main agent activity updates to onMainAgentActivity", () => {
+    const { calls, handlers } = recorder();
+    applyUiUpdate({ type: "main_agent_activity", event: "started" }, handlers);
+    expect(calls).toEqual(["main:started"]);
   });
 
   it("routes subagent activity updates to onSubagentActivity", () => {
@@ -213,6 +230,20 @@ describe("normalizeUiUpdate", () => {
     });
   });
 
+  it("validates main agent activity updates", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "main_agent_activity",
+        event: "completed",
+        message: "done",
+      }),
+    ).toEqual({
+      type: "main_agent_activity",
+      event: "completed",
+      message: "done",
+    });
+  });
+
   it("rejects subagent activity with unknown events", () => {
     expect(
       normalizeUiUpdate({
@@ -254,6 +285,15 @@ describe("uiUpdateZone", () => {
         subagentName: "researcher",
         event: "delta",
         text: "Searching",
+      }),
+    ).toBe("interaction");
+  });
+
+  it("keeps main agent activity out of the chat zone", () => {
+    expect(
+      uiUpdateZone({
+        type: "main_agent_activity",
+        event: "started",
       }),
     ).toBe("interaction");
   });

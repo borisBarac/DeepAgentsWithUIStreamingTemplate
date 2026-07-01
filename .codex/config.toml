@@ -1,4 +1,28 @@
+[features]
+memories = true
+
 [mcp_servers.chrome-devtools]
 command = "npx"
 args = ["-y", "chrome-devtools-mcp@latest"]
 startup_timeout_sec = 20
+enabled = false
+
+[mcp_servers.codex_apps]
+command = "npx"
+args = ["-y", "codex-apps-mcp@latest"]
+enabled = false
+
+[mcp_servers.computer-use]
+command = "npx"
+args = ["-y", "computer-use-mcp@latest"]
+enabled = false
+
+[mcp_servers.dataAnalyticsWidgets]
+command = "npx"
+args = ["-y", "data-analytics-widgets-mcp@latest"]
+enabled = false
+
+[mcp_servers.node_repl]
+command = "npx"
+args = ["-y", "node-repl-mcp@latest"]
+enabled = false

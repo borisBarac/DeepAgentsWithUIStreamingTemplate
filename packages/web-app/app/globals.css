@@ -33,13 +33,14 @@ input {
 .app-shell {
   display: grid;
   gap: 0;
-  grid-template-columns: minmax(360px, 0.86fr) minmax(420px, 1.14fr);
+  grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.1fr) minmax(260px, 0.55fr);
   height: 100vh;
   min-height: 0;
 }
 
 .chat-pane,
-.preview-pane {
+.preview-pane,
+.debug-pane {
   min-width: 0;
   padding: 28px;
 }
@@ -48,6 +49,13 @@ input {
   border-right: 1px solid var(--line);
   display: grid;
   grid-template-rows: auto 1fr auto;
+  min-height: 0;
+}
+
+.debug-pane {
+  border-left: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: auto 1fr;
   min-height: 0;
 }
 
@@ -133,34 +141,59 @@ input {
   color: var(--danger);
 }
 
-.subagent-activity {
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
-}
-
-.subagent-activity summary {
+.debug-header {
   align-items: center;
-  cursor: pointer;
   display: flex;
   justify-content: space-between;
+  margin-bottom: 18px;
 }
 
-.subagent-activity summary span {
-  color: var(--ink);
-  font-size: 0.82rem;
+.debug-header p {
+  color: var(--accent);
+  font-size: 0.78rem;
   font-weight: 700;
+  letter-spacing: 0;
+  margin: 0 0 8px;
+  text-transform: uppercase;
 }
 
-.subagent-activity-list {
+.debug-header h2 {
+  font-size: 1.2rem;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.debug-header > span {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  min-width: 32px;
+  padding: 6px 10px;
+  text-align: center;
+}
+
+.agent-activity-list {
+  align-content: start;
   display: grid;
   gap: 8px;
-  margin-top: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
 }
 
-.subagent-activity-item {
-  background: #ffffff;
+.agent-empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 14px;
+}
+
+.agent-activity-item {
+  background: var(--panel-soft);
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
@@ -168,26 +201,26 @@ input {
   padding: 9px 10px;
 }
 
-.subagent-activity-item header {
+.agent-activity-item header {
   align-items: center;
   display: flex;
   gap: 8px;
   justify-content: space-between;
 }
 
-.subagent-activity-item strong {
+.agent-activity-item strong {
   font-size: 0.82rem;
   overflow-wrap: anywhere;
 }
 
-.subagent-activity-item header span {
+.agent-activity-item header span {
   color: var(--accent);
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.subagent-activity-item p {
+.agent-activity-item p {
   color: var(--muted);
   font-size: 0.84rem;
   line-height: 1.35;
@@ -196,11 +229,28 @@ input {
   white-space: pre-wrap;
 }
 
-.subagent-event-error {
+.agent-activity-item.main_agent_activity {
+  background: #f6ead7;
+  border-color: #e8d3af;
+}
+
+.agent-activity-item.subagent_activity {
+  background: #eef3f7;
+}
+
+.agent-activity-item.subagent_activity header span {
+  color: var(--accent-dark);
+}
+
+.agent-activity-item.error,
+.agent-activity-item.subagent_activity.error,
+.agent-activity-item.main_agent_activity.error {
   border-color: #e8b4b4;
 }
 
-.subagent-event-error header span {
+.agent-activity-item.error header span,
+.agent-activity-item.subagent_activity.error header span,
+.agent-activity-item.main_agent_activity.error header span {
   color: var(--danger);
 }
 
@@ -427,11 +477,6 @@ input {
   text-transform: uppercase;
 }
 
-.subagent-activity summary small {
-  color: var(--muted);
-  font-weight: 700;
-}
-
 .jr-card {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -522,8 +567,15 @@ input {
   }
 
   .chat-pane,
-  .preview-pane {
+  .preview-pane,
+  .debug-pane {
     padding: 20px;
+  }
+
+  .debug-pane {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    max-height: 42vh;
   }
 
   .composer {

@@ -100,6 +100,12 @@ export type UiUpdate =
       message: string;
     }
   | {
+      type: "main_agent_activity";
+      event: "started" | "delta" | "completed" | "error";
+      text?: string;
+      message?: string;
+    }
+  | {
       type: "subagent_activity";
       subagentName: string;
       event: "started" | "delta" | "completed" | "error";

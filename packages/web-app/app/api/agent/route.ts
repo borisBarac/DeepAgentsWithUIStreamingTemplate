@@ -1,10 +1,9 @@
 import type { DeepAgent } from "@deep-agent-template/core";
 import {
-  extractUpdateObjects,
   normalizeUiUpdate,
+  parseUpdateText,
   productCardBatchSchema,
   productCardsToUiUpdates,
-  StreamingLineBuffer,
   type UiUpdate,
 } from "@deep-agent-template/core/generative-ui";
 import { NextResponse } from "next/server";
@@ -167,29 +166,16 @@ function parseRequestBody(body: unknown): {
   };
 }
 
-function emitParsedLines(
+function emitParsedUpdates(
   controller: ReadableStreamDefaultController<Uint8Array>,
-  lines: string[],
+  updates: UiUpdate[],
   stats?: { valid: number },
   onUpdate?: (update: UiUpdate) => void,
 ): void {
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    for (const candidate of extractUpdateObjects(parsed)) {
-      const update = normalizeUiUpdate(candidate, normalizeStreamingSpec);
-      if (update) {
-        controller.enqueue(encodeUpdate(update));
-        if (stats) stats.valid += 1;
-        onUpdate?.(update);
-      }
-    }
+  for (const update of updates) {
+    controller.enqueue(encodeUpdate(update));
+    if (stats) stats.valid += 1;
+    onUpdate?.(update);
   }
 }
 
@@ -253,12 +239,12 @@ async function streamWithEvents(
   agent: StreamableAgent,
   input: { messages: AgentInputMessage[] },
   sessionId: string,
-  onText: (text: string) => void,
+  onMainAgentActivity?: (update: Extract<UiUpdate, { type: "main_agent_activity" }>) => void,
   onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
-): Promise<{ finalText: string; result: AgentResult | null; streamedText: boolean }> {
+): Promise<{ finalText: string; result: AgentResult | null }> {
   if (!agent.streamEvents) {
     const result = (await agent.invoke(input)) as AgentResult;
-    return { finalText: extractFinalResponse(result), result, streamedText: false };
+    return { finalText: extractFinalResponse(result), result };
   }
 
   const run = await agent.streamEvents(input, {
@@ -268,10 +254,14 @@ async function streamWithEvents(
   let streamedText = "";
 
   const drainMessages = async () => {
+    onMainAgentActivity?.({ type: "main_agent_activity", event: "started" });
     for await (const message of run.messages) {
       for await (const token of message.text) {
+        if (!token) {
+          continue;
+        }
         streamedText += token;
-        onText(token);
+        onMainAgentActivity?.({ type: "main_agent_activity", event: "delta", text: token });
       }
     }
   };
@@ -288,10 +278,19 @@ async function streamWithEvents(
     await Promise.all(activityStreams);
   };
 
-  const [result] = await Promise.all([run.output, drainMessages(), drainSubagents()]);
-
-  const finalText = streamedText || extractFinalResponse(result);
-  return { finalText, result, streamedText: Boolean(streamedText) };
+  try {
+    const [result] = await Promise.all([run.output, drainMessages(), drainSubagents()]);
+    onMainAgentActivity?.({ type: "main_agent_activity", event: "completed" });
+    const finalText = streamedText || extractFinalResponse(result);
+    return { finalText, result };
+  } catch (error) {
+    onMainAgentActivity?.({
+      type: "main_agent_activity",
+      event: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
 }
 
 async function drainSubagentActivity(
@@ -382,14 +381,15 @@ export async function POST(request: Request): Promise<Response> {
       const stats = { valid: 0 };
 
       async function runAttempt(): Promise<{ finalText: string; result: AgentResult | null }> {
-        const lineBuffer = new StreamingLineBuffer();
-        const { finalText, result, streamedText } = await streamWithEvents(
+        const { finalText, result } = await streamWithEvents(
           agent,
           input,
           parsedRequest.sessionId,
-          (token) => {
-            emitParsedLines(controller, lineBuffer.push(token), stats);
-          },
+          parsedRequest.includeSubagentActivity
+            ? (update) => {
+                controller.enqueue(encodeUpdate(update));
+              }
+            : undefined,
           parsedRequest.includeSubagentActivity
             ? (update) => {
                 controller.enqueue(encodeUpdate(update));
@@ -397,13 +397,7 @@ export async function POST(request: Request): Promise<Response> {
             : undefined,
         );
 
-        if (streamedText) {
-          // The final line often lacks a trailing newline; flush whatever
-          // remains buffered so it isn't dropped.
-          emitParsedLines(controller, lineBuffer.flush(), stats);
-        } else {
-          emitParsedLines(controller, finalText.split("\n"), stats);
-        }
+        emitParsedUpdates(controller, parseUpdateText(finalText, normalizeStreamingSpec), stats);
         return { finalText, result };
       }
 

@@ -27,12 +27,46 @@ type InspectableAgent = FakeAgent & {
   inputs: Array<{ messages: Array<{ content: string; role: "assistant" | "user" }> }>;
 };
 
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+};
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function asyncIterableFrom<T>(items: T[]): AsyncIterable<T> {
   return {
     async *[Symbol.asyncIterator]() {
       for (const item of items) {
         yield item;
       }
+    },
+  };
+}
+
+function createBufferedCompletionAgent(
+  chunks: string[],
+  output: Deferred<{ messages: Array<{ content: string; role: "assistant" }> }>,
+): FakeAgent {
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom(chunks),
+          },
+        ]),
+        output: output.promise,
+      };
     },
   };
 }
@@ -52,6 +86,32 @@ function createStreamingAgent(outputs: string[]): FakeAgent {
         output: Promise.resolve({
           messages: [{ content: text, role: "assistant" }],
         }),
+      };
+    },
+  };
+}
+
+function createLiveSubagentAgent(
+  output: Deferred<{ messages: Array<{ content: string; role: "assistant" }> }>,
+): FakeAgent {
+  const text = '{"type":"message","text":"done"}\n';
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom([text]),
+          },
+        ]),
+        subagents: asyncIterableFrom([
+          {
+            name: "researcher",
+            taskInput: "Find supporting facts",
+            messages: asyncIterableFrom([]),
+            output: Promise.resolve({}),
+          },
+        ]),
+        output: output.promise,
       };
     },
   };
@@ -122,6 +182,13 @@ async function readNdjson(response: Response): Promise<unknown[]> {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => JSON.parse(line) as unknown);
+}
+
+async function readWithTimeout<T>(read: Promise<T>, timeoutMs = 20): Promise<T | "timeout"> {
+  return await Promise.race([
+    read,
+    new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), timeoutMs)),
+  ]);
 }
 
 afterEach(async () => {
@@ -210,6 +277,115 @@ describe("finalTextToMessageFallback", () => {
 });
 
 describe("POST", () => {
+  it("buffers chunked main-agent output until the run completes", async () => {
+    const route = await import("./route.ts");
+    const output = createDeferred<{ messages: Array<{ content: string; role: "assistant" }> }>();
+    const text = '{"type":"message","text":"chunked"}';
+    route.setAgentForTest(
+      createBufferedCompletionAgent(
+        ['{"type":"message"', ',"text":"chunked"}'],
+        output,
+      ) as unknown as Parameters<typeof route.setAgentForTest>[0],
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "generate concepts", sessionId: "chunked-buffered" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    if (!response.body) {
+      throw new Error("expected response body");
+    }
+    const reader = response.body.getReader();
+    const pendingRead = reader.read();
+    await expect(readWithTimeout(pendingRead)).resolves.toBe("timeout");
+
+    output.resolve({ messages: [{ content: text, role: "assistant" }] });
+
+    const first = await pendingRead;
+    expect(first.done).toBe(false);
+    expect(JSON.parse(new TextDecoder().decode(first.value))).toEqual({
+      type: "message",
+      text: "chunked",
+    });
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it("streams main-agent activity before buffered output completes when requested", async () => {
+    const route = await import("./route.ts");
+    const output = createDeferred<{ messages: Array<{ content: string; role: "assistant" }> }>();
+    route.setAgentForTest(
+      createBufferedCompletionAgent(["Thinking", " through"], output) as unknown as Parameters<
+        typeof route.setAgentForTest
+      >[0],
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({
+          includeSubagentActivity: true,
+          message: "generate concepts",
+          sessionId: "main-activity",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    if (!response.body) {
+      throw new Error("expected response body");
+    }
+
+    const reader = response.body.getReader();
+    const first = await readWithTimeout(reader.read(), 100);
+    expect(first).not.toBe("timeout");
+    if (first === "timeout" || first.done) {
+      throw new Error("expected debug updates before completion");
+    }
+
+    const earlyUpdates = new TextDecoder()
+      .decode(first.value)
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as unknown);
+    const second = await readWithTimeout(reader.read(), 100);
+    expect(second).not.toBe("timeout");
+    if (second === "timeout" || second.done) {
+      throw new Error("expected main-agent delta before completion");
+    }
+    earlyUpdates.push(
+      ...new TextDecoder()
+        .decode(second.value)
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as unknown),
+    );
+
+    expect(earlyUpdates).toContainEqual({
+      type: "main_agent_activity",
+      event: "started",
+    });
+    expect(earlyUpdates).toContainEqual({
+      type: "main_agent_activity",
+      event: "delta",
+      text: "Thinking",
+    });
+    expect(earlyUpdates).not.toContainEqual({ type: "message", text: "Thinking through" });
+
+    output.resolve({
+      messages: [{ content: '{"type":"message","text":"Thinking through"}\n', role: "assistant" }],
+    });
+    while (true) {
+      const next = await reader.read();
+      if (next.done) {
+        break;
+      }
+    }
+  });
+
   it("streams one valid message update for malformed non-UI model text", async () => {
     const route = await import("./route.ts");
     route.setAgentForTest(
@@ -338,6 +514,71 @@ describe("POST", () => {
       subagentName: "researcher",
       event: "completed",
     });
+  });
+
+  it("streams requested subagent activity before buffered main output completes", async () => {
+    const route = await import("./route.ts");
+    const output = createDeferred<{ messages: Array<{ content: string; role: "assistant" }> }>();
+    route.setAgentForTest(
+      createLiveSubagentAgent(output) as unknown as Parameters<typeof route.setAgentForTest>[0],
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({
+          includeSubagentActivity: true,
+          message: "generate concepts",
+          sessionId: "live-activity",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    if (!response.body) {
+      throw new Error("expected response body");
+    }
+    const reader = response.body.getReader();
+    const first = await readWithTimeout(reader.read(), 100);
+    expect(first).not.toBe("timeout");
+    if (first === "timeout" || first.done) {
+      throw new Error("expected subagent update before completion");
+    }
+
+    const earlyUpdates = new TextDecoder()
+      .decode(first.value)
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as unknown);
+    const second = await readWithTimeout(reader.read(), 100);
+    expect(second).not.toBe("timeout");
+    if (second === "timeout" || second.done) {
+      throw new Error("expected subagent update before completion");
+    }
+    earlyUpdates.push(
+      ...new TextDecoder()
+        .decode(second.value)
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as unknown),
+    );
+    expect(earlyUpdates).toContainEqual({
+      type: "subagent_activity",
+      subagentName: "researcher",
+      event: "started",
+      task: "Find supporting facts",
+    });
+    expect(earlyUpdates).not.toContainEqual({ type: "message", text: "done" });
+
+    output.resolve({
+      messages: [{ content: '{"type":"message","text":"done"}\n', role: "assistant" }],
+    });
+    while (true) {
+      const next = await reader.read();
+      if (next.done) {
+        break;
+      }
+    }
   });
 
   it("does not stream subagent activity unless requested", async () => {

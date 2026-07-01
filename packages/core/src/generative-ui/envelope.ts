@@ -53,6 +53,13 @@ const rawErrorUpdateSchema = z.object({
   message: z.string(),
 });
 
+const rawMainAgentActivityUpdateSchema = z.object({
+  type: z.literal("main_agent_activity"),
+  event: z.enum(["started", "delta", "completed", "error"]),
+  text: z.string().optional(),
+  message: z.string().optional(),
+});
+
 const rawSubagentActivityUpdateSchema = z.object({
   type: z.literal("subagent_activity"),
   subagentName: z.string().min(1),
@@ -72,6 +79,7 @@ const rawUpdateSchema = z.discriminatedUnion("type", [
   rawQuestionUpdateSchema,
   rawUiUpdateSchema,
   rawErrorUpdateSchema,
+  rawMainAgentActivityUpdateSchema,
   rawSubagentActivityUpdateSchema,
 ]);
 
@@ -134,6 +142,7 @@ export type UpdateHandlers = {
   onQuestion?: (question: UiQuestion) => void;
   onSpec: (spec: Spec) => void;
   onError: (message: string) => void;
+  onMainAgentActivity?: (update: Extract<UiUpdate, { type: "main_agent_activity" }>) => void;
   onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void;
 };
 
@@ -154,6 +163,9 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
     case "error":
       handlers.onError(update.message);
       break;
+    case "main_agent_activity":
+      handlers.onMainAgentActivity?.(update);
+      break;
     case "subagent_activity":
       handlers.onSubagentActivity?.(update);
       break;
@@ -163,11 +175,15 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
 /**
  * Returns the UI zone an update belongs to.
  *
- * `ui` updates (product cards) route to the dedicated interaction zone; all
- * other updates (messages, questions, errors) route to the chat history.
+ * `ui` updates (product cards) and agent activity route to the dedicated
+ * interaction zone; chat content stays in the transcript.
  */
 export function uiUpdateZone(update: UiUpdate): UiZone {
-  return update.type === "ui" || update.type === "subagent_activity" ? "interaction" : "chat";
+  return update.type === "ui" ||
+    update.type === "main_agent_activity" ||
+    update.type === "subagent_activity"
+    ? "interaction"
+    : "chat";
 }
 
 /**

@@ -3,7 +3,7 @@
 import { normalizeQuestionOption } from "@deep-agent-template/core/generative-ui";
 import { useState } from "react";
 import { JsonRenderPreview } from "../src/ui/catalog.tsx";
-import type { DisplayMessage, DisplaySubagentActivity } from "../src/ui/use-agent-chat.ts";
+import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
 
@@ -68,38 +68,48 @@ function QuestionControls({
   );
 }
 
-function SubagentActivityPanel({ activity }: { activity: DisplaySubagentActivity[] }) {
-  if (activity.length === 0) {
-    return null;
-  }
-
+function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) {
   return (
-    <details className="subagent-activity" open>
-      <summary>
-        <span>Subagent activity</span>
-        <small>{activity.length}</small>
-      </summary>
-      <div className="subagent-activity-list">
-        {activity.map((item) => (
-          <article className={`subagent-activity-item subagent-event-${item.event}`} key={item.id}>
-            <header>
-              <strong>{item.subagentName}</strong>
-              <span>{item.event}</span>
-            </header>
-            {item.task ? <p>{item.task}</p> : null}
-            {item.text ? <p>{item.text}</p> : null}
-            {item.message ? <p>{item.message}</p> : null}
-          </article>
-        ))}
+    <section className="debug-pane" aria-label="Agent debug log">
+      <header className="debug-header">
+        <div>
+          <p>Debug Log</p>
+          <h2>Agent Activity</h2>
+        </div>
+        <span>{activity.length}</span>
+      </header>
+      <div className="agent-activity-list">
+        {activity.length === 0 ? (
+          <div className="agent-empty">No agent activity yet.</div>
+        ) : (
+          activity.map((item) => (
+            <article className={`agent-activity-item ${item.type} ${item.event}`} key={item.id}>
+              {item.type === "main_agent_activity" ? (
+                <header>
+                  <strong>Main agent</strong>
+                  <span>{item.event}</span>
+                </header>
+              ) : (
+                <header>
+                  <strong>{item.subagentName}</strong>
+                  <span>{item.event}</span>
+                </header>
+              )}
+              {"task" in item && item.task ? <p>{item.task}</p> : null}
+              {"text" in item && item.text ? <p>{item.text}</p> : null}
+              {"message" in item && item.message ? <p>{item.message}</p> : null}
+            </article>
+          ))
+        )}
       </div>
-    </details>
+    </section>
   );
 }
 
 export default function Home() {
   const {
     visibleMessages,
-    subagentActivity,
+    agentActivity,
     input,
     latestSpec,
     error,
@@ -111,7 +121,7 @@ export default function Home() {
   } = useAgentChat();
   const { bottomAnchorRef, containerRef: messageListRef } = useStickyBottomScroll([
     visibleMessages,
-    subagentActivity,
+    agentActivity,
     latestSpec,
     error,
   ]);
@@ -145,7 +155,6 @@ export default function Home() {
               <p>{error}</p>
             </article>
           ) : null}
-          <SubagentActivityPanel activity={subagentActivity} />
           <div aria-hidden="true" className="message-list-anchor" ref={bottomAnchorRef} />
         </div>
 
@@ -172,7 +181,7 @@ export default function Home() {
       <section className="preview-pane" aria-label="Generated UI preview">
         <div className="preview-header">
           <p>Interaction Zone</p>
-          <span>{loading ? "Streaming" : "Idle"}</span>
+          <span>{loading ? "Processing" : "Idle"}</span>
         </div>
         <div className="preview-surface">
           {latestSpec ? (
@@ -182,6 +191,8 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      <AgentActivityPanel activity={agentActivity} />
     </main>
   );
 }
