@@ -2,6 +2,7 @@ import type { Spec, UIElement } from "@json-render/core";
 import { z } from "zod";
 
 import { productCardSchema as scaffoldProductCardSchema } from "./envelope.ts";
+
 export { productCardSchema } from "./envelope.ts";
 
 export const componentTypes = [

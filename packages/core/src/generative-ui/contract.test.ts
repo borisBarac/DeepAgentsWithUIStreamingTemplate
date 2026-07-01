@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import { productCardSchema } from "./envelope.ts";
 import {
   catalogPrompt,
   componentPropsSchemas,
   componentTypes,
   normalizeStreamingSpec,
 } from "./contract.ts";
+import { productCardSchema } from "./envelope.ts";
 
 const validSamples = {
   Button: { label: "Continue", action: "demo_action" },

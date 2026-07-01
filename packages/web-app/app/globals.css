@@ -153,11 +153,6 @@ input {
   font-weight: 700;
 }
 
-.subagent-activity summary small {
-  color: var(--muted);
-  font-weight: 700;
-}
-
 .subagent-activity-list {
   display: grid;
   gap: 8px;
@@ -430,6 +425,11 @@ input {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.subagent-activity summary small {
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .jr-card {

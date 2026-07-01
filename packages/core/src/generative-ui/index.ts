@@ -1,6 +1,6 @@
 export {
-  type ComponentTypeName,
   buttonPropsSchema,
+  type ComponentTypeName,
   cardPropsSchema,
   catalogPrompt,
   componentPropsSchemas,

@@ -31,7 +31,7 @@ export function useStickyBottomScroll(dependencies: DependencyList) {
 
     bottomAnchorRef.current?.scrollIntoView({ block: "end" });
     scrollElementToBottom(container);
-  }, dependencies);
+  }, [...dependencies]);
 
   return { bottomAnchorRef, containerRef };
 }
