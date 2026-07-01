@@ -8,6 +8,7 @@ type FakeStreamRun = {
   }>;
   subagents?: AsyncIterable<{
     name?: string;
+    subagentName?: string;
     taskInput?: unknown;
     messages?: AsyncIterable<{
       text: AsyncIterable<string>;
@@ -162,6 +163,46 @@ function createSubagentStreamingAgent(): FakeAgent {
             messages: asyncIterableFrom([
               {
                 text: asyncIterableFrom(["Searching", " sources"]),
+              },
+            ]),
+            output: Promise.resolve({}),
+          },
+        ]),
+        output: Promise.resolve({
+          messages: [{ content: text, role: "assistant" }],
+        }),
+      };
+    },
+  };
+}
+
+function createRepeatedSameNameSubagentAgent(): FakeAgent {
+  return {
+    async streamEvents() {
+      const text = '{"type":"message","text":"done"}\n';
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom([text]),
+          },
+        ]),
+        subagents: asyncIterableFrom([
+          {
+            name: "researcher",
+            taskInput: "First pass",
+            messages: asyncIterableFrom([
+              {
+                text: asyncIterableFrom(["First"]),
+              },
+            ]),
+            output: Promise.resolve({}),
+          },
+          {
+            name: "researcher",
+            taskInput: "Second pass",
+            messages: asyncIterableFrom([
+              {
+                text: asyncIterableFrom(["Second"]),
               },
             ]),
             output: Promise.resolve({}),
@@ -493,27 +534,92 @@ describe("POST", () => {
     expect(updates).toContainEqual({ type: "message", text: "done" });
     expect(updates).toContainEqual({
       type: "subagent_activity",
+      subagentRunId: expect.any(String),
       subagentName: "researcher",
       event: "started",
       task: "Find supporting facts",
     });
     expect(updates).toContainEqual({
       type: "subagent_activity",
+      subagentRunId: expect.any(String),
       subagentName: "researcher",
       event: "delta",
       text: "Searching",
     });
     expect(updates).toContainEqual({
       type: "subagent_activity",
+      subagentRunId: expect.any(String),
       subagentName: "researcher",
       event: "delta",
       text: " sources",
     });
     expect(updates).toContainEqual({
       type: "subagent_activity",
+      subagentRunId: expect.any(String),
       subagentName: "researcher",
       event: "completed",
     });
+
+    const activityUpdates = updates.filter(
+      (update): update is { type: "subagent_activity"; subagentRunId: string } =>
+        typeof update === "object" &&
+        update !== null &&
+        "type" in update &&
+        update.type === "subagent_activity" &&
+        "subagentRunId" in update &&
+        typeof update.subagentRunId === "string",
+    );
+    expect(new Set(activityUpdates.map((update) => update.subagentRunId)).size).toBe(1);
+  });
+
+  it("uses a distinct run id for repeated same-name subagent streams", async () => {
+    const route = await import("./route.ts");
+    route.setAgentForTest(
+      createRepeatedSameNameSubagentAgent() as unknown as Parameters<
+        typeof route.setAgentForTest
+      >[0],
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({
+          includeSubagentActivity: true,
+          message: "generate concepts",
+          sessionId: "repeated-subagent-activity",
+        }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    const updates = await readNdjson(response);
+    const subagentUpdates = updates.filter(
+      (
+        update,
+      ): update is {
+        type: "subagent_activity";
+        subagentRunId: string;
+        event: "started" | "delta" | "completed" | "error";
+        task?: string;
+        text?: string;
+      } =>
+        typeof update === "object" &&
+        update !== null &&
+        "type" in update &&
+        update.type === "subagent_activity" &&
+        "subagentRunId" in update &&
+        typeof update.subagentRunId === "string",
+    );
+    const ids = [...new Set(subagentUpdates.map((update) => update.subagentRunId))];
+
+    expect(ids).toHaveLength(2);
+    for (const id of ids) {
+      const runUpdates = subagentUpdates.filter((update) => update.subagentRunId === id);
+      expect(runUpdates.map((update) => update.event)).toEqual(["started", "delta", "completed"]);
+      expect(new Set(runUpdates.map((update) => update.subagentRunId))).toEqual(new Set([id]));
+    }
+    expect(subagentUpdates.filter((update) => update.task === "First pass")).toHaveLength(1);
+    expect(subagentUpdates.filter((update) => update.task === "Second pass")).toHaveLength(1);
   });
 
   it("streams requested subagent activity before buffered main output completes", async () => {
@@ -564,6 +670,7 @@ describe("POST", () => {
     );
     expect(earlyUpdates).toContainEqual({
       type: "subagent_activity",
+      subagentRunId: expect.any(String),
       subagentName: "researcher",
       event: "started",
       task: "Find supporting facts",

@@ -107,6 +107,7 @@ export type UiUpdate =
     }
   | {
       type: "subagent_activity";
+      subagentRunId?: string;
       subagentName: string;
       event: "started" | "delta" | "completed" | "error";
       task?: string;

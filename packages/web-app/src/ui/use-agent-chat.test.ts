@@ -114,6 +114,74 @@ describe("agent activity state", () => {
     ]);
   });
 
+  it("keeps same-name subagent runs separate when run ids differ", () => {
+    let activity = appendAgentActivity(
+      [],
+      {
+        type: "subagent_activity",
+        subagentRunId: "run-a",
+        subagentName: "general-purpose",
+        event: "started",
+      },
+      "activity-a",
+    );
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentRunId: "run-b",
+        subagentName: "general-purpose",
+        event: "started",
+      },
+      "activity-b",
+    );
+    activity = appendAgentActivity(activity, {
+      type: "subagent_activity",
+      subagentRunId: "run-a",
+      subagentName: "general-purpose",
+      event: "delta",
+      text: "First",
+    });
+    activity = appendAgentActivity(activity, {
+      type: "subagent_activity",
+      subagentRunId: "run-b",
+      subagentName: "general-purpose",
+      event: "delta",
+      text: "Second",
+    });
+    activity = appendAgentActivity(activity, {
+      type: "subagent_activity",
+      subagentRunId: "run-a",
+      subagentName: "general-purpose",
+      event: "completed",
+    });
+    activity = appendAgentActivity(activity, {
+      type: "subagent_activity",
+      subagentRunId: "run-b",
+      subagentName: "general-purpose",
+      event: "completed",
+    });
+
+    expect(activity).toEqual([
+      {
+        id: "activity-a",
+        type: "subagent_activity",
+        subagentRunId: "run-a",
+        subagentName: "general-purpose",
+        event: "completed",
+        text: "First",
+      },
+      {
+        id: "activity-b",
+        type: "subagent_activity",
+        subagentRunId: "run-b",
+        subagentName: "general-purpose",
+        event: "completed",
+        text: "Second",
+      },
+    ]);
+  });
+
   it("starts a new block after the previous subagent run is completed", () => {
     let activity = appendAgentActivity(
       [],
@@ -278,6 +346,23 @@ describe("streaming assistant message state", () => {
         content: "Thinking through the layout.",
         id: assistantId,
         streaming: undefined,
+      },
+    ]);
+  });
+
+  it("concatenates message update chunks into one assistant bubble", () => {
+    const assistantId = "assistant-0";
+    let messages: DisplayMessage[] = [];
+
+    messages = appendAssistantChunk(messages, "Hello", assistantId);
+    messages = appendAssistantChunk(messages, " world", assistantId);
+
+    expect(messages).toEqual([
+      {
+        role: "assistant",
+        content: "Hello world",
+        id: assistantId,
+        streaming: true,
       },
     ]);
   });

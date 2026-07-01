@@ -62,6 +62,7 @@ const rawMainAgentActivityUpdateSchema = z.object({
 
 const rawSubagentActivityUpdateSchema = z.object({
   type: z.literal("subagent_activity"),
+  subagentRunId: z.string().min(1).optional(),
   subagentName: z.string().min(1),
   event: z.enum(["started", "delta", "completed", "error"]),
   task: z.string().optional(),

@@ -218,12 +218,14 @@ describe("normalizeUiUpdate", () => {
     expect(
       normalizeUiUpdate({
         type: "subagent_activity",
+        subagentRunId: "run-1",
         subagentName: "analyst",
         event: "started",
         task: "Review the plan",
       }),
     ).toEqual({
       type: "subagent_activity",
+      subagentRunId: "run-1",
       subagentName: "analyst",
       event: "started",
       task: "Review the plan",

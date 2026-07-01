@@ -51,6 +51,9 @@ function sameActivityStream(
   }
 
   if (activity.type === "subagent_activity" && update.type === "subagent_activity") {
+    if (activity.subagentRunId || update.subagentRunId) {
+      return activity.subagentRunId === update.subagentRunId;
+    }
     return activity.subagentName === update.subagentName;
   }
 
@@ -267,7 +270,7 @@ export function useAgentChat(): AgentChat {
       onMessage: (text) => {
         streamingAssistantId ??= createId();
         const assistantId = streamingAssistantId;
-        setMessages((current) => replaceAssistantMessage(current, text, assistantId));
+        setMessages((current) => appendAssistantChunk(current, text, assistantId));
       },
       onQuestion: (question) => {
         finishStreamingAssistant();
@@ -313,7 +316,7 @@ export function useAgentChat(): AgentChat {
         setAgentActivity((current) => appendAgentActivity(current, update, activityId));
       },
       onSubagentActivity: (update) => {
-        const key = update.subagentName;
+        const key = update.subagentRunId ?? update.subagentName;
         if (update.event === "started") {
           if (!activeSubagentActivityIds.has(key) || finishedSubagentActivityKeys.has(key)) {
             activeSubagentActivityIds.set(key, createId());

@@ -298,9 +298,11 @@ async function drainSubagentActivity(
   onSubagentActivity: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
 ): Promise<void> {
   const subagentName = subagentNameFrom(subagent);
+  const subagentRunId = crypto.randomUUID();
   try {
     onSubagentActivity({
       type: "subagent_activity",
+      subagentRunId,
       subagentName,
       event: "started",
       task: taskInputToText(subagent.taskInput),
@@ -312,6 +314,7 @@ async function drainSubagentActivity(
           if (token) {
             onSubagentActivity({
               type: "subagent_activity",
+              subagentRunId,
               subagentName,
               event: "delta",
               text: token,
@@ -322,10 +325,16 @@ async function drainSubagentActivity(
     }
 
     await subagent.output;
-    onSubagentActivity({ type: "subagent_activity", subagentName, event: "completed" });
+    onSubagentActivity({
+      type: "subagent_activity",
+      subagentRunId,
+      subagentName,
+      event: "completed",
+    });
   } catch (error) {
     onSubagentActivity({
       type: "subagent_activity",
+      subagentRunId,
       subagentName,
       event: "error",
       message: error instanceof Error ? error.message : String(error),
