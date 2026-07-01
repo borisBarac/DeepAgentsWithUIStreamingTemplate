@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyUiUpdate, normalizeUiUpdate, parseUpdateLine } from "./envelope.ts";
+import { applyUiUpdate, normalizeUiUpdate, parseUpdateLine, uiUpdateZone } from "./envelope.ts";
 
 describe("parseUpdateLine", () => {
   it("parses message updates", () => {
@@ -45,6 +45,19 @@ describe("parseUpdateLine", () => {
     });
   });
 
+  it("parses subagent activity updates", () => {
+    expect(
+      parseUpdateLine(
+        '{"type":"subagent_activity","subagentName":"researcher","event":"delta","text":"Searching"}',
+      ),
+    ).toEqual({
+      type: "subagent_activity",
+      subagentName: "researcher",
+      event: "delta",
+      text: "Searching",
+    });
+  });
+
   it("returns null for malformed JSON", () => {
     expect(parseUpdateLine("not json")).toBeNull();
   });
@@ -64,6 +77,8 @@ describe("applyUiUpdate", () => {
         onQuestion: (question: { prompt: string }) => calls.push(`question:${question.prompt}`),
         onSpec: () => calls.push("spec"),
         onError: (message: string) => calls.push(`error:${message}`),
+        onSubagentActivity: (update: { subagentName: string; event: string }) =>
+          calls.push(`subagent:${update.subagentName}:${update.event}`),
       },
     };
   }
@@ -100,6 +115,15 @@ describe("applyUiUpdate", () => {
     const { calls, handlers } = recorder();
     applyUiUpdate({ type: "error", message: "boom" }, handlers);
     expect(calls).toEqual(["error:boom"]);
+  });
+
+  it("routes subagent activity updates to onSubagentActivity", () => {
+    const { calls, handlers } = recorder();
+    applyUiUpdate(
+      { type: "subagent_activity", subagentName: "researcher", event: "completed" },
+      handlers,
+    );
+    expect(calls).toEqual(["subagent:researcher:completed"]);
   });
 });
 
@@ -173,6 +197,33 @@ describe("normalizeUiUpdate", () => {
     expect(normalizeUiUpdate({ type: "other", text: "hi" })).toBeNull();
   });
 
+  it("validates subagent activity updates", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "subagent_activity",
+        subagentName: "analyst",
+        event: "started",
+        task: "Review the plan",
+      }),
+    ).toEqual({
+      type: "subagent_activity",
+      subagentName: "analyst",
+      event: "started",
+      task: "Review the plan",
+    });
+  });
+
+  it("rejects subagent activity with unknown events", () => {
+    expect(
+      normalizeUiUpdate({
+        type: "subagent_activity",
+        subagentName: "analyst",
+        event: "reasoning",
+        text: "hidden",
+      }),
+    ).toBeNull();
+  });
+
   it("passes the ui spec through unchanged without a normalizeSpec hook", () => {
     const spec = { root: "root", elements: { root: { type: "Card", props: {}, children: [] } } };
     expect(normalizeUiUpdate({ type: "ui", spec })).toEqual({ type: "ui", spec });
@@ -192,5 +243,18 @@ describe("normalizeUiUpdate", () => {
   it("rejects ui updates when the normalizeSpec hook rejects the spec", () => {
     const rejectAll = () => null;
     expect(normalizeUiUpdate({ type: "ui", spec: { root: "root" } }, rejectAll)).toBeNull();
+  });
+});
+
+describe("uiUpdateZone", () => {
+  it("keeps subagent activity out of the chat zone", () => {
+    expect(
+      uiUpdateZone({
+        type: "subagent_activity",
+        subagentName: "researcher",
+        event: "delta",
+        text: "Searching",
+      }),
+    ).toBe("interaction");
   });
 });

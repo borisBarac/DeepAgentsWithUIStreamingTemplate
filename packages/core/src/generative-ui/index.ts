@@ -1,4 +1,20 @@
 export {
+  type ComponentTypeName,
+  buttonPropsSchema,
+  cardPropsSchema,
+  catalogPrompt,
+  componentPropsSchemas,
+  componentTypes,
+  imagePlaceholderPropsSchema,
+  normalizeStreamingSpec,
+  productCardPropsSchema,
+  productCardSchema,
+  productGridPropsSchema,
+  stackPropsSchema,
+  textInputPropsSchema,
+  textPropsSchema,
+} from "./contract.ts";
+export {
   applyUiUpdate,
   clarificationResultToQuestionUpdates,
   extractUpdateObjects,
@@ -10,7 +26,6 @@ export {
   parseUpdateLine,
   parseUpdateText,
   productCardBatchSchema,
-  productCardSchema,
   productCardsToUiUpdates,
   type QuestionUpdate,
   StreamingLineBuffer,

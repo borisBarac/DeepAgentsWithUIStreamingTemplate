@@ -53,6 +53,15 @@ const rawErrorUpdateSchema = z.object({
   message: z.string(),
 });
 
+const rawSubagentActivityUpdateSchema = z.object({
+  type: z.literal("subagent_activity"),
+  subagentName: z.string().min(1),
+  event: z.enum(["started", "delta", "completed", "error"]),
+  task: z.string().optional(),
+  text: z.string().optional(),
+  message: z.string().optional(),
+});
+
 const rawUiUpdateSchema = z.object({
   type: z.literal("ui"),
   spec: z.unknown(),
@@ -63,6 +72,7 @@ const rawUpdateSchema = z.discriminatedUnion("type", [
   rawQuestionUpdateSchema,
   rawUiUpdateSchema,
   rawErrorUpdateSchema,
+  rawSubagentActivityUpdateSchema,
 ]);
 
 /**
@@ -124,6 +134,7 @@ export type UpdateHandlers = {
   onQuestion?: (question: UiQuestion) => void;
   onSpec: (spec: Spec) => void;
   onError: (message: string) => void;
+  onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void;
 };
 
 /**
@@ -143,6 +154,9 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
     case "error":
       handlers.onError(update.message);
       break;
+    case "subagent_activity":
+      handlers.onSubagentActivity?.(update);
+      break;
   }
 }
 
@@ -153,7 +167,7 @@ export function applyUiUpdate(update: UiUpdate, handlers: UpdateHandlers): void 
  * other updates (messages, questions, errors) route to the chat history.
  */
 export function uiUpdateZone(update: UiUpdate): UiZone {
-  return update.type === "ui" ? "interaction" : "chat";
+  return update.type === "ui" || update.type === "subagent_activity" ? "interaction" : "chat";
 }
 
 /**

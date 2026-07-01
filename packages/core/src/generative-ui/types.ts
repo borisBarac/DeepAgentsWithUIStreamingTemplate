@@ -98,4 +98,12 @@ export type UiUpdate =
   | {
       type: "error";
       message: string;
+    }
+  | {
+      type: "subagent_activity";
+      subagentName: string;
+      event: "started" | "delta" | "completed" | "error";
+      task?: string;
+      text?: string;
+      message?: string;
     };
