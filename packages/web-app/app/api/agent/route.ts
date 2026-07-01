@@ -2,6 +2,8 @@ import type { DeepAgent } from "@deep-agent-template/core";
 import {
   extractUpdateObjects,
   normalizeUiUpdate,
+  productCardBatchSchema,
+  productCardsToUiUpdates,
   StreamingLineBuffer,
   type UiUpdate,
 } from "@deep-agent-template/core/generative-ui";
@@ -23,14 +25,25 @@ type AgentResult = {
 
 type Agent = DeepAgent;
 
+type StreamTextMessage = {
+  text: AsyncIterable<string>;
+};
+
+type StreamSubagent = {
+  name?: unknown;
+  subagentName?: unknown;
+  taskInput?: unknown;
+  messages?: AsyncIterable<StreamTextMessage>;
+  output?: Promise<unknown>;
+};
+
 type StreamableAgent = Agent & {
   streamEvents?: (
     input: { messages: AgentInputMessage[] },
     config: { configurable: { thread_id: string }; version: "v3" },
   ) => Promise<{
-    messages: AsyncIterable<{
-      text: AsyncIterable<string>;
-    }>;
+    messages: AsyncIterable<StreamTextMessage>;
+    subagents?: AsyncIterable<StreamSubagent>;
     output: Promise<AgentResult>;
   }>;
 };
@@ -63,6 +76,10 @@ function createAgent(): Agent {
 }
 
 let agentCache: Agent | null = null;
+
+export function setAgentForTest(agent: Agent | null): void {
+  agentCache = agent;
+}
 
 function getAgent(): Agent {
   if (agentCache === null) {
@@ -98,7 +115,7 @@ function extractTextContent(content: unknown): string | undefined {
 function extractFinalResponse(result: AgentResult): string {
   const messages = result.messages;
   if (!Array.isArray(messages)) {
-    throw new Error("Core returned no messages.");
+    return "";
   }
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -113,7 +130,7 @@ function extractFinalResponse(result: AgentResult): string {
     }
   }
 
-  throw new Error("Core returned no text response.");
+  return "";
 }
 
 function toInputMessages(history: unknown[], message: string): unknown[] {
@@ -126,12 +143,16 @@ function encodeUpdate(update: UiUpdate): Uint8Array {
   return encoder.encode(`${JSON.stringify(update)}\n`);
 }
 
-function parseRequestBody(body: unknown): { message: string; sessionId: string } {
+function parseRequestBody(body: unknown): {
+  includeSubagentActivity: boolean;
+  message: string;
+  sessionId: string;
+} {
   if (typeof body !== "object" || body === null) {
     throw new Error("Request body must be an object.");
   }
 
-  const { message, sessionId } = body as Record<string, unknown>;
+  const { includeSubagentActivity, message, sessionId } = body as Record<string, unknown>;
   if (typeof sessionId !== "string" || !sessionId.trim()) {
     throw new Error("sessionId is required.");
   }
@@ -139,7 +160,11 @@ function parseRequestBody(body: unknown): { message: string; sessionId: string }
     throw new Error("message is required.");
   }
 
-  return { sessionId: sessionId.trim(), message: message.trim() };
+  return {
+    includeSubagentActivity: includeSubagentActivity === true,
+    sessionId: sessionId.trim(),
+    message: message.trim(),
+  };
 }
 
 function emitParsedLines(
@@ -168,11 +193,68 @@ function emitParsedLines(
   }
 }
 
+export function productBatchTextToUiUpdates(text: string): UiUpdate[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return [];
+  }
+
+  const batch = productCardBatchSchema.safeParse(parsed);
+  if (!batch.success) {
+    return [];
+  }
+
+  return productCardsToUiUpdates(batch.data.products).flatMap((candidate) => {
+    const update = normalizeUiUpdate(candidate, normalizeStreamingSpec);
+    return update ? [update] : [];
+  });
+}
+
+function emitProductBatchFallback(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  finalText: string,
+  stats: { valid: number },
+): boolean {
+  const updates = productBatchTextToUiUpdates(finalText);
+  for (const update of updates) {
+    controller.enqueue(encodeUpdate(update));
+    stats.valid += 1;
+  }
+  return updates.length > 0;
+}
+
+const UNRENDERABLE_UI_MESSAGE =
+  "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.";
+
+export function finalTextToMessageFallback(finalText: string): UiUpdate {
+  return {
+    type: "message",
+    text: finalTextToAssistantContent(finalText),
+  };
+}
+
+function finalTextToAssistantContent(finalText: string): string {
+  const text = finalText.trim();
+  return text || UNRENDERABLE_UI_MESSAGE;
+}
+
+function emitMessageFallback(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  finalText: string,
+  stats: { valid: number },
+): void {
+  controller.enqueue(encodeUpdate(finalTextToMessageFallback(finalText)));
+  stats.valid += 1;
+}
+
 async function streamWithEvents(
   agent: StreamableAgent,
   input: { messages: AgentInputMessage[] },
   sessionId: string,
   onText: (text: string) => void,
+  onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
 ): Promise<{ finalText: string; result: AgentResult | null; streamedText: boolean }> {
   if (!agent.streamEvents) {
     const result = (await agent.invoke(input)) as AgentResult;
@@ -185,20 +267,102 @@ async function streamWithEvents(
   });
   let streamedText = "";
 
-  for await (const message of run.messages) {
-    for await (const token of message.text) {
-      streamedText += token;
-      onText(token);
+  const drainMessages = async () => {
+    for await (const message of run.messages) {
+      for await (const token of message.text) {
+        streamedText += token;
+        onText(token);
+      }
     }
-  }
+  };
 
-  const result = await run.output;
+  const drainSubagents = async () => {
+    if (!run.subagents || !onSubagentActivity) {
+      return;
+    }
+
+    const activityStreams: Promise<void>[] = [];
+    for await (const subagent of run.subagents) {
+      activityStreams.push(drainSubagentActivity(subagent, onSubagentActivity));
+    }
+    await Promise.all(activityStreams);
+  };
+
+  const [result] = await Promise.all([run.output, drainMessages(), drainSubagents()]);
+
   const finalText = streamedText || extractFinalResponse(result);
   return { finalText, result, streamedText: Boolean(streamedText) };
 }
 
+async function drainSubagentActivity(
+  subagent: StreamSubagent,
+  onSubagentActivity: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
+): Promise<void> {
+  const subagentName = subagentNameFrom(subagent);
+  try {
+    onSubagentActivity({
+      type: "subagent_activity",
+      subagentName,
+      event: "started",
+      task: taskInputToText(subagent.taskInput),
+    });
+
+    if (subagent.messages) {
+      for await (const message of subagent.messages) {
+        for await (const token of message.text) {
+          if (token) {
+            onSubagentActivity({
+              type: "subagent_activity",
+              subagentName,
+              event: "delta",
+              text: token,
+            });
+          }
+        }
+      }
+    }
+
+    await subagent.output;
+    onSubagentActivity({ type: "subagent_activity", subagentName, event: "completed" });
+  } catch (error) {
+    onSubagentActivity({
+      type: "subagent_activity",
+      subagentName,
+      event: "error",
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function subagentNameFrom(subagent: StreamSubagent): string {
+  if (typeof subagent.subagentName === "string" && subagent.subagentName.trim()) {
+    return subagent.subagentName.trim();
+  }
+  if (typeof subagent.name === "string" && subagent.name.trim()) {
+    return subagent.name.trim();
+  }
+  return "subagent";
+}
+
+function taskInputToText(taskInput: unknown): string | undefined {
+  if (typeof taskInput === "string") {
+    return taskInput.trim() || undefined;
+  }
+  if (typeof taskInput !== "object" || taskInput === null) {
+    return undefined;
+  }
+
+  if ("task" in taskInput && typeof taskInput.task === "string") {
+    return taskInput.task.trim() || undefined;
+  }
+  if ("content" in taskInput) {
+    return extractTextContent(taskInput.content);
+  }
+  return undefined;
+}
+
 export async function POST(request: Request): Promise<Response> {
-  let parsedRequest: { message: string; sessionId: string };
+  let parsedRequest: { includeSubagentActivity: boolean; message: string; sessionId: string };
   try {
     parsedRequest = parseRequestBody(await request.json());
   } catch (error) {
@@ -226,6 +390,11 @@ export async function POST(request: Request): Promise<Response> {
           (token) => {
             emitParsedLines(controller, lineBuffer.push(token), stats);
           },
+          parsedRequest.includeSubagentActivity
+            ? (update) => {
+                controller.enqueue(encodeUpdate(update));
+              }
+            : undefined,
         );
 
         if (streamedText) {
@@ -242,18 +411,19 @@ export async function POST(request: Request): Promise<Response> {
         let attempt = await runAttempt();
 
         // If the model ignored the NDJSON prompt entirely (zero valid updates),
-        // retry once — it often cooperates on the second attempt.
+        // first bridge known structured product-generator output, then retry
+        // once for other malformed output.
         if (stats.valid === 0) {
-          attempt = await runAttempt();
+          emitProductBatchFallback(controller, attempt.finalText, stats);
         }
 
         if (stats.valid === 0) {
-          controller.enqueue(
-            encodeUpdate({
-              type: "error",
-              message: "The model did not produce any valid UI updates.",
-            }),
-          );
+          attempt = await runAttempt();
+          emitProductBatchFallback(controller, attempt.finalText, stats);
+        }
+
+        if (stats.valid === 0) {
+          emitMessageFallback(controller, attempt.finalText, stats);
         }
 
         const outputMessages = attempt.result?.messages;
@@ -263,7 +433,7 @@ export async function POST(request: Request): Promise<Response> {
           saveHistory(parsedRequest.sessionId, [
             ...history,
             { content: parsedRequest.message, role: "user" },
-            { content: attempt.finalText, role: "assistant" },
+            { content: finalTextToAssistantContent(attempt.finalText), role: "assistant" },
           ]);
         }
       } catch (error) {

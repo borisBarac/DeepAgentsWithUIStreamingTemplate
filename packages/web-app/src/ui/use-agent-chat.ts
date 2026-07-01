@@ -12,11 +12,16 @@ import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "./types.ts";
 
 export type QualificationQuestion = Extract<UiUpdate, { type: "question" }>["question"];
+export type SubagentActivityUpdate = Extract<UiUpdate, { type: "subagent_activity" }>;
 
 export type DisplayMessage = ChatMessage & {
   id: string;
   answered?: boolean;
   question?: QualificationQuestion;
+};
+
+export type DisplaySubagentActivity = SubagentActivityUpdate & {
+  id: string;
 };
 
 function createId(): string {
@@ -26,9 +31,18 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+export function appendSubagentActivity(
+  current: DisplaySubagentActivity[],
+  update: SubagentActivityUpdate,
+  id = createId(),
+): DisplaySubagentActivity[] {
+  return [...current, { ...update, id }];
+}
+
 export type AgentChat = {
   messages: DisplayMessage[];
   visibleMessages: DisplayMessage[];
+  subagentActivity: DisplaySubagentActivity[];
   assistantText: string;
   input: string;
   latestSpec: Spec | null;
@@ -44,6 +58,7 @@ const STREAMING_MESSAGE_ID = "streaming";
 
 export function useAgentChat(): AgentChat {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
+  const [subagentActivity, setSubagentActivity] = useState<DisplaySubagentActivity[]>([]);
   const [assistantText, setAssistantText] = useState("");
   const [input, setInput] = useState("");
   const [latestSpec, setLatestSpec] = useState<Spec | null>(null);
@@ -81,6 +96,7 @@ export function useAgentChat(): AgentChat {
     loadingRef.current = true;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
     setAssistantText("");
+    setSubagentActivity([]);
     setError(null);
     setInput("");
     setLoading(true);
@@ -125,11 +141,18 @@ export function useAgentChat(): AgentChat {
         setLatestSpec(spec);
       },
       onError: (errorMessage) => setError(errorMessage),
+      onSubagentActivity: (update) => {
+        setSubagentActivity((current) => appendSubagentActivity(current, update));
+      },
     };
 
     try {
       const response = await fetch("/api/agent", {
-        body: JSON.stringify({ message, sessionId: sessionIdRef.current }),
+        body: JSON.stringify({
+          includeSubagentActivity: true,
+          message,
+          sessionId: sessionIdRef.current,
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
@@ -203,6 +226,7 @@ export function useAgentChat(): AgentChat {
   return {
     messages,
     visibleMessages,
+    subagentActivity,
     assistantText,
     input,
     latestSpec,
