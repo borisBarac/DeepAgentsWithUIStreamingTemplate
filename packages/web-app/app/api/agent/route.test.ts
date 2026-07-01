@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import { finalTextToMessageFallback, POST, productBatchTextToUiUpdates } from "./route.ts";
+import {
+  finalTextToMessageFallback,
+  productBatchTextToUiUpdates,
+} from "@deep-agent-template/core/interaction-stream";
+
+import { POST } from "./route.ts";
 
 type FakeStreamRun = {
   messages: AsyncIterable<{
@@ -273,7 +278,6 @@ describe("productBatchTextToUiUpdates", () => {
               imageUrl: "https://example.com/launch-map.png",
               status: "complete",
             },
-            children: [],
           },
         },
       },
