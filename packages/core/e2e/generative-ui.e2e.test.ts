@@ -2,11 +2,11 @@ import { describe, expect, it } from "bun:test";
 import type { SubAgent } from "deepagents";
 
 import {
+  createDefaultSubagentCatalog,
   createRuntimeScaffold,
   createScaffoldedAgent,
   productCardBatchSchema,
 } from "../src/index.ts";
-import { createDefaultSubagents } from "../src/scaffold/subagents.ts";
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,
@@ -25,12 +25,14 @@ describe.skipIf(!hasLiveLLMCredentials)(
   () => {
     it("surfaces a productCardBatch-spec-compliant response from the product-generator", async () => {
       const modelRuntime = createDefaultModelRuntime(false);
-      const productGenerator = createDefaultSubagents({
+      const productGenerator = createDefaultSubagentCatalog({
         modelRuntime,
         generativeUi: {},
-      }).find((subagent) => subagent.name === "product-generator");
+      }).byRole["product-generator"];
       if (!productGenerator) {
-        throw new Error("createDefaultSubagents did not produce a product-generator subagent.");
+        throw new Error(
+          "createDefaultSubagentCatalog did not produce a product-generator subagent.",
+        );
       }
 
       const scaffold = createRuntimeScaffold({

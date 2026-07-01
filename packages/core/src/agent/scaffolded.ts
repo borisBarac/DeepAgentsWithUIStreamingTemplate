@@ -1,11 +1,9 @@
 import { InMemoryStore } from "@langchain/langgraph";
-import { createDeepAgent, type DeepAgent } from "deepagents";
+import type { DeepAgent } from "deepagents";
 
-import { createGuardrailDecision } from "../guardrails/index.ts";
-import { configureLangSmithTracing } from "../observability/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
-import { DEFAULT_AGENT_NAME } from "./constants.ts";
+import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import type { CreateScaffoldedAgentOptions } from "./types.ts";
 
 export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
@@ -32,12 +30,8 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     ...agentOptions
   } = options;
 
-  if (!modelRuntime) {
-    throw new Error(
-      "createScaffoldedAgent requires a modelRuntime. Provide one via createModelRuntime(...).",
-    );
-  }
   const scaffold = createRuntimeScaffold({
+    mode: "supervisor-specialists",
     backend,
     backendOptions: {
       ...backendOptions,
@@ -58,32 +52,14 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     ...subagentOverrides,
   });
 
-  configureLangSmithTracing(langSmith);
-  const chatModel = modelRuntime.getModelForRole("supervisor");
-  const guardrailDecision = createGuardrailDecision(
-    guardrails === false
-      ? { enabled: false, middleware }
-      : {
-          ...guardrails,
-          safetyModel:
-            modelRuntime.getModelForGuardrails?.() ?? modelRuntime.getModelForCategory("fast"),
-          taskScopeModel:
-            modelRuntime.getModelForGuardrails?.() ?? modelRuntime.getModelForCategory("fast"),
-          middleware,
-        },
-  );
-
-  return createDeepAgent({
-    name: DEFAULT_AGENT_NAME,
+  return createAgentFromRuntimeScaffold({
+    factoryName: "createScaffoldedAgent",
+    scaffold,
+    modelRuntime,
+    guardrails,
+    langSmith,
+    middleware,
     store,
-    systemPrompt: scaffold.systemPrompt,
-    backend: scaffold.backend,
-    interruptOn: scaffold.interruptOn,
-    memory: scaffold.memory,
-    permissions: scaffold.permissions,
-    subagents: scaffold.subagents,
-    ...agentOptions,
-    middleware: guardrailDecision.middleware,
-    model: chatModel,
+    agentOptions,
   });
 }

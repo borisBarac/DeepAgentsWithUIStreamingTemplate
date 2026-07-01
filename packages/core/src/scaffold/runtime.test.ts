@@ -1,18 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { type FilesystemPermission, StateBackend, type SubAgent } from "deepagents";
 
-import { clarificationResultSchema } from "../clarification/index.ts";
-import { IMAGE_DESIGNER_TOOL_NAME, imageDesignerResponseSchema } from "../image-designer/index.ts";
-import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
-import { reviewReportSchema } from "../review/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
-
-function responseFormatSchema(rf: unknown): unknown {
-  return rf != null && typeof rf === "object" && "schema" in rf
-    ? (rf as { schema: unknown }).schema
-    : rf;
-}
 
 const testPromptLoader: PromptLoader = {
   getBaselinePrompt: () => "baseline prompt",
@@ -36,12 +26,6 @@ const testImageGenerationService = {
 
 function asDefaultSubagents(subagents: unknown): SubAgent[] {
   return subagents as SubAgent[];
-}
-
-function expectStructuredPrompt(prompt: unknown, basePrompt: string): void {
-  expect(prompt).toBe(
-    `${basePrompt}\n\nRespond with a single JSON object matching the requested schema.`,
-  );
 }
 
 describe("runtime scaffold defaults", () => {
@@ -114,110 +98,6 @@ describe("runtime scaffold defaults", () => {
     );
   });
 
-  it("uses a custom prompt loader for default subagent prompts", () => {
-    const scaffold = createRuntimeScaffold({
-      imageGenerationService: testImageGenerationService,
-      promptLoader: testPromptLoader,
-    });
-    const subagents = asDefaultSubagents(scaffold.subagents);
-
-    expectStructuredPrompt(subagents[0]?.systemPrompt, "custom clarifier prompt");
-    expect(subagents[1]?.systemPrompt).toBe("custom researcher prompt");
-    expect(subagents[2]?.systemPrompt).toBe("custom analyst prompt");
-    expectStructuredPrompt(subagents[3]?.systemPrompt, "custom image designer prompt");
-    expectStructuredPrompt(subagents[4]?.systemPrompt, "custom review prompt");
-    expect(scaffold.systemPrompt).toBe("supervisor prompt");
-  });
-
-  it("lets explicit subagent prompt overrides win over the prompt loader", () => {
-    const [clarifier] = asDefaultSubagents(
-      createRuntimeScaffold({
-        imageGenerationService: testImageGenerationService,
-        promptLoader: testPromptLoader,
-        clarifier: {
-          systemPrompt: "explicit clarifier prompt",
-        },
-      }).subagents,
-    );
-
-    expect(clarifier?.systemPrompt).toBe("explicit clarifier prompt");
-  });
-
-  it("enforces structured output on the clarifier and review agent", () => {
-    const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
-      createRuntimeScaffold({ imageGenerationService: testImageGenerationService }).subagents,
-    );
-
-    expect(responseFormatSchema(clarifier?.responseFormat)).toBe(clarificationResultSchema);
-    expect(researcher?.responseFormat).toBeUndefined();
-    expect(analyst?.responseFormat).toBeUndefined();
-    expect(responseFormatSchema(imageDesigner?.responseFormat)).toBe(imageDesignerResponseSchema);
-    expect(responseFormatSchema(reviewer?.responseFormat)).toBe(reviewReportSchema);
-  });
-
-  it("lets an explicit clarifier responseFormat override the default schema", () => {
-    const customSchema = clarificationResultSchema;
-    const [clarifier] = createRuntimeScaffold({
-      imageGenerationService: testImageGenerationService,
-      clarifier: {
-        responseFormat: customSchema,
-      },
-    }).subagents as SubAgent[];
-
-    expect(clarifier?.responseFormat).toBe(customSchema);
-  });
-
-  it("threads model runtime assignments into default subagents", () => {
-    const modelRuntime = createModelRuntime({
-      connections: {
-        default: {
-          provider: "openai-compatible",
-          apiKey: "test-key",
-          baseURL: "https://api.openai.com/v1",
-        },
-      },
-      categories: {
-        fast: { connection: "default", model: "fast-model" },
-        normal: { connection: "default", model: "normal-model" },
-        pro: { connection: "default", model: "pro-model" },
-      },
-      assignments: {
-        default: "normal",
-        clarifier: "fast",
-        "image-designer": "fast",
-      },
-    });
-    const [clarifier, researcher, , imageDesigner] = createRuntimeScaffold({
-      imageGenerationService: testImageGenerationService,
-      modelRuntime,
-    }).subagents as SubAgent[];
-
-    expect((clarifier?.model as { model?: string }).model).toBe("fast-model");
-    expect((researcher?.model as { model?: string }).model).toBe("normal-model");
-    expect((imageDesigner?.model as { model?: string }).model).toBe("fast-model");
-  });
-
-  it("omits the image designer when image generation is not configured", () => {
-    const subagents = createRuntimeScaffold().subagents as SubAgent[];
-
-    expect(subagents.map((subagent) => subagent.name)).toEqual([
-      "clarifier",
-      "researcher",
-      "analyst",
-      "review-agent",
-    ]);
-  });
-
-  it("assigns specialist execution tools by default", () => {
-    const [, researcher, analyst, imageDesigner] = createRuntimeScaffold({
-      imageGenerationService: testImageGenerationService,
-    }).subagents as SubAgent[];
-
-    expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
-    expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
-    expect(imageDesigner?.tools?.map((tool) => tool.name)).toEqual([IMAGE_DESIGNER_TOOL_NAME]);
-  });
-
   it("leaves the supervisor prompt and subagents unchanged when generativeUi is absent", () => {
     const scaffold = createRuntimeScaffold({ promptLoader: testPromptLoader });
 
@@ -251,5 +131,27 @@ describe("runtime scaffold defaults", () => {
     expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).toContain(
       "product-generator",
     );
+  });
+
+  it("creates a baseline scaffold without supervisor-specialist defaults", () => {
+    const scaffold = createRuntimeScaffold({
+      mode: "baseline",
+      promptLoader: testPromptLoader,
+      generativeUi: { catalogPrompt: "BASELINE CATALOG" },
+    });
+
+    expect(scaffold.architecture).toBe("baseline");
+    expect(scaffold.systemPrompt).toContain("baseline prompt");
+    expect(scaffold.systemPrompt).toContain("BASELINE CATALOG");
+    expect(scaffold.systemPrompt).toContain("newline-delimited JSON");
+    expect(scaffold.backend).toBeUndefined();
+    expect(scaffold.memory).toBeUndefined();
+    expect(scaffold.memoryFilePaths).toEqual([]);
+    expect(scaffold.permissions).toBeUndefined();
+    expect(scaffold.subagents).toEqual([]);
+    expect(scaffold.clarification).toBeUndefined();
+    expect(scaffold.productGeneration).toBeUndefined();
+    expect(scaffold.review).toBeUndefined();
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
   });
 });

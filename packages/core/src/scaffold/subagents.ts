@@ -15,7 +15,7 @@ import {
 } from "../review/index.ts";
 import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
-import type { CreateDefaultSubagentsOptions } from "./types.ts";
+import type { CreateDefaultSubagentCatalogOptions, DefaultSubagentCatalog } from "./types.ts";
 
 const STRUCTURED_JSON_PROMPT = "Respond with a single JSON object matching the requested schema.";
 
@@ -46,11 +46,11 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
   };
 }
 
-export function createDefaultSubagents(
-  options: CreateDefaultSubagentsOptions = {},
+export function createDefaultSubagentCatalog(
+  options: CreateDefaultSubagentCatalogOptions = {},
   clarificationOptions: Partial<ClarificationConfig> = {},
   promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
-): SubAgent[] {
+): DefaultSubagentCatalog {
   const clarification = createClarificationConfig(clarificationOptions);
   const imageDesignerTool = options.imageGenerationService
     ? createImageDesignerTool(options.imageGenerationService)
@@ -111,10 +111,12 @@ export function createDefaultSubagents(
     options.reviewer,
   );
 
+  let imageDesigner: SubAgent | undefined;
+  let productGenerator: SubAgent | undefined;
   const subagents: SubAgent[] = [clarifier, researcher, analyst];
 
   if (imageDesignerTool) {
-    const imageDesigner = mergeSubagent(
+    imageDesigner = mergeSubagent(
       {
         name: "image-designer",
         description:
@@ -131,7 +133,7 @@ export function createDefaultSubagents(
   }
 
   if (options.generativeUi) {
-    const productGenerator = mergeSubagent(
+    productGenerator = mergeSubagent(
       {
         name: "product-generator",
         description:
@@ -148,5 +150,15 @@ export function createDefaultSubagents(
   }
 
   subagents.push(reviewer);
-  return subagents;
+  return {
+    byRole: {
+      clarifier,
+      researcher,
+      analyst,
+      reviewer,
+      "image-designer": imageDesigner,
+      "product-generator": productGenerator,
+    },
+    all: subagents,
+  };
 }

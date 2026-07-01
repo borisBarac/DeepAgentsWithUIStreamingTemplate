@@ -46,7 +46,7 @@ export type CreateDefaultPermissionsOptions = {
   restrictReads?: boolean;
 };
 
-export type CreateDefaultSubagentsOptions = {
+export type CreateDefaultSubagentCatalogOptions = {
   additionalResearcherTools?: NonNullable<SubAgent["tools"]>;
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
@@ -60,11 +60,26 @@ export type CreateDefaultSubagentsOptions = {
   productGenerator?: Partial<SubAgent>;
 };
 
-export type DeepAgentBlueprint = {
-  architecture: "supervisor-specialists";
+export type DefaultSubagentCatalog = {
+  byRole: Record<SpecialistRole, SubAgent | undefined>;
+  all: SubAgent[];
+};
+
+export type RuntimeScaffoldArchitecture = "baseline" | "supervisor-specialists";
+
+type RuntimeScaffoldBase = {
+  architecture: RuntimeScaffoldArchitecture;
   virtualFilesystem: VirtualFilesystemLayout;
   memoryFilePaths: readonly string[];
   interruptOn: CreateDeepAgentParams["interruptOn"];
+  backend: CreateDeepAgentParams["backend"];
+  memory: CreateDeepAgentParams["memory"];
+  systemPrompt: string;
+  generativeUi?: GenerativeUiOptions;
+};
+
+export type SupervisorSpecialistsRuntimeScaffold = RuntimeScaffoldBase & {
+  architecture: "supervisor-specialists";
   permissions: NonNullable<CreateDeepAgentParams["permissions"]>;
   subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
   clarification: {
@@ -78,16 +93,22 @@ export type DeepAgentBlueprint = {
   review: {
     requiredSubagent: "review-agent";
   };
-  generativeUi?: GenerativeUiOptions;
 };
 
-export type RuntimeScaffold = DeepAgentBlueprint & {
-  backend: CreateDeepAgentParams["backend"];
-  memory: CreateDeepAgentParams["memory"];
-  systemPrompt: string;
+export type BaselineRuntimeScaffold = RuntimeScaffoldBase & {
+  architecture: "baseline";
+  permissions: CreateDeepAgentParams["permissions"];
+  subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
+  clarification?: never;
+  productGeneration?: never;
+  review?: never;
 };
 
-export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentsOptions & {
+export type DeepAgentBlueprint = SupervisorSpecialistsRuntimeScaffold | BaselineRuntimeScaffold;
+export type RuntimeScaffold = DeepAgentBlueprint;
+
+export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions & {
+  mode?: RuntimeScaffoldArchitecture;
   backend?: CreateDeepAgentParams["backend"];
   backendOptions?: CreateCompositeBackendOptions;
   clarificationOptions?: Partial<ClarificationConfig>;

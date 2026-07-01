@@ -1,11 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createDefaultSubagentCatalog,
   createRuntimeScaffold,
   createScaffoldedAgent,
-  DEFAULT_REVIEW_AGENT_NAME,
   reviewReportSchema,
 } from "../src/index.ts";
-import { createDefaultSubagents } from "../src/scaffold/subagents.ts";
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,
@@ -28,10 +27,9 @@ describe.skipIf(!hasLiveLLMCredentials)(
   () => {
     it("surfaces the reviewer structured report when the supervisor delegates through the scaffolded agent", async () => {
       const modelRuntime = createDefaultModelRuntime(false);
-      const subagents = createDefaultSubagents({ modelRuntime });
-      const reviewer = subagents.find((agent) => agent.name === DEFAULT_REVIEW_AGENT_NAME);
+      const reviewer = createDefaultSubagentCatalog({ modelRuntime }).byRole.reviewer;
       if (!reviewer) {
-        throw new Error("createDefaultSubagents did not produce a reviewer subagent.");
+        throw new Error("createDefaultSubagentCatalog did not produce a reviewer subagent.");
       }
 
       const scaffold = createRuntimeScaffold({

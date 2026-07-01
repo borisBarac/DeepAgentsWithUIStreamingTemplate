@@ -11,14 +11,18 @@ export {
 export { createVirtualFilesystemLayout } from "./filesystem.ts";
 export { createDefaultPermissions } from "./permissions.ts";
 export { createRuntimeScaffold } from "./runtime.ts";
-export { createDefaultSubagents } from "./subagents.ts";
+export { createDefaultSubagentCatalog } from "./subagents.ts";
 export type {
+  BaselineRuntimeScaffold,
   CreateCompositeBackendOptions,
   CreateDefaultPermissionsOptions,
-  CreateDefaultSubagentsOptions,
+  CreateDefaultSubagentCatalogOptions,
   CreateRuntimeScaffoldOptions,
   DeepAgentBlueprint,
+  DefaultSubagentCatalog,
   RuntimeScaffold,
+  RuntimeScaffoldArchitecture,
   SpecialistRole,
+  SupervisorSpecialistsRuntimeScaffold,
   VirtualFilesystemLayout,
 } from "./types.ts";

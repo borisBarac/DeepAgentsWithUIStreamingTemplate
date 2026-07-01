@@ -82,6 +82,7 @@ describe("index barrel exports", () => {
 
   it("re-exports the runtime scaffold interface from the scaffold module", () => {
     expect(index.createRuntimeScaffold).toBe(scaffold.createRuntimeScaffold);
+    expect(index.createDefaultSubagentCatalog).toBe(scaffold.createDefaultSubagentCatalog);
     expect(index.DEFAULT_ARTIFACTS_ROOT).toBe(scaffold.DEFAULT_ARTIFACTS_ROOT);
     expect(index.DEFAULT_MEMORY_FILE_PATHS).toBe(scaffold.DEFAULT_MEMORY_FILE_PATHS);
     expect(index.DEFAULT_MEMORY_ROOT).toBe(scaffold.DEFAULT_MEMORY_ROOT);

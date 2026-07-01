@@ -269,8 +269,9 @@ export {
 export {
   type CreateCompositeBackendOptions,
   type CreateDefaultPermissionsOptions,
-  type CreateDefaultSubagentsOptions,
+  type CreateDefaultSubagentCatalogOptions,
   type CreateRuntimeScaffoldOptions,
+  createDefaultSubagentCatalog,
   createRuntimeScaffold,
   DEFAULT_ARTIFACTS_ROOT,
   DEFAULT_MEMORY_FILE_PATHS,
@@ -280,6 +281,7 @@ export {
   DEFAULT_SCRATCH_ROOT,
   DEFAULT_SKILLS_ROOT,
   type DeepAgentBlueprint,
+  type DefaultSubagentCatalog,
   type RuntimeScaffold,
   type SpecialistRole,
   type VirtualFilesystemLayout,

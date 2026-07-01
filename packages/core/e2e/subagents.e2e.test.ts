@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import {
   clarificationResultSchema,
+  createDefaultSubagentCatalog,
   createRuntimeScaffold,
   createScaffoldedAgent,
 } from "../src/index.ts";
-import { createDefaultSubagents } from "../src/scaffold/subagents.ts";
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,
@@ -23,9 +23,9 @@ describe.skipIf(!hasLiveLLMCredentials)(
   () => {
     it("surfaces the clarifier structured response when the supervisor delegates through the scaffolded agent", async () => {
       const modelRuntime = createDefaultModelRuntime(false);
-      const [clarifier] = createDefaultSubagents({ modelRuntime });
+      const clarifier = createDefaultSubagentCatalog({ modelRuntime }).byRole.clarifier;
       if (!clarifier) {
-        throw new Error("createDefaultSubagents did not produce a clarifier subagent.");
+        throw new Error("createDefaultSubagentCatalog did not produce a clarifier subagent.");
       }
 
       const scaffold = createRuntimeScaffold({

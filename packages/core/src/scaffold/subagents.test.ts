@@ -11,7 +11,7 @@ import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
-import { createDefaultSubagents } from "./subagents.ts";
+import { createDefaultSubagentCatalog } from "./subagents.ts";
 
 function responseFormatSchema(rf: unknown): unknown {
   return rf != null && typeof rf === "object" && "schema" in rf
@@ -39,8 +39,8 @@ const testImageGenerationService = {
   },
 };
 
-function asDefaultSubagents(subagents: unknown): SubAgent[] {
-  return subagents as SubAgent[];
+function asDefaultSubagents(catalog: ReturnType<typeof createDefaultSubagentCatalog>): SubAgent[] {
+  return catalog.all as SubAgent[];
 }
 
 function expectStructuredPrompt(prompt: unknown, basePrompt: string): void {
@@ -51,7 +51,8 @@ function expectStructuredPrompt(prompt: unknown, basePrompt: string): void {
 
 describe("default subagents", () => {
   it("omits the image designer when image generation is not configured", () => {
-    const subagents = asDefaultSubagents(createDefaultSubagents());
+    const catalog = createDefaultSubagentCatalog();
+    const subagents = asDefaultSubagents(catalog);
 
     expect(subagents.map((subagent) => subagent.name)).toEqual([
       "clarifier",
@@ -59,11 +60,15 @@ describe("default subagents", () => {
       "analyst",
       "review-agent",
     ]);
+    expect(catalog.byRole["image-designer"]).toBeUndefined();
+    expect(catalog.byRole["product-generator"]).toBeUndefined();
+    expect(catalog.byRole.clarifier?.name).toBe("clarifier");
+    expect(catalog.byRole.reviewer?.name).toBe("review-agent");
   });
 
   it("provides specialist subagents for clarification, research, analysis, image design, and review", () => {
     const subagents = asDefaultSubagents(
-      createDefaultSubagents({ imageGenerationService: testImageGenerationService }),
+      createDefaultSubagentCatalog({ imageGenerationService: testImageGenerationService }),
     );
 
     expect(subagents.map((subagent) => subagent.name)).toEqual([
@@ -103,7 +108,7 @@ describe("default subagents", () => {
       },
     };
     const [, researcher, analyst] = asDefaultSubagents(
-      createDefaultSubagents({ pythonSandboxBackend: backend }),
+      createDefaultSubagentCatalog({ pythonSandboxBackend: backend }),
     );
 
     expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
@@ -118,7 +123,7 @@ describe("default subagents", () => {
       schema: z.object({ url: z.string().url() }),
     });
     const [, researcher, analyst] = asDefaultSubagents(
-      createDefaultSubagents({ additionalResearcherTools: [scrapeTool] }),
+      createDefaultSubagentCatalog({ additionalResearcherTools: [scrapeTool] }),
     );
 
     expect(researcher?.tools?.map((researcherTool) => researcherTool.name)).toEqual([
@@ -130,7 +135,7 @@ describe("default subagents", () => {
 
   it("lets explicit specialist tool overrides replace Python execution", () => {
     const [, researcher, analyst] = asDefaultSubagents(
-      createDefaultSubagents({
+      createDefaultSubagentCatalog({
         researcher: { tools: [] },
         analyst: { tools: [] },
       }),
@@ -142,7 +147,7 @@ describe("default subagents", () => {
 
   it("uses a custom prompt loader for default subagent prompts", () => {
     const subagents = asDefaultSubagents(
-      createDefaultSubagents(
+      createDefaultSubagentCatalog(
         { imageGenerationService: testImageGenerationService },
         {},
         testPromptLoader,
@@ -158,7 +163,7 @@ describe("default subagents", () => {
 
   it("lets explicit subagent prompt overrides win over the prompt loader", () => {
     const [clarifier] = asDefaultSubagents(
-      createDefaultSubagents(
+      createDefaultSubagentCatalog(
         {
           imageGenerationService: testImageGenerationService,
           clarifier: {
@@ -175,7 +180,7 @@ describe("default subagents", () => {
 
   it("enforces structured output on the clarifier and review agent", () => {
     const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
-      createDefaultSubagents({ imageGenerationService: testImageGenerationService }),
+      createDefaultSubagentCatalog({ imageGenerationService: testImageGenerationService }),
     );
 
     expect(responseFormatSchema(clarifier?.responseFormat)).toBe(clarificationResultSchema);
@@ -187,12 +192,14 @@ describe("default subagents", () => {
 
   it("lets an explicit reviewer responseFormat override the default schema", () => {
     const customSchema = reviewReportSchema;
-    const [, , , , reviewer] = createDefaultSubagents({
-      imageGenerationService: testImageGenerationService,
-      reviewer: {
-        responseFormat: customSchema,
-      },
-    }) as SubAgent[];
+    const [, , , , reviewer] = asDefaultSubagents(
+      createDefaultSubagentCatalog({
+        imageGenerationService: testImageGenerationService,
+        reviewer: {
+          responseFormat: customSchema,
+        },
+      }),
+    );
 
     expect(reviewer?.responseFormat).toBe(customSchema);
   });
@@ -220,13 +227,13 @@ describe("default subagents", () => {
     });
     const explicitReviewerModel = runtime.getModelForCategory("fast");
     const [clarifier, researcher, analyst, imageDesigner, reviewer] = asDefaultSubagents(
-      createDefaultSubagents({
+      createDefaultSubagentCatalog({
         imageGenerationService: testImageGenerationService,
         modelRuntime: runtime,
       }),
     );
     const [, , , , overriddenReviewer] = asDefaultSubagents(
-      createDefaultSubagents({
+      createDefaultSubagentCatalog({
         imageGenerationService: testImageGenerationService,
         modelRuntime: runtime,
         reviewer: { model: explicitReviewerModel },
@@ -243,7 +250,7 @@ describe("default subagents", () => {
 
   it("omits the product generator when generativeUi is not enabled", () => {
     const subagents = asDefaultSubagents(
-      createDefaultSubagents({ imageGenerationService: testImageGenerationService }),
+      createDefaultSubagentCatalog({ imageGenerationService: testImageGenerationService }),
     );
 
     expect(subagents.map((subagent) => subagent.name)).not.toContain("product-generator");
@@ -251,7 +258,7 @@ describe("default subagents", () => {
 
   it("includes the product generator after the image designer when generativeUi is enabled", () => {
     const subagents = asDefaultSubagents(
-      createDefaultSubagents({
+      createDefaultSubagentCatalog({
         imageGenerationService: testImageGenerationService,
         generativeUi: {},
       }),
@@ -272,7 +279,7 @@ describe("default subagents", () => {
   });
 
   it("includes the product generator without an image tool when no image service is configured", () => {
-    const subagents = asDefaultSubagents(createDefaultSubagents({ generativeUi: {} }));
+    const subagents = asDefaultSubagents(createDefaultSubagentCatalog({ generativeUi: {} }));
 
     const productGenerator = subagents.find((subagent) => subagent.name === "product-generator");
     expect(productGenerator?.tools).toEqual([]);
@@ -280,7 +287,7 @@ describe("default subagents", () => {
 
   it("uses the prompt loader for the product generator prompt and lets overrides win", () => {
     const defaultSubagents = asDefaultSubagents(
-      createDefaultSubagents({ generativeUi: {} }, {}, testPromptLoader),
+      createDefaultSubagentCatalog({ generativeUi: {} }, {}, testPromptLoader),
     );
     expect(
       defaultSubagents.find((subagent) => subagent.name === "product-generator")?.systemPrompt,
@@ -289,7 +296,7 @@ describe("default subagents", () => {
     );
 
     const overriddenSubagents = asDefaultSubagents(
-      createDefaultSubagents(
+      createDefaultSubagentCatalog(
         {
           generativeUi: {},
           productGenerator: { systemPrompt: "explicit product generator prompt" },

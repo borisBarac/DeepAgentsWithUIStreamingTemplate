@@ -5,10 +5,10 @@ import type { AgentMiddleware } from "langchain";
 import {
   connectLinkloomResearchTools,
   createAppConfig,
+  createDefaultSubagentCatalog,
   createRuntimeScaffold,
   createScaffoldedAgent,
 } from "../src/index.ts";
-import { createDefaultSubagents } from "../src/scaffold/subagents.ts";
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,
@@ -82,17 +82,16 @@ describe.skipIf(!hasLiveLLMCredentials)(
       const linkloom = await connectLinkloomResearchTools();
       try {
         const modelRuntime = createDefaultModelRuntime(false);
-        const subagents = createDefaultSubagents({
+        const researcher = createDefaultSubagentCatalog({
           modelRuntime,
           researcher: {
             systemPrompt: RESEARCHER_SYSTEM_PROMPT,
             tools: [...linkloom.tools],
             middleware: [linkloomExtractionOnlyMiddleware],
           },
-        });
-        const researcher = subagents.find((agent) => agent.name === "researcher");
+        }).byRole.researcher;
         if (!researcher) {
-          throw new Error("createDefaultSubagents did not produce a researcher subagent.");
+          throw new Error("createDefaultSubagentCatalog did not produce a researcher subagent.");
         }
 
         const scaffold = createRuntimeScaffold({
