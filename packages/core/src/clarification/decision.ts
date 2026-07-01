@@ -19,6 +19,19 @@ function executionDecision(
     };
   }
 
+  if (!options.productBatchGenerated) {
+    return {
+      phase: "product_generation",
+      shouldDelegateToClarifier: false,
+      requiredSubagent: "product-generator",
+      canPlan: false,
+      canDelegate: true,
+      canFinalize: false,
+      state,
+      config,
+    };
+  }
+
   if (options.reviewStatus === "approved") {
     return {
       phase: "execution",
@@ -53,19 +66,6 @@ function executionDecision(
       canDelegate: true,
       canFinalize: false,
       reviewFeedback: options.reviewFeedback,
-      state,
-      config,
-    };
-  }
-
-  if (!options.productBatchGenerated) {
-    return {
-      phase: "product_generation",
-      shouldDelegateToClarifier: false,
-      requiredSubagent: "product-generator",
-      canPlan: false,
-      canDelegate: true,
-      canFinalize: false,
       state,
       config,
     };

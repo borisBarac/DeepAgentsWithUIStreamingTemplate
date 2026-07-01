@@ -148,6 +148,32 @@ describe("clarification orchestration", () => {
     expect(decision.canFinalize).toBeFalse();
   });
 
+  it("routes stale approved reviews without a product batch to product generation", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+      productBatchGenerated: false,
+      reviewStatus: "approved",
+    });
+
+    expect(decision.phase).toBe("product_generation");
+    expect(decision.requiredSubagent).toBe("product-generator");
+    expect(decision.canFinalize).toBeFalse();
+  });
+
   it("routes generated product batches to review before execution", () => {
     const state = applyClarificationResult(createClarificationState("Build product cards."), {
       status: "ready_to_proceed",
@@ -201,6 +227,35 @@ describe("clarification orchestration", () => {
     expect(decision.canPlan).toBeTrue();
     expect(decision.canDelegate).toBeTrue();
     expect(decision.canFinalize).toBeTrue();
+  });
+
+  it("blocks execution when review blocks a generated product batch", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+      productBatchGenerated: true,
+      reviewStatus: "blocked",
+      reviewFeedback: "Cannot validate product requirements.",
+    });
+
+    expect(decision.phase).toBe("blocked");
+    expect(decision.reviewFeedback).toBe("Cannot validate product requirements.");
+    expect(decision.canPlan).toBeFalse();
+    expect(decision.canDelegate).toBeFalse();
+    expect(decision.canFinalize).toBeFalse();
   });
 
   it("routes reviewer changes back to product generation with feedback", () => {
