@@ -71,6 +71,13 @@ export type DeepAgentBlueprint = {
     config: ClarificationConfig;
     requiredSubagent: "clarifier";
   };
+  productGeneration: {
+    enabled: boolean;
+    requiredSubagent?: "product-generator";
+  };
+  review: {
+    requiredSubagent: "review-agent";
+  };
   generativeUi?: GenerativeUiOptions;
 };
 

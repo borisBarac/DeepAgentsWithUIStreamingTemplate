@@ -12,8 +12,10 @@ describe("clarification orchestration", () => {
 
     expect(decision.phase).toBe("clarification");
     expect(decision.shouldDelegateToClarifier).toBeTrue();
+    expect(decision.requiredSubagent).toBe("clarifier");
     expect(decision.canPlan).toBeFalse();
     expect(decision.canDelegate).toBeFalse();
+    expect(decision.canFinalize).toBeFalse();
     expect(decision.state?.originalRequest).toBe("Build a dashboard for the Q2 launch.");
   });
 
@@ -43,8 +45,10 @@ describe("clarification orchestration", () => {
 
     expect(decision.phase).toBe("clarification");
     expect(decision.shouldDelegateToClarifier).toBeTrue();
+    expect(decision.requiredSubagent).toBe("clarifier");
     expect(decision.canPlan).toBeFalse();
     expect(decision.canDelegate).toBeFalse();
+    expect(decision.canFinalize).toBeFalse();
   });
 
   it("unlocks normal execution once clarification is ready", () => {
@@ -75,6 +79,7 @@ describe("clarification orchestration", () => {
     expect(decision.shouldDelegateToClarifier).toBeFalse();
     expect(decision.canPlan).toBeTrue();
     expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeTrue();
   });
 
   it("returns blocked when the clarification state is blocked", () => {
@@ -114,5 +119,117 @@ describe("clarification orchestration", () => {
     expect(decision.phase).toBe("blocked");
     expect(decision.canPlan).toBeFalse();
     expect(decision.canDelegate).toBeFalse();
+    expect(decision.canFinalize).toBeFalse();
+  });
+
+  it("routes ready clarified generative UI requests to product generation before execution", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+    });
+
+    expect(decision.phase).toBe("product_generation");
+    expect(decision.requiredSubagent).toBe("product-generator");
+    expect(decision.canPlan).toBeFalse();
+    expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeFalse();
+  });
+
+  it("routes generated product batches to review before execution", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+      productBatchGenerated: true,
+    });
+
+    expect(decision.phase).toBe("review");
+    expect(decision.requiredSubagent).toBe("review-agent");
+    expect(decision.canPlan).toBeFalse();
+    expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeFalse();
+  });
+
+  it("unlocks execution after review approval", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+      productBatchGenerated: true,
+      reviewStatus: "approved",
+    });
+
+    expect(decision.phase).toBe("execution");
+    expect(decision.requiredSubagent).toBeUndefined();
+    expect(decision.canPlan).toBeTrue();
+    expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeTrue();
+  });
+
+  it("routes reviewer changes back to product generation with feedback", () => {
+    const state = applyClarificationResult(createClarificationState("Build product cards."), {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "audience", value: "developers" }],
+      reasoningSummary: "The product request is sufficiently scoped.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state,
+      generativeUiEnabled: true,
+      productBatchGenerated: true,
+      reviewStatus: "changes_required",
+      reviewFeedback: "Make the cards more actionable.",
+    });
+
+    expect(decision.phase).toBe("product_generation");
+    expect(decision.requiredSubagent).toBe("product-generator");
+    expect(decision.reviewFeedback).toBe("Make the cards more actionable.");
+    expect(decision.canPlan).toBeFalse();
+    expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeFalse();
   });
 });

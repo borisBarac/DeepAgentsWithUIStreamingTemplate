@@ -6,6 +6,7 @@ import {
   DEFAULT_BASELINE_SYSTEM_PROMPT,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
   DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
+  DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
@@ -42,6 +43,21 @@ describe("prompt defaults", () => {
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
       "When a question omits `options`, ask it directly",
+    );
+  });
+
+  it("requires product generation and review before final delivery when generative UI is enabled", () => {
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "delegate to `product-generator` immediately after the clarifier returns `ready_to_proceed`",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "After product generation, submit the generated product batch to `review-agent`",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "route the work back to `product-generator` with the reviewer feedback",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "Deliver final work only after the reviewer approves the generated product batch",
     );
   });
 
@@ -116,6 +132,13 @@ describe("prompt defaults", () => {
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
       "tests, checks, citations, or manual validation",
     );
+  });
+
+  it("tells the product generator to revise from reviewer feedback", () => {
+    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain(
+      "If reviewer feedback is provided, treat it as required revision input",
+    );
+    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain("revised product batch");
   });
 
   it("uses the default markdown loader for compatibility exports", () => {

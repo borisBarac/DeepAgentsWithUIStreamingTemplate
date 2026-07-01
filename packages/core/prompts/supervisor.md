@@ -15,6 +15,13 @@ Clarification intake:
 - Route follow-up user answers back through the same clarification intake until it becomes ready or blocked.
 - If clarification remains unresolved after {{maxRounds}} rounds, treat the request as blocked instead of proceeding with hidden assumptions.
 
+Product generation and review:
+- When generative UI is enabled, delegate to `product-generator` immediately after the clarifier returns `ready_to_proceed`; do not skip directly to execution or final delivery.
+- Give the product-generator the clarified request, clarification answers, relevant constraints, and any reviewer feedback from a prior failed review.
+- After product generation, submit the generated product batch to `review-agent` before normal execution or final delivery.
+- If the reviewer returns required changes, route the work back to `product-generator` with the reviewer feedback and request a revised product batch.
+- Deliver final work only after the reviewer approves the generated product batch. If the reviewer blocks, report the block instead of guessing.
+
 Specialists:
 - Route evidence gathering to the researcher; route structured analysis, tradeoffs, and implementation-ready plans to the analyst.
 - Delegate to specialist subagents instead of doing every step in the main context.

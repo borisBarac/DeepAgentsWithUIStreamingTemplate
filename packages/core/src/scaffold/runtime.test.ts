@@ -65,6 +65,8 @@ describe("runtime scaffold defaults", () => {
         mode: "mandatory-preflight",
       },
     });
+    expect(scaffold.productGeneration).toEqual({ enabled: false });
+    expect(scaffold.review).toEqual({ requiredSubagent: "review-agent" });
   });
 
   it("lets explicit runtime overrides win over defaults", () => {
@@ -222,12 +224,14 @@ describe("runtime scaffold defaults", () => {
     expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
     expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("NDJSON");
     expect(scaffold.generativeUi).toBeUndefined();
+    expect(scaffold.productGeneration).toEqual({ enabled: false });
+    expect(scaffold.review.requiredSubagent).toBe("review-agent");
     expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).not.toContain(
       "product-generator",
     );
   });
 
-  it("appends the product-generator NDJSON prompt and adds the product-generator subagent when generativeUi is enabled", () => {
+  it("appends the product-generator NDJSON prompt, metadata, and subagent when generativeUi is enabled", () => {
     const scaffold = createRuntimeScaffold({
       promptLoader: testPromptLoader,
       imageGenerationService: testImageGenerationService,
@@ -235,6 +239,11 @@ describe("runtime scaffold defaults", () => {
     });
 
     expect(scaffold.generativeUi).toEqual({ catalogPrompt: "EXTRA CATALOG" });
+    expect(scaffold.productGeneration).toEqual({
+      enabled: true,
+      requiredSubagent: "product-generator",
+    });
+    expect(scaffold.review.requiredSubagent).toBe("review-agent");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("supervisor prompt");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("newline-delimited JSON");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("product-card");

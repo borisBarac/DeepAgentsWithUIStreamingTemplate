@@ -3,7 +3,14 @@ import { z } from "zod";
 export type ClarificationMode = "mandatory-preflight";
 export type ClarificationQuestionsPerRound = 1 | 2 | 3;
 export type ClarificationStatus = "needs_clarification" | "ready_to_proceed" | "blocked";
-export type ClarificationGatePhase = "clarification" | "execution" | "blocked";
+export type ClarificationGatePhase =
+  | "clarification"
+  | "product_generation"
+  | "review"
+  | "execution"
+  | "blocked";
+export type ClarificationFlowRequiredSubagent = "clarifier" | "product-generator" | "review-agent";
+export type ProductFlowReviewStatus = "approved" | "changes_required" | "blocked";
 
 export type ClarificationOption = {
   label: string;
@@ -62,13 +69,20 @@ export type ResolveClarificationGateOptions = {
   request: string;
   state?: ClarificationState | null;
   config?: Partial<ClarificationConfig>;
+  generativeUiEnabled?: boolean;
+  productBatchGenerated?: boolean;
+  reviewStatus?: ProductFlowReviewStatus | null;
+  reviewFeedback?: string;
 };
 
 export type ClarificationGateDecision = {
   phase: ClarificationGatePhase;
   shouldDelegateToClarifier: boolean;
+  requiredSubagent?: ClarificationFlowRequiredSubagent;
   canPlan: boolean;
   canDelegate: boolean;
+  canFinalize: boolean;
+  reviewFeedback?: string;
   state: ClarificationState | null;
   config: ClarificationConfig;
 };

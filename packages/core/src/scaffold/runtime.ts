@@ -32,6 +32,13 @@ export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}
       config: clarification,
       requiredSubagent: "clarifier",
     },
+    productGeneration: {
+      enabled: Boolean(options.generativeUi),
+      ...(options.generativeUi ? { requiredSubagent: "product-generator" as const } : {}),
+    },
+    review: {
+      requiredSubagent: "review-agent",
+    },
     generativeUi: options.generativeUi,
   };
 }

@@ -17,6 +17,7 @@ export {
   type ArchivedClarificationState,
   type ClarificationAnsweredInformation,
   type ClarificationConfig,
+  type ClarificationFlowRequiredSubagent,
   type ClarificationGateDecision,
   type ClarificationGatePhase,
   type ClarificationMode,
@@ -31,5 +32,6 @@ export {
   clarificationQuestionSchema,
   clarificationResultSchema,
   clarificationStatusSchema,
+  type ProductFlowReviewStatus,
   type ResolveClarificationGateOptions,
 } from "./types.ts";
