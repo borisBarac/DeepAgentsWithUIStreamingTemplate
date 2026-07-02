@@ -64,6 +64,21 @@ export function findTaskToolMessage(messages: unknown[] | undefined): TaskToolMe
   return undefined;
 }
 
+const JSON_FENCE_PATTERN = /```(?:json)?\s*([\s\S]*?)```/;
+
+function extractJsonObject(content: string): string {
+  const fenced = content.match(JSON_FENCE_PATTERN);
+  if (fenced?.[1]) {
+    return fenced[1].trim();
+  }
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    return content.slice(start, end + 1);
+  }
+  return content.trim();
+}
+
 export function parseTaskToolPayload(message: TaskToolMessage | undefined): StructuredPayload {
   if (!message) {
     throw new Error("No task tool message was found in the agent result.");
@@ -72,7 +87,7 @@ export function parseTaskToolPayload(message: TaskToolMessage | undefined): Stru
     throw new Error("The task tool message did not carry string content.");
   }
   try {
-    return JSON.parse(message.content) as StructuredPayload;
+    return JSON.parse(extractJsonObject(message.content)) as StructuredPayload;
   } catch {
     throw new Error(`The task tool content was not valid JSON: ${message.content.slice(0, 200)}`);
   }

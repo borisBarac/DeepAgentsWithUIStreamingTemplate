@@ -14,6 +14,7 @@ export const LINKLOOM_MCP_TOOL_NAMES = [
   "render_page",
   "extract_links",
   "extract_tables",
+  "search_web",
 ] as const;
 
 export type LinkloomMcpOptions = Pick<

@@ -422,6 +422,18 @@ export class StreamingLineBuffer {
  * through {@link normalizeUiUpdate}; blank lines and malformed JSON are skipped.
  */
 export function parseUpdateText(text: string, normalizeSpec?: NormalizeSpec): UiUpdate[] {
+  const parseCandidates = (parsed: unknown) =>
+    extractUpdateObjects(parsed)
+      .map((candidate) => normalizeUiUpdate(candidate, normalizeSpec))
+      .filter((update): update is UiUpdate => update !== null);
+
+  try {
+    const parsed = JSON.parse(text.trim());
+    return parseCandidates(parsed);
+  } catch {
+    // Fall back to NDJSON line parsing when the payload is not a single JSON value.
+  }
+
   const updates: UiUpdate[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -432,10 +444,7 @@ export function parseUpdateText(text: string, normalizeSpec?: NormalizeSpec): Ui
     } catch {
       continue;
     }
-    for (const candidate of extractUpdateObjects(parsed)) {
-      const update = normalizeUiUpdate(candidate, normalizeSpec);
-      if (update) updates.push(update);
-    }
+    updates.push(...parseCandidates(parsed));
   }
   return updates;
 }

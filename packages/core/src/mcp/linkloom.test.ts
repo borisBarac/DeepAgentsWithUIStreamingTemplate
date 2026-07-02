@@ -58,6 +58,7 @@ describe("Linkloom MCP", () => {
       "render_page",
       "extract_links",
       "extract_tables",
+      "search_web",
     ]);
   });
 });

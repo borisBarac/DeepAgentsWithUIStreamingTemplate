@@ -40,6 +40,12 @@ const RESEARCHER_SYSTEM_PROMPT = [
   "Return only the extracted URLs.",
 ].join("\n");
 
+const RESEARCH_SUPERVISOR_PROMPT = [
+  "You are a deterministic researcher supervisor for a live e2e test.",
+  "Use the `task` tool exactly once with `subagent_type: researcher`.",
+  "Relay the researcher result unchanged.",
+].join("\n");
+
 const LINKLOOM_EXTRACTION_TOOLS = new Set(["scrape", "extract_links"]);
 
 const linkloomExtractionOnlyMiddleware: AgentMiddleware = {
@@ -97,6 +103,7 @@ describe.skipIf(!hasLiveLLMCredentials)(
         const scaffold = createRuntimeScaffold({
           backend: new StateBackend(),
           modelRuntime,
+          systemPrompt: RESEARCH_SUPERVISOR_PROMPT,
           subagents: [researcher],
         });
         if (scaffold.subagents.length !== 1) {
@@ -108,6 +115,7 @@ describe.skipIf(!hasLiveLLMCredentials)(
           modelRuntime,
           permissions: scaffold.permissions,
           guardrails: false,
+          systemPrompt: scaffold.systemPrompt,
           subagents: scaffold.subagents,
         });
 

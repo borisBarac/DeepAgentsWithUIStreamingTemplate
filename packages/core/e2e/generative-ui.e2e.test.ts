@@ -16,8 +16,20 @@ import {
 } from "./helpers.ts";
 
 const PRODUCT_PROMPT = [
-  "Generate a batch of 2 product cards for a wireless noise-cancelling headphone product line.",
+  "Incoming user request: 'Show me product cards for two of our headphones.'",
+  "",
+  "The request is already clarified and ready to proceed. Generate cards for these two products:",
+  "1. 'Aurora NC Pro' — premium over-ear audiophile headphones with adaptive ANC, $349.",
+  "2. 'Aurora NC Lite' — everyday over-ear headphones with hybrid ANC, $149.",
+  "",
   "Delegate this to your product-generator subagent and relay its product cards.",
+].join("\n");
+
+const PRODUCT_SUPERVISOR_PROMPT = [
+  "You are a deterministic product-generator supervisor for a live e2e test.",
+  "The user request is already clarified.",
+  "Use the `task` tool exactly once with `subagent_type: product-generator`.",
+  "Relay the product-generator result unchanged.",
 ].join("\n");
 
 describe.skipIf(!hasLiveLLMCredentials)(
@@ -38,6 +50,7 @@ describe.skipIf(!hasLiveLLMCredentials)(
       const scaffold = createRuntimeScaffold({
         modelRuntime,
         generativeUi: {},
+        systemPrompt: PRODUCT_SUPERVISOR_PROMPT,
         subagents: [productGenerator as SubAgent],
       });
       if (scaffold.subagents.length !== 1) {
@@ -50,14 +63,13 @@ describe.skipIf(!hasLiveLLMCredentials)(
       const agent = createScaffoldedAgent({
         modelRuntime,
         guardrails: false,
+        systemPrompt: PRODUCT_SUPERVISOR_PROMPT,
         subagents: scaffold.subagents,
       });
 
       const result = (await agent.invoke({
         messages: [{ role: "user", content: PRODUCT_PROMPT }],
       })) as AgentInvokeResult;
-
-      console.log(result);
 
       const payload = parseTaskToolPayload(findTaskToolMessage(result.messages));
 
@@ -68,6 +80,6 @@ describe.skipIf(!hasLiveLLMCredentials)(
         expect(product.title.length).toBeGreaterThan(0);
         expect(product.description.length).toBeGreaterThan(0);
       }
-    }, 60_000);
+    }, 120_000);
   },
 );

@@ -27,7 +27,7 @@
       "name": "@deep-agent-template/core",
       "version": "0.1.0",
       "dependencies": {
-        "@boris.barac/linkloom": "^0.1.4",
+        "@boris.barac/linkloom": "^0.1.5",
         "@deep-agent-template/image-gen": "workspace:*",
         "@deep-agent-template/sandbox": "workspace:*",
         "@json-render/core": "^0.4.0",
@@ -105,7 +105,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.0", "", { "os": "win32", "cpu": "x64" }, "sha512-VT/lF+GId+67j8aDfLkxdxNoVApsPSTbyAtB3jJq0IWTrY77WXfbPfpngxq0bA6JCEv/7k8C9qWjDRKRznDlyw=="],
 
-    "@boris.barac/linkloom": ["@boris.barac/linkloom@0.1.4", "", { "dependencies": { "@langchain/google-genai": "^2.1.28", "@langchain/openai": "^1.4.4", "@modelcontextprotocol/sdk": "^1.29.0", "@mozilla/readability": "^0.6.0", "axios": "^1.15.2", "camoufox-js": "^0.10.2", "cheerio": "^1.2.0", "citty": "^0.2.2", "impit": "^0.14.2", "jsdom": "^29.0.2", "pdf.js-extract": "^1.0.1", "playwright": "^1.59.1", "turndown": "^7.2.4" }, "peerDependencies": { "typescript": "^6.0.3" }, "bin": { "linkloom": "src/cli.ts", "linkloom-mcp": "src/mcp.ts" } }, "sha512-bc6Iy51oV6+8ADdtY6uQCLAfi8Z5F+n3PIdovcyKy7y9SxLNgpI9Xaqp9FVSdZi16XxYcBA5OrKrCBTrYwubBQ=="],
+    "@boris.barac/linkloom": ["@boris.barac/linkloom@0.1.5", "", { "dependencies": { "@langchain/google-genai": "^2.1.28", "@langchain/openai": "^1.4.4", "@modelcontextprotocol/sdk": "^1.29.0", "@mozilla/readability": "^0.6.0", "axios": "^1.15.2", "camoufox-js": "^0.10.2", "cheerio": "^1.2.0", "citty": "^0.2.2", "impit": "^0.14.2", "jsdom": "^29.0.2", "pdf.js-extract": "^1.0.1", "playwright": "^1.59.1", "turndown": "^7.2.4" }, "peerDependencies": { "typescript": "^6.0.3" }, "bin": { "linkloom": "src/cli.ts", "linkloom-mcp": "src/mcp.ts" } }, "sha512-FdOocDH/NOXU4t0tfu3TNbnAi4jSLWxx8yfGpUaqCSpEVXm8gVdRZuYNqZxpmEW3GubKFnSSCfleBzdVCAH8cw=="],
 
     "@bramus/specificity": ["@bramus/specificity@2.4.2", "", { "dependencies": { "css-tree": "^3.0.0" }, "bin": { "specificity": "bin/cli.js" } }, "sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw=="],
 

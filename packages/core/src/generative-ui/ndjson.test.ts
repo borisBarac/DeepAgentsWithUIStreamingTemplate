@@ -88,6 +88,16 @@ describe("parseUpdateText", () => {
     ]);
   });
 
+  it("parses pretty-printed JSON envelopes before falling back to NDJSON", () => {
+    const text = `{
+  "updates": [
+    {"type":"message","text":"hi"}
+  ]
+}`;
+
+    expect(parseUpdateText(text)).toEqual([{ type: "message", text: "hi" }]);
+  });
+
   it("drops ui updates when the normalizeSpec hook rejects them", () => {
     const rejectAll = () => null;
     const text = '{"type":"ui","spec":{"root":"raw"}}';
