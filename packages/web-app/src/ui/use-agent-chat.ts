@@ -17,6 +17,7 @@ export type SubagentActivityUpdate = Extract<UiUpdate, { type: "subagent_activit
 
 export type DisplayMessage = ChatMessage & {
   id: string;
+  answer?: string;
   answered?: boolean;
   question?: QualificationQuestion;
   streaming?: boolean;
@@ -136,7 +137,7 @@ export type AgentChat = {
   loading: boolean;
   canSubmit: boolean;
   setInput: (value: string) => void;
-  submitAnswer: (questionId: string, answer: string) => Promise<void>;
+  submitAnswer: (questionId: string, answer: string) => void;
   submitMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
 };
 
@@ -214,6 +215,22 @@ export function finishAssistantMessage(
   });
 }
 
+export function formatQuestionAnswers(
+  messages: readonly DisplayMessage[],
+  answers: ReadonlyMap<string, string>,
+  questionIds: ReadonlySet<string>,
+): string {
+  const lines = messages.flatMap((message) => {
+    const question = message.question;
+    const answer = question ? answers.get(question.id)?.trim() : undefined;
+    return question && questionIds.has(question.id) && answer
+      ? [`- ${question.prompt}: ${answer}`]
+      : [];
+  });
+
+  return lines.length > 0 ? `Here are my answers:\n${lines.join("\n")}` : "";
+}
+
 export function useAgentChat(): AgentChat {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [agentActivity, setAgentActivity] = useState<DisplayAgentActivity[]>([]);
@@ -222,18 +239,26 @@ export function useAgentChat(): AgentChat {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(() => new Set());
+  const [openQuestionIds, setOpenQuestionIds] = useState<Set<string>>(() => new Set());
+  const [questionAnswers, setQuestionAnswers] = useState<Map<string, string>>(() => new Map());
   const sessionIdRef = useRef<string>(createId());
   const loadingRef = useRef(false);
 
-  const canSubmit = input.trim().length > 0 && !loading;
+  const hasOpenQuestions = openQuestionIds.size > 0;
+  const allOpenQuestionsAnswered = [...openQuestionIds].every((id) =>
+    Boolean(questionAnswers.get(id)?.trim()),
+  );
+  const canSubmit =
+    !loading && (hasOpenQuestions ? allOpenQuestionsAnswered : input.trim().length > 0);
 
   const visibleMessages = useMemo<DisplayMessage[]>(
     () =>
       messages.map((message) => ({
         ...message,
+        answer: message.question ? questionAnswers.get(message.question.id) : undefined,
         answered: message.question ? answeredQuestionIds.has(message.question.id) : undefined,
       })),
-    [answeredQuestionIds, messages],
+    [answeredQuestionIds, messages, questionAnswers],
   );
 
   const assistantText = useMemo(
@@ -274,6 +299,12 @@ export function useAgentChat(): AgentChat {
       },
       onQuestion: (question) => {
         finishStreamingAssistant();
+        setOpenQuestionIds((current) => new Set(current).add(question.id));
+        setQuestionAnswers((current) => {
+          const next = new Map(current);
+          next.delete(question.id);
+          return next;
+        });
         setAnsweredQuestionIds((current) => {
           if (!current.has(question.id)) {
             return current;
@@ -390,23 +421,35 @@ export function useAgentChat(): AgentChat {
     }
   }, []);
 
-  const submitAnswer = useCallback(
-    async (questionId: string, answer: string) => {
-      if (!answer.trim() || loadingRef.current) {
-        return;
-      }
-      setAnsweredQuestionIds((current) => new Set(current).add(questionId));
-      await submitText(answer);
-    },
-    [submitText],
-  );
+  const submitAnswer = useCallback((questionId: string, answer: string) => {
+    if (!answer.trim() || loadingRef.current) {
+      return;
+    }
+    setAnsweredQuestionIds((current) => new Set(current).add(questionId));
+    setQuestionAnswers((current) => new Map(current).set(questionId, answer.trim()));
+  }, []);
 
   const submitMessage = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
+      if (loadingRef.current) {
+        return;
+      }
+
+      if (openQuestionIds.size > 0) {
+        const message = formatQuestionAnswers(messages, questionAnswers, openQuestionIds);
+        if (!message) {
+          return;
+        }
+        setOpenQuestionIds(new Set());
+        setQuestionAnswers(new Map());
+        await submitText(message);
+        return;
+      }
+
       await submitText(input);
     },
-    [input, submitText],
+    [input, messages, openQuestionIds, questionAnswers, submitText],
   );
 
   return {

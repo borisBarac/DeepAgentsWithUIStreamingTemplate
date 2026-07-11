@@ -14,7 +14,7 @@ function QuestionControls({
 }: {
   disabled: boolean;
   message: DisplayMessage;
-  onAnswer: (questionId: string, answer: string) => Promise<void>;
+  onAnswer: (questionId: string, answer: string) => void;
 }) {
   const [answer, setAnswer] = useState("");
   const question = message.question;
@@ -49,7 +49,7 @@ function QuestionControls({
       className="question-form"
       onSubmit={(event) => {
         event.preventDefault();
-        void onAnswer(question.id, answer);
+        onAnswer(question.id, answer);
         setAnswer("");
       }}
     >
@@ -62,7 +62,7 @@ function QuestionControls({
         value={answer}
       />
       <button disabled={disabled || message.answered || !answer.trim()} type="submit">
-        Reply
+        Set answer
       </button>
     </form>
   );
@@ -146,6 +146,7 @@ export default function Home() {
                 <span>{message.role}</span>
                 <p>{message.content}</p>
                 <QuestionControls disabled={loading} message={message} onAnswer={submitAnswer} />
+                {message.question && message.answer ? <p>Your answer: {message.answer}</p> : null}
               </article>
             ))
           )}

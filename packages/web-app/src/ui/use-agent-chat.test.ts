@@ -5,6 +5,7 @@ import {
   appendAssistantChunk,
   type DisplayMessage,
   finishAssistantMessage,
+  formatQuestionAnswers,
   previewAssistantTextFromActivity,
   replaceAssistantMessage,
 } from "./use-agent-chat.ts";
@@ -424,6 +425,45 @@ describe("streaming assistant message state", () => {
         },
       },
     ]);
+  });
+
+  it("formats every answer from an open clarification round into one reply", () => {
+    const messages: DisplayMessage[] = [
+      {
+        role: "assistant",
+        content: "Who is this for?",
+        id: "question-0",
+        question: {
+          id: "audience",
+          kind: "multiple_choice",
+          options: ["Founders", "Designers"],
+          prompt: "Who is this for?",
+        },
+      },
+      {
+        role: "assistant",
+        content: "What should it do first?",
+        id: "question-1",
+        question: {
+          id: "priority",
+          kind: "open_text",
+          prompt: "What should it do first?",
+        },
+      },
+    ];
+
+    expect(
+      formatQuestionAnswers(
+        messages,
+        new Map([
+          ["audience", "Designers"],
+          ["priority", "Plan daily work"],
+        ]),
+        new Set(["audience", "priority"]),
+      ),
+    ).toBe(
+      "Here are my answers:\n- Who is this for?: Designers\n- What should it do first?: Plan daily work",
+    );
   });
 
   it("reuses the streaming assistant id when final message arrives after activity deltas", () => {
