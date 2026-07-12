@@ -1,41 +1,52 @@
 import { describe, expect, it } from "bun:test";
 
-import { AGENT_PROVIDER_MODE_ENV, getAgentProviderMode } from "./agent-provider.ts";
+import { createAgentProvider } from "./agent-provider.ts";
 
-function withEnv<T>(value: string | undefined, fn: () => T): T {
-  const previous = process.env[AGENT_PROVIDER_MODE_ENV];
+const BASE_ENV: Record<string, string> = {
+  LLM_BASE_URL: "https://example.com/v1",
+  LLM_API_KEY: "test-key",
+  USE_FAKE_IMAGE_PROVIDER: "true",
+};
+
+function withEnv<T>(overrides: Record<string, string | undefined>, fn: () => T): T {
+  const previous: Record<string, string | undefined> = {};
+  const allKeys = new Set([...Object.keys(BASE_ENV), ...Object.keys(overrides)]);
+  for (const key of allKeys) {
+    previous[key] = process.env[key];
+  }
   try {
-    if (value === undefined) {
-      delete process.env[AGENT_PROVIDER_MODE_ENV];
-    } else {
-      process.env[AGENT_PROVIDER_MODE_ENV] = value;
+    for (const [key, value] of Object.entries(BASE_ENV)) {
+      process.env[key] = value;
+    }
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
     return fn();
   } finally {
-    if (previous === undefined) {
-      delete process.env[AGENT_PROVIDER_MODE_ENV];
-    } else {
-      process.env[AGENT_PROVIDER_MODE_ENV] = previous;
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
     }
   }
 }
 
-describe("agent provider mode", () => {
-  it("defaults to simple mode", () => {
-    expect(withEnv(undefined, () => getAgentProviderMode())).toBe("simple");
+describe("createAgentProvider", () => {
+  it("returns the advanced scaffolded agent by default", () => {
+    const agent = withEnv({}, () => createAgentProvider());
+    expect(agent).toBeTruthy();
+    expect(typeof agent.invoke).toBe("function");
   });
 
-  it("parses simple mode", () => {
-    expect(withEnv("simple", () => getAgentProviderMode())).toBe("simple");
-  });
-
-  it("parses advanced mode", () => {
-    expect(withEnv("advanced", () => getAgentProviderMode())).toBe("advanced");
-  });
-
-  it("rejects unsupported values", () => {
-    expect(() => withEnv("broken", () => getAgentProviderMode())).toThrow(
-      `${AGENT_PROVIDER_MODE_ENV} must be "simple" or "advanced" when set.`,
-    );
+  it("ignores WEB_APP_AGENT_PROVIDER_MODE and always returns the advanced agent", () => {
+    const agent = withEnv({ WEB_APP_AGENT_PROVIDER_MODE: "simple" }, () => createAgentProvider());
+    expect(agent).toBeTruthy();
+    expect(typeof agent.invoke).toBe("function");
   });
 });

@@ -37,7 +37,7 @@ function saveHistory(sessionId: string, history: unknown[]): void {
 }
 
 function createAgent(): Agent {
-  return createAgentProvider().agent;
+  return createAgentProvider();
 }
 
 let agentCache: Agent | null = null;

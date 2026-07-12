@@ -23,9 +23,7 @@
     "baseline": "bun run packages/cli/src/index.ts baseline",
     "scaffold": "bun run packages/cli/src/index.ts scaffold",
     "scaffold:dump": "bun run packages/cli/src/index.ts scaffold --dump",
-    "web-app": "bun --env-file=.env run --filter @deep-agent-template/web-app dev",
-    "web-app:simple": "WEB_APP_AGENT_PROVIDER_MODE=simple bun --env-file=.env run --filter @deep-agent-template/web-app dev",
-    "web-app:advanced": "WEB_APP_AGENT_PROVIDER_MODE=advanced bun --env-file=.env run --filter @deep-agent-template/web-app dev"
+    "web-app": "bun --env-file=.env run --filter @deep-agent-template/web-app dev"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.9.0",
