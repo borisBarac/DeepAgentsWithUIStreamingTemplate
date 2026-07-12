@@ -77,7 +77,10 @@ function validateClarificationQuestionBatch(
 }
 
 function deriveResultStatus(result: ClarificationResult): ClarificationStatus {
-  if (result.status === "ready_to_proceed" || result.roundCount >= result.maxRounds) {
+  const hasReachedRoundCap = result.roundCount === result.maxRounds;
+
+  // The cap is terminal: it overrides an unresolved or blocked model result.
+  if (result.status === "ready_to_proceed" || hasReachedRoundCap) {
     return "ready_to_proceed";
   }
 

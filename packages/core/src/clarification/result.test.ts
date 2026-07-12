@@ -186,4 +186,23 @@ describe("clarification result application", () => {
     expect(state.status).toBe("blocked");
     expect(state.readyToProceed).toBeFalse();
   });
+
+  it("lets the round cap override a blocked result", () => {
+    const state = applyClarificationResult(
+      createClarificationState("Launch the product.", { maxRounds: 1 }),
+      {
+        status: "blocked",
+        readyToProceed: false,
+        questions: [],
+        missingInformation: ["market"],
+        answeredInformation: [],
+        reasoningSummary: "The launch market is still missing.",
+        roundCount: 1,
+        maxRounds: 1,
+      },
+    );
+
+    expect(state.status).toBe("ready_to_proceed");
+    expect(state.readyToProceed).toBeTrue();
+  });
 });

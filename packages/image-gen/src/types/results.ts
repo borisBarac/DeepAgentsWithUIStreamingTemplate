@@ -69,7 +69,7 @@ export function isImageGenerationResult(value: unknown): value is ImageGeneratio
 
   return (
     typeof errorCandidate.code === "string" &&
-    IMAGE_GENERATION_ERROR_CODES.includes(errorCandidate.code as ImageGenerationErrorCode) &&
+    IMAGE_GENERATION_ERROR_CODES.some((code) => code === errorCandidate.code) &&
     typeof errorCandidate.message === "string"
   );
 }
