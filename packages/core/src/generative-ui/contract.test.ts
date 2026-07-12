@@ -137,14 +137,16 @@ describe("generative-ui contract", () => {
     }
   });
 
-  it("derives the catalog prompt prop descriptions from the schemas", () => {
-    for (const type of componentTypes) {
-      const schema = componentPropsSchemas[type];
-      for (const [key, propSchema] of Object.entries(schema.shape)) {
-        const optional = propSchema.isOptional();
-        const suffix = optional ? "?" : "";
-        expect(catalogPrompt).toContain(`"${key}"${suffix}:`);
-      }
-    }
+  it("includes schema-derived prop descriptions in the catalog prompt", () => {
+    expect(catalogPrompt).toContain(`Allowed component props:
+- Button: {"label": string, "action"?: string}
+- Card: {"title"?: string}
+- ImagePlaceholder: {"alt"?: string, "prompt"?: string}
+- ProductCard: {"title": string, "description": string, "imageAlt"?: string, "imagePrompt"?: string}
+- ProductGrid: {"heading"?: string}
+- Stack: {"direction"?: "row" | "column", "gap"?: "xs" | "sm" | "md" | "lg"}
+- Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
+- TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
+- product-card: {"id": string, "title": string, "description": string, "imageUrl"?: string, "status"?: "streaming" | "complete"}`);
   });
 });
