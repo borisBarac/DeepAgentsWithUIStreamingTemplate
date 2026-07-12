@@ -1,13 +1,22 @@
 import {
+  classifyUpdateText,
   type NormalizeSpec,
+  normalizeSpecToValidateSpec,
   normalizeUiUpdate,
-  parseUpdateText,
   productCardBatchSchema,
   productCardsToUiUpdates,
+  type RejectedUiCandidate,
   type UiUpdate,
+  type ValidateSpec,
 } from "../generative-ui/index.ts";
 
-export type { UiUpdate } from "../generative-ui/index.ts";
+export type {
+  ClassifiedUpdates,
+  SpecValidationIssue,
+  SpecValidationResult,
+  UiUpdate,
+  ValidateSpec,
+} from "../generative-ui/index.ts";
 
 export type AgentInputMessage = {
   content: string;
@@ -48,6 +57,7 @@ export type InteractionStreamOptions = {
   messages: AgentInputMessage[];
   normalizeSpec?: NormalizeSpec;
   sessionId: string;
+  validateSpec?: ValidateSpec;
 };
 
 export type InteractionStreamResult = {
@@ -164,53 +174,153 @@ export function finalTextToMessageFallback(finalText: string): UiUpdate {
   };
 }
 
+const MAX_REJECTED_LINES = 8;
+const MAX_ISSUES_PER_LINE = 10;
+const MAX_FEEDBACK_BYTES = 8 * 1024;
+
+type Attempt = {
+  finalText: string;
+  result: AgentResult | null;
+  classification: {
+    accepted: UiUpdate[];
+    rejectedUiCandidates: RejectedUiCandidate[];
+  };
+};
+
 async function runInteraction(
   options: InteractionStreamOptions,
   onUpdate: (update: UiUpdate) => void,
 ): Promise<InteractionStreamResult> {
   const stats = { valid: 0 };
+  const validateSpec = resolveValidator(options);
 
-  async function runAttempt(): Promise<{ finalText: string; result: AgentResult | null }> {
-    const { finalText, result } = await streamWithEvents(
-      options.agent,
-      { messages: options.messages },
-      options.sessionId,
-      options.includeActivity ? onUpdate : undefined,
-      options.includeActivity ? onUpdate : undefined,
-    );
+  const attempt1 = await runAttempt(options.messages, options, validateSpec, stats, onUpdate);
+  let lastAttempt: Attempt = attempt1;
+  let hadRepair = false;
 
-    emitUpdates(parseUpdateText(finalText, options.normalizeSpec), stats, onUpdate);
-    return { finalText, result };
-  }
-
-  let attempt = await runAttempt();
-
-  if (stats.valid === 0) {
+  if (attempt1.classification.rejectedUiCandidates.length > 0) {
+    const feedback = buildRepairFeedback(attempt1.classification.rejectedUiCandidates);
+    const repairMessages: AgentInputMessage[] = [
+      ...options.messages,
+      { content: finalTextToAssistantContent(attempt1.finalText), role: "assistant" },
+      { content: feedback, role: "user" },
+    ];
+    lastAttempt = await runAttempt(repairMessages, options, validateSpec, stats, onUpdate);
+    hadRepair = true;
+  } else if (stats.valid === 0) {
     emitUpdates(
-      productBatchTextToUiUpdates(attempt.finalText, options.normalizeSpec),
+      productBatchTextToUiUpdates(attempt1.finalText, options.normalizeSpec),
       stats,
       onUpdate,
     );
+    if (stats.valid === 0) {
+      lastAttempt = await runAttempt(options.messages, options, validateSpec, stats, onUpdate);
+      emitUpdates(
+        productBatchTextToUiUpdates(lastAttempt.finalText, options.normalizeSpec),
+        stats,
+        onUpdate,
+      );
+    }
   }
 
   if (stats.valid === 0) {
-    attempt = await runAttempt();
-    emitUpdates(
-      productBatchTextToUiUpdates(attempt.finalText, options.normalizeSpec),
-      stats,
-      onUpdate,
-    );
-  }
-
-  if (stats.valid === 0) {
-    emitUpdates([finalTextToMessageFallback(attempt.finalText)], stats, onUpdate);
+    const uiIntended = lastAttempt.classification.rejectedUiCandidates.length > 0;
+    emitUpdates([messageFallbackFor(lastAttempt.finalText, uiIntended)], stats, onUpdate);
   }
 
   return {
-    finalText: attempt.finalText,
-    history: historyFromAttempt(options.messages, attempt),
-    result: attempt.result,
+    finalText: lastAttempt.finalText,
+    history: buildHistory(options.messages, lastAttempt, hadRepair),
+    result: lastAttempt.result,
   };
+}
+
+function resolveValidator(options: InteractionStreamOptions): ValidateSpec | undefined {
+  if (options.validateSpec) {
+    return options.validateSpec;
+  }
+  if (options.normalizeSpec) {
+    return normalizeSpecToValidateSpec(options.normalizeSpec);
+  }
+  return undefined;
+}
+
+async function runAttempt(
+  messages: AgentInputMessage[],
+  options: InteractionStreamOptions,
+  validateSpec: ValidateSpec | undefined,
+  stats: { valid: number },
+  onUpdate: (update: UiUpdate) => void,
+): Promise<Attempt> {
+  const { finalText, result } = await streamWithEvents(
+    options.agent,
+    { messages },
+    options.sessionId,
+    options.includeActivity ? onUpdate : undefined,
+    options.includeActivity ? onUpdate : undefined,
+  );
+  const classification = classifyUpdateText(finalText, validateSpec);
+  emitUpdates(classification.accepted, stats, onUpdate);
+  return { finalText, result, classification };
+}
+
+function messageFallbackFor(finalText: string, uiIntended: boolean): UiUpdate {
+  if (uiIntended) {
+    return { type: "message", text: UNRENDERABLE_UI_MESSAGE };
+  }
+  return finalTextToMessageFallback(finalText);
+}
+
+function buildHistory(
+  messages: AgentInputMessage[],
+  attempt: Attempt,
+  hadRepair: boolean,
+): unknown[] {
+  if (!hadRepair) {
+    const outputMessages = attempt.result?.messages;
+    if (Array.isArray(outputMessages) && outputMessages.length > 0) {
+      return outputMessages;
+    }
+  }
+  return [
+    ...messages,
+    { content: finalTextToAssistantContent(attempt.finalText), role: "assistant" },
+  ];
+}
+
+const feedbackEncoder = new TextEncoder();
+
+function byteLength(text: string): number {
+  return feedbackEncoder.encode(text).length;
+}
+
+function buildRepairFeedback(candidates: RejectedUiCandidate[]): string {
+  const header =
+    'The following UI updates were rejected during validation. Replace ONLY the rejected updates with valid NDJSON. Do not repeat already-accepted updates. If you cannot produce valid UI, respond with a single {"type":"message","text":"..."} update.';
+  const blocks: string[] = [header];
+  let size = byteLength(header);
+  const capped = candidates.slice(0, MAX_REJECTED_LINES);
+  for (let index = 0; index < capped.length; index += 1) {
+    const candidate = capped[index];
+    if (!candidate) {
+      break;
+    }
+    const block = formatRejectedCandidate(index + 1, candidate);
+    const blockSize = byteLength(block);
+    if (size + blockSize > MAX_FEEDBACK_BYTES) {
+      break;
+    }
+    blocks.push(block);
+    size += blockSize;
+  }
+  return blocks.join("\n\n");
+}
+
+function formatRejectedCandidate(index: number, candidate: RejectedUiCandidate): string {
+  const issues = candidate.issues
+    .slice(0, MAX_ISSUES_PER_LINE)
+    .map((issue) => `  - ${issue.path}: ${issue.message} (${issue.code})`);
+  return `Rejected update ${index}:\n${candidate.line}\nIssues:\n${issues.join("\n")}`;
 }
 
 function emitUpdates(
@@ -222,21 +332,6 @@ function emitUpdates(
     onUpdate(update);
     stats.valid += 1;
   }
-}
-
-function historyFromAttempt(
-  messages: AgentInputMessage[],
-  attempt: { finalText: string; result: AgentResult | null },
-): unknown[] {
-  const outputMessages = attempt.result?.messages;
-  if (Array.isArray(outputMessages) && outputMessages.length > 0) {
-    return outputMessages;
-  }
-
-  return [
-    ...messages,
-    { content: finalTextToAssistantContent(attempt.finalText), role: "assistant" },
-  ];
 }
 
 async function streamWithEvents(

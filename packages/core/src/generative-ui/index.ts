@@ -13,14 +13,18 @@ export {
   stackPropsSchema,
   textInputPropsSchema,
   textPropsSchema,
+  validateStreamingSpec,
 } from "./contract.ts";
 export {
   applyUiUpdate,
+  type ClassifiedUpdates,
   clarificationResultToQuestionUpdates,
+  classifyUpdateText,
   extractUpdateObjects,
   type NormalizeSpec,
   normalizeProductCardSpec,
   normalizeQuestionOption,
+  normalizeSpecToValidateSpec,
   normalizeUiUpdate,
   PRODUCT_CARD_COMPONENT_NAME,
   parseUpdateLine,
@@ -28,10 +32,14 @@ export {
   productCardBatchSchema,
   productCardsToUiUpdates,
   type QuestionUpdate,
+  type RejectedUiCandidate,
+  type SpecValidationIssue,
+  type SpecValidationResult,
   StreamingLineBuffer,
   type UiSpecUpdate,
   type UpdateHandlers,
   uiUpdateZone,
+  type ValidateSpec,
 } from "./envelope.ts";
 export {
   composeGenerativeUiPrompt,

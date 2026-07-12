@@ -5,6 +5,7 @@ import {
   componentPropsSchemas,
   componentTypes,
   normalizeStreamingSpec,
+  validateStreamingSpec,
 } from "./contract.ts";
 import { productCardSchema } from "./envelope.ts";
 
@@ -148,5 +149,100 @@ describe("generative-ui contract", () => {
 - Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
 - TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
 - product-card: {"id": string, "title": string, "description": string, "imageUrl"?: string, "status"?: "streaming" | "complete"}`);
+  });
+
+  describe("validateStreamingSpec", () => {
+    it("returns a normalized spec on success", () => {
+      const result = validateStreamingSpec({
+        root: "text",
+        elements: {
+          text: { type: "Text", props: { text: "Hello" }, children: [] },
+        },
+      });
+      expect(result).toEqual({
+        ok: true,
+        spec: {
+          root: "text",
+          elements: {
+            text: { type: "Text", props: { text: "Hello" }, children: [] },
+          },
+        },
+      });
+    });
+
+    it("reports a path-specific issue for a missing root element", () => {
+      const result = validateStreamingSpec({
+        root: "missing",
+        elements: {
+          text: { type: "Text", props: { text: "Hello" }, children: [] },
+        },
+      });
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "root",
+            code: "missing_root_element",
+          }),
+        ],
+      });
+    });
+
+    it("reports a path-specific issue for an unknown component type", () => {
+      const result = validateStreamingSpec({
+        root: "x",
+        elements: {
+          x: { type: "Mystery", props: {}, children: [] },
+        },
+      });
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.x.type",
+            code: "unknown_component",
+          }),
+        ],
+      });
+    });
+
+    it("reports a path-specific issue for invalid props", () => {
+      const result = validateStreamingSpec({
+        root: "btn",
+        elements: {
+          btn: { type: "Button", props: {}, children: [] },
+        },
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues[0]).toEqual(
+          expect.objectContaining({
+            path: "elements.btn.props.label",
+          }),
+        );
+      }
+    });
+
+    it("reports a missing child reference with a path", () => {
+      const result = validateStreamingSpec({
+        root: "grid",
+        elements: {
+          grid: {
+            type: "ProductGrid",
+            props: { heading: "Concepts" },
+            children: ["ghost"],
+          },
+        },
+      });
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.grid.children",
+            code: "missing_child",
+          }),
+        ],
+      });
+    });
   });
 });

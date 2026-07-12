@@ -1,11 +1,13 @@
 import { describe, expect, it } from "bun:test";
 
+import { validateStreamingSpec } from "../generative-ui/contract.ts";
 import {
   createInteractionStream,
   finalTextToMessageFallback,
   productBatchTextToUiUpdates,
   type StreamableAgent,
   type UiUpdate,
+  type ValidateSpec,
 } from "./index.ts";
 
 type FakeStreamRun = {
@@ -542,5 +544,183 @@ describe("createInteractionStream", () => {
     await expect(collectUpdates(createSubagentStreamingAgent())).resolves.toEqual([
       { type: "message", text: "done" },
     ]);
+  });
+});
+
+const SAFE_FALLBACK_MESSAGE =
+  "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.";
+
+function textSpec(
+  key: string,
+  text: string,
+): {
+  root: string;
+  elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }>;
+} {
+  return {
+    root: key,
+    elements: { [key]: { type: "Text", props: { text }, children: [] } },
+  };
+}
+
+function buttonSpec(
+  key: string,
+  label: string,
+): {
+  root: string;
+  elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }>;
+} {
+  return {
+    root: key,
+    elements: { [key]: { type: "Button", props: { label }, children: [] } },
+  };
+}
+
+const unknownComponentSpec = {
+  root: "x",
+  elements: { x: { type: "Mystery", props: {}, children: [] } },
+};
+
+function uiLine(spec: unknown): string {
+  return JSON.stringify({ type: "ui", spec });
+}
+
+async function collectWithValidator(
+  agent: FakeAgent,
+  validateSpec: ValidateSpec,
+  includeActivity = false,
+): Promise<{ updates: UiUpdate[]; history: unknown[] }> {
+  const interaction = createInteractionStream({
+    agent: asStreamable(agent),
+    includeActivity,
+    messages: [{ content: "build ui", role: "user" }],
+    sessionId: "repair-test",
+    validateSpec,
+  });
+  const updates: UiUpdate[] = [];
+  for await (const update of interaction.updates) {
+    updates.push(update);
+  }
+  const result = await interaction.result;
+  return { updates, history: result.history };
+}
+
+describe("createInteractionStream — NDJSON UI repair", () => {
+  it("repairs rejected UI candidates using path-specific feedback and succeeds on retry", async () => {
+    const agent = createInspectableAgent([
+      uiLine(unknownComponentSpec),
+      uiLine(textSpec("text", "fixed")),
+    ]);
+    const { updates, history } = await collectWithValidator(agent, validateStreamingSpec);
+
+    expect(updates).toEqual([{ type: "ui", spec: textSpec("text", "fixed") }]);
+
+    const repairInput = agent.inputs[1];
+    expect(repairInput?.messages).toHaveLength(3);
+    const feedback = repairInput?.messages[2];
+    expect(feedback?.role).toBe("user");
+    expect(feedback?.content).toContain("elements.x.type");
+
+    const historyMessages = history as Array<{ content: string; role: string }>;
+    expect(historyMessages.some((message) => message.content === feedback?.content)).toBe(false);
+  });
+
+  it("repairs malformed UI-intended JSON but ignores non-UI malformed lines", async () => {
+    const truncatedUi = '{"type":"ui","spec":{"root":"x","elements":{"x":{"type":"Text"';
+    const repairAgent = createInspectableAgent([truncatedUi, uiLine(textSpec("text", "fixed"))]);
+    const { updates } = await collectWithValidator(repairAgent, validateStreamingSpec);
+    expect(updates).toEqual([{ type: "ui", spec: textSpec("text", "fixed") }]);
+    expect(repairAgent.inputs).toHaveLength(2);
+
+    const proseAgent = createInspectableAgent(["This is plain prose, not a UI update."]);
+    const { updates: proseUpdates } = await collectWithValidator(proseAgent, validateStreamingSpec);
+    expect(proseUpdates).toEqual([
+      { type: "message", text: "This is plain prose, not a UI update." },
+    ]);
+    expect(proseAgent.inputs).toHaveLength(2);
+    const retryMessages = proseAgent.inputs[1]?.messages;
+    expect(retryMessages).toEqual([{ content: "build ui", role: "user" }]);
+  });
+
+  it("preserves valid components alongside repaired ones without duplication", async () => {
+    const attempt1 = [uiLine(textSpec("ok", "kept")), uiLine(unknownComponentSpec)].join("\n");
+    const repair = uiLine(buttonSpec("btn", "Fixed"));
+    const agent = createInspectableAgent([attempt1, repair]);
+    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+
+    expect(updates).toEqual([
+      { type: "ui", spec: textSpec("ok", "kept") },
+      { type: "ui", spec: buttonSpec("btn", "Fixed") },
+    ]);
+    expect(agent.inputs).toHaveLength(2);
+  });
+
+  it("requests only rejected replacements in the repair feedback", async () => {
+    const attempt1 = [uiLine(textSpec("ok", "kept")), uiLine(unknownComponentSpec)].join("\n");
+    const repair = uiLine(buttonSpec("btn", "Fixed"));
+    const agent = createInspectableAgent([attempt1, repair]);
+    await collectWithValidator(agent, validateStreamingSpec);
+
+    const feedback = agent.inputs[1]?.messages[2]?.content ?? "";
+    expect(feedback).toContain("Mystery");
+    expect(feedback).not.toContain("kept");
+  });
+
+  it("accepts a prose message when the repairing agent cannot produce UI", async () => {
+    const agent = createInspectableAgent([
+      uiLine(unknownComponentSpec),
+      JSON.stringify({ type: "message", text: "I cannot build that UI, so here is a summary." }),
+    ]);
+    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+    expect(updates).toEqual([
+      { type: "message", text: "I cannot build that UI, so here is a summary." },
+    ]);
+  });
+
+  it("keeps repair feedback in agent context but out of saved history", async () => {
+    const agent = createInspectableAgent([
+      uiLine(unknownComponentSpec),
+      uiLine(textSpec("text", "fixed")),
+    ]);
+    const { history } = await collectWithValidator(agent, validateStreamingSpec);
+
+    const feedback = agent.inputs[1]?.messages[2]?.content ?? "";
+    const historyMessages = history as Array<{ content: string; role: string }>;
+    expect(historyMessages).toEqual([
+      { content: "build ui", role: "user" },
+      { content: uiLine(textSpec("text", "fixed")), role: "assistant" },
+    ]);
+    expect(historyMessages.some((message) => message.content === feedback)).toBe(false);
+  });
+
+  it("emits main-agent activity for both attempts when requested", async () => {
+    const agent = createInspectableAgent([
+      uiLine(unknownComponentSpec),
+      uiLine(textSpec("text", "fixed")),
+    ]);
+    const { updates } = await collectWithValidator(agent, validateStreamingSpec, true);
+
+    const started = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "main_agent_activity" }> =>
+        update.type === "main_agent_activity" && update.event === "started",
+    );
+    const completed = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "main_agent_activity" }> =>
+        update.type === "main_agent_activity" && update.event === "completed",
+    );
+    expect(started).toHaveLength(2);
+    expect(completed).toHaveLength(2);
+    expect(updates.some((update) => update.type === "ui")).toBe(true);
+  });
+
+  it("emits the safe prose fallback and stops when repair also fails", async () => {
+    const agent = createInspectableAgent([
+      uiLine(unknownComponentSpec),
+      uiLine(unknownComponentSpec),
+    ]);
+    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+
+    expect(updates).toEqual([{ type: "message", text: SAFE_FALLBACK_MESSAGE }]);
+    expect(agent.inputs).toHaveLength(2);
   });
 });

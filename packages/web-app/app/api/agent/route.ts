@@ -7,7 +7,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { createAgentProvider } from "../../../src/server/agent-provider.ts";
-import { normalizeStreamingSpec } from "../../../src/ui/normalize.ts";
+import { normalizeStreamingSpec, validateStreamingSpec } from "../../../src/ui/normalize.ts";
 
 export const runtime = "nodejs";
 
@@ -110,6 +110,7 @@ export async function POST(request: Request): Promise<Response> {
           includeActivity: parsedRequest.includeSubagentActivity,
           messages,
           normalizeSpec: normalizeStreamingSpec,
+          validateSpec: validateStreamingSpec,
           sessionId: parsedRequest.sessionId,
         });
         void interaction.result.catch(() => undefined);

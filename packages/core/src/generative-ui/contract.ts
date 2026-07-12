@@ -1,6 +1,6 @@
 import type { Spec, UIElement } from "@json-render/core";
 import { z } from "zod";
-
+import type { SpecValidationIssue, SpecValidationResult } from "./envelope.ts";
 import { productCardSchema as scaffoldProductCardSchema } from "./envelope.ts";
 
 export { productCardSchema } from "./envelope.ts";
@@ -172,38 +172,168 @@ function normalizeElement(value: unknown): UIElement | null {
   };
 }
 
-export function normalizeStreamingSpec(value: unknown): Spec | null {
-  if (!isRecord(value) || typeof value.root !== "string" || !isRecord(value.elements)) {
-    return null;
+function diagnoseElement(key: string, value: unknown): SpecValidationIssue[] {
+  if (!isRecord(value)) {
+    return [
+      {
+        path: `elements.${key}`,
+        code: "invalid_element",
+        message: `Element "${key}" must be an object.`,
+      },
+    ];
   }
 
+  const type = value.type;
+  if (typeof type !== "string" || !knownComponentTypes.has(type)) {
+    return [
+      {
+        path: `elements.${key}.type`,
+        code: "unknown_component",
+        message: `Component type "${String(type)}" is not in the catalog.`,
+      },
+    ];
+  }
+
+  if (!isRecord(value.props)) {
+    return [
+      {
+        path: `elements.${key}.props`,
+        code: "missing_props",
+        message: `Element "${key}" must include a props object.`,
+      },
+    ];
+  }
+
+  const parsed = componentPropsSchemas[type as ComponentTypeName].safeParse(value.props);
+  if (!parsed.success) {
+    return parsed.error.issues.map((issue) => ({
+      path: `elements.${key}.props.${issue.path.join(".")}`,
+      code: issue.code,
+      message: issue.message,
+    }));
+  }
+
+  const rawChildren = value.children ?? [];
+  if (!Array.isArray(rawChildren) || rawChildren.some((child) => typeof child !== "string")) {
+    return [
+      {
+        path: `elements.${key}.children`,
+        code: "invalid_children",
+        message: `Element "${key}" children must be an array of strings.`,
+      },
+    ];
+  }
+
+  return [
+    {
+      path: `elements.${key}`,
+      code: "invalid_element",
+      message: `Element "${key}" could not be normalized.`,
+    },
+  ];
+}
+
+/**
+ * Validates a streamed spec against the component catalog, returning either a
+ * normalized spec or structured, path-specific issues.
+ *
+ * Diagnostics include the JSON path (e.g. `elements.card.props.title`), a code,
+ * and a human-readable message, so a repair pass can tell the agent exactly what
+ * to fix.
+ */
+export function validateStreamingSpec(value: unknown): SpecValidationResult {
+  if (!isRecord(value)) {
+    return {
+      ok: false,
+      issues: [{ path: "$", code: "invalid_type", message: "Spec must be an object." }],
+    };
+  }
+  if (typeof value.root !== "string" || value.root === "") {
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "root",
+          code: "missing_root",
+          message: "Spec must include a non-empty string 'root'.",
+        },
+      ],
+    };
+  }
+  if (!isRecord(value.elements)) {
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "elements",
+          code: "missing_elements",
+          message: "Spec must include an 'elements' object.",
+        },
+      ],
+    };
+  }
   if (!(value.root in value.elements)) {
-    return null;
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "root",
+          code: "missing_root_element",
+          message: `Root element "${value.root}" is not defined in elements.`,
+        },
+      ],
+    };
   }
 
   const elements: Spec["elements"] = {};
+  const issues: SpecValidationIssue[] = [];
 
   for (const [key, elementValue] of Object.entries(value.elements)) {
-    const element = normalizeElement(elementValue);
-    if (!element) {
-      return null;
+    const normalized = normalizeElement(elementValue);
+    if (normalized) {
+      elements[key] = normalized;
+    } else {
+      issues.push(...diagnoseElement(key, elementValue));
     }
-    elements[key] = element;
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
   }
 
   for (const [key, element] of Object.entries(elements)) {
     for (const child of element.children ?? []) {
       if (!(child in elements)) {
-        return null;
+        return {
+          ok: false,
+          issues: [
+            {
+              path: `elements.${key}.children`,
+              code: "missing_child",
+              message: `Child "${child}" is not defined in elements.`,
+            },
+          ],
+        };
       }
       if (child === key) {
-        return null;
+        return {
+          ok: false,
+          issues: [
+            {
+              path: `elements.${key}.children`,
+              code: "self_reference",
+              message: `Element "${key}" cannot reference itself as a child.`,
+            },
+          ],
+        };
       }
     }
   }
 
-  return {
-    root: value.root,
-    elements,
-  };
+  return { ok: true, spec: { root: value.root, elements } };
+}
+
+export function normalizeStreamingSpec(value: unknown): Spec | null {
+  const result = validateStreamingSpec(value);
+  return result.ok ? result.spec : null;
 }

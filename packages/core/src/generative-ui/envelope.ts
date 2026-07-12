@@ -125,6 +125,53 @@ export type UiSpecUpdate = Extract<UiUpdate, { type: "ui" }>;
 export type NormalizeSpec = (spec: unknown) => Spec | null;
 
 /**
+ * A single structured diagnostic for a rejected UI spec.
+ */
+export type SpecValidationIssue = {
+  path: string;
+  code: string;
+  message: string;
+};
+
+/**
+ * Result of validating a UI spec: either a normalized spec or a list of
+ * structured issues describing why it was rejected.
+ */
+export type SpecValidationResult =
+  | { ok: true; spec: Spec }
+  | { ok: false; issues: SpecValidationIssue[] };
+
+/**
+ * Diagnostic validator for a UI spec. Produces structured issues on failure so
+ * the agent can be told exactly what to fix. Preferred over {@link NormalizeSpec}
+ * when both are supplied to an interaction stream.
+ */
+export type ValidateSpec = (spec: unknown) => SpecValidationResult;
+
+/**
+ * Adapts a legacy {@link NormalizeSpec} into a {@link ValidateSpec}, producing a
+ * generic issue when the spec is rejected (since the legacy callback gives no
+ * detail).
+ */
+export function normalizeSpecToValidateSpec(normalize: NormalizeSpec): ValidateSpec {
+  return (spec) => {
+    const result = normalize(spec);
+    return result
+      ? { ok: true, spec: result }
+      : {
+          ok: false,
+          issues: [
+            {
+              path: "$",
+              code: "invalid_spec",
+              message: "The spec was rejected by the catalog validator.",
+            },
+          ],
+        };
+  };
+}
+
+/**
  * Parses a single NDJSON line into a {@link UiUpdate}.
  *
  * Returns `null` for malformed JSON or unknown update types so a bad line never
@@ -416,35 +463,161 @@ export class StreamingLineBuffer {
 }
 
 /**
+ * A UI candidate line that failed validation, retained so the interaction stream
+ * can request a targeted repair from the agent.
+ */
+export type RejectedUiCandidate = {
+  line: string;
+  issues: SpecValidationIssue[];
+};
+
+/**
+ * The outcome of classifying a block of streamed NDJSON text: updates that are
+ * safe to emit immediately, and UI candidates that were rejected (for repair).
+ */
+export type ClassifiedUpdates = {
+  accepted: UiUpdate[];
+  rejectedUiCandidates: RejectedUiCandidate[];
+};
+
+/**
+ * Classifies each attempted NDJSON line into accepted updates, rejected UI
+ * candidates, or irrelevant malformed output (silently dropped).
+ *
+ * A line is treated as a UI candidate when it parses as a `type: "ui"`
+ * envelope, or when it clearly intends to be one (a malformed envelope that
+ * still carries a UI type/spec, or unparseable text mentioning `type: "ui"`).
+ * Rejected candidates carry structured issues from `validateSpec` so a repair
+ * pass can give the agent path-specific feedback.
+ */
+export function classifyUpdateText(text: string, validateSpec?: ValidateSpec): ClassifiedUpdates {
+  const accepted: UiUpdate[] = [];
+  const rejectedUiCandidates: RejectedUiCandidate[] = [];
+
+  const classify = (candidate: unknown, line: string): void => {
+    const envelope = rawUpdateSchema.safeParse(candidate);
+    if (envelope.success) {
+      if (envelope.data.type !== "ui") {
+        accepted.push(envelope.data);
+        return;
+      }
+      if (!validateSpec) {
+        accepted.push({ type: "ui", spec: envelope.data.spec as Spec });
+        return;
+      }
+      const result = validateSpec(envelope.data.spec);
+      if (result.ok) {
+        accepted.push({ type: "ui", spec: result.spec });
+      } else {
+        rejectedUiCandidates.push({ line, issues: result.issues });
+      }
+      return;
+    }
+
+    if (looksLikeUiCandidate(candidate)) {
+      rejectedUiCandidates.push({
+        line,
+        issues: issuesForMalformedCandidate(candidate, validateSpec),
+      });
+    }
+  };
+
+  const visitParsed = (parsed: unknown): void => {
+    for (const candidate of extractUpdateObjects(parsed)) {
+      classify(candidate, JSON.stringify(candidate));
+    }
+  };
+
+  const trimmed = text.trim();
+  if (trimmed) {
+    try {
+      visitParsed(JSON.parse(trimmed));
+      return { accepted, rejectedUiCandidates };
+    } catch {
+      // Not a single JSON value; parse line by line below.
+    }
+  }
+
+  for (const line of text.split("\n")) {
+    const lineTrimmed = line.trim();
+    if (!lineTrimmed) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(lineTrimmed);
+    } catch {
+      if (looksLikeUiText(lineTrimmed)) {
+        rejectedUiCandidates.push({
+          line: lineTrimmed,
+          issues: [
+            {
+              path: "$",
+              code: "invalid_json",
+              message: "This line is not valid JSON.",
+            },
+          ],
+        });
+      }
+      continue;
+    }
+    classify(parsed, lineTrimmed);
+  }
+
+  return { accepted, rejectedUiCandidates };
+}
+
+function looksLikeUiCandidate(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === "ui") {
+    return true;
+  }
+  if (record.spec !== undefined && typeof record.spec === "object" && record.spec !== null) {
+    const spec = record.spec as Record<string, unknown>;
+    if (typeof spec.root === "string" || spec.elements !== undefined) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function looksLikeUiText(line: string): boolean {
+  if (/"type"\s*:\s*"ui"/.test(line)) {
+    return true;
+  }
+  return /"spec"\s*:/.test(line) && /"(root|elements)"/.test(line);
+}
+
+function issuesForMalformedCandidate(
+  candidate: unknown,
+  validateSpec?: ValidateSpec,
+): SpecValidationIssue[] {
+  if (validateSpec && typeof candidate === "object" && candidate !== null && "spec" in candidate) {
+    const specValue = (candidate as { spec: unknown }).spec;
+    if (typeof specValue === "object" && specValue !== null) {
+      const result = validateSpec(specValue);
+      if (!result.ok) {
+        return result.issues;
+      }
+    }
+  }
+  return [
+    {
+      path: "$",
+      code: "invalid_envelope",
+      message: "This line is not a valid UI update.",
+    },
+  ];
+}
+
+/**
  * Parses a complete NDJSON text into validated {@link UiUpdate}s.
  *
  * Used for the non-streaming fallback path. Each line is JSON-parsed and run
  * through {@link normalizeUiUpdate}; blank lines and malformed JSON are skipped.
  */
 export function parseUpdateText(text: string, normalizeSpec?: NormalizeSpec): UiUpdate[] {
-  const parseCandidates = (parsed: unknown) =>
-    extractUpdateObjects(parsed)
-      .map((candidate) => normalizeUiUpdate(candidate, normalizeSpec))
-      .filter((update): update is UiUpdate => update !== null);
-
-  try {
-    const parsed = JSON.parse(text.trim());
-    return parseCandidates(parsed);
-  } catch {
-    // Fall back to NDJSON line parsing when the payload is not a single JSON value.
-  }
-
-  const updates: UiUpdate[] = [];
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
-    updates.push(...parseCandidates(parsed));
-  }
-  return updates;
+  const validateSpec = normalizeSpec ? normalizeSpecToValidateSpec(normalizeSpec) : undefined;
+  return classifyUpdateText(text, validateSpec).accepted;
 }
