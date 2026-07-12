@@ -140,13 +140,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isComponentType(value: unknown): value is ComponentTypeName {
+  return typeof value === "string" && knownComponentTypes.has(value);
+}
+
 function normalizeElement(value: unknown): UIElement | null {
   if (!isRecord(value)) {
     return null;
   }
 
   const type = value.type;
-  if (typeof type !== "string" || !knownComponentTypes.has(type)) {
+  if (!isComponentType(type)) {
     return null;
   }
 
@@ -159,7 +163,7 @@ function normalizeElement(value: unknown): UIElement | null {
     return null;
   }
 
-  const parsedProps = componentPropsSchemas[type as ComponentTypeName].safeParse(value.props);
+  const parsedProps = componentPropsSchemas[type].safeParse(value.props);
   if (!parsedProps.success) {
     return null;
   }
@@ -184,7 +188,7 @@ function diagnoseElement(key: string, value: unknown): SpecValidationIssue[] {
   }
 
   const type = value.type;
-  if (typeof type !== "string" || !knownComponentTypes.has(type)) {
+  if (!isComponentType(type)) {
     return [
       {
         path: `elements.${key}.type`,
@@ -204,7 +208,7 @@ function diagnoseElement(key: string, value: unknown): SpecValidationIssue[] {
     ];
   }
 
-  const parsed = componentPropsSchemas[type as ComponentTypeName].safeParse(value.props);
+  const parsed = componentPropsSchemas[type].safeParse(value.props);
   if (!parsed.success) {
     return parsed.error.issues.map((issue) => ({
       path: `elements.${key}.props.${issue.path.join(".")}`,

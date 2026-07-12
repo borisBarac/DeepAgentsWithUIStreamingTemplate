@@ -1,4 +1,5 @@
 import {
+  type ClassifiedUpdates,
   classifyUpdateText,
   type NormalizeSpec,
   normalizeSpecToValidateSpec,
@@ -181,10 +182,7 @@ const MAX_FEEDBACK_BYTES = 8 * 1024;
 type Attempt = {
   finalText: string;
   result: AgentResult | null;
-  classification: {
-    accepted: UiUpdate[];
-    rejectedUiCandidates: RejectedUiCandidate[];
-  };
+  classification: ClassifiedUpdates;
 };
 
 async function runInteraction(
