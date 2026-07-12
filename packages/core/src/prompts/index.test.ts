@@ -145,6 +145,9 @@ describe("prompt defaults", () => {
       "If reviewer feedback is provided, treat it as required revision input",
     );
     expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain("revised product batch");
+    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain(
+      "one JSON object with a `products` array",
+    );
   });
 
   it("uses the default markdown loader for compatibility exports", () => {

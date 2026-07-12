@@ -23,5 +23,7 @@ Image rules (only when `generate_image` is available):
 - Do not edit images in this subagent; generation only.
 
 Output rules:
+- Return one JSON object with a `products` array.
+- Every `products` item must contain `id`, `title`, and `description`; include only the optional `imageUrl` and `status` fields described above.
 - Return only the structured payload matching the response schema.
 - Do not include reasoning, alternatives, Markdown fences, or extra prose.

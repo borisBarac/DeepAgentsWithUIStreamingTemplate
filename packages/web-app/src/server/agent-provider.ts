@@ -19,15 +19,7 @@ function parseClarificationMaxRounds(): number | undefined {
 }
 
 export function createAgentProvider(): DeepAgent {
-  const modelRuntime = createModelRuntimeFromEnv({
-    profiles: {
-      // DeepSeek thinking mode rejects tool_choice, which the scaffold needs
-      // for specialist/subagent routing.
-      fast: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
-      normal: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
-      pro: { providerOptions: { modelKwargs: { thinking: { type: "disabled" } } } },
-    },
-  });
+  const modelRuntime = createModelRuntimeFromEnv({});
 
   const maxRounds = parseClarificationMaxRounds();
 

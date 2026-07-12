@@ -400,7 +400,7 @@ const agent = createScaffoldedAgent({
 
 The scaffolded supervisor treats clarification as a required preflight phase. Every new top-level request is expected to route through the `clarifier` subagent before normal planning, tool use, or downstream delegation begins.
 
-The `clarifier` is wired with a Zod `responseFormat` (`clarificationResultSchema`), so its readiness payload is returned to the supervisor as machine-readable structured output rather than free text. The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
+The `clarifier` uses provider-parsed structured output backed by `clarificationResultSchema`. Default structured subagents request `json_object` and retry one terminal parse failure with transient correction context, so readiness payloads reach the supervisor as machine-readable data rather than free text. The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
 
 The clarifier returns a structured readiness payload with:
 
