@@ -1,3 +1,3 @@
 # TODO
-- review subagent
-- tools
+- handle response with no UI spec
+- add mode for single clarification

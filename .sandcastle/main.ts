@@ -35,7 +35,7 @@ const MAX_ITERATIONS = 10;
 // Hooks run inside the sandbox before the agent starts each iteration.
 // npm install ensures the sandbox always has fresh dependencies.
 const hooks = {
-  sandbox: { onSandboxReady: [{ command: "npm install" }] },
+  sandbox: { onSandboxReady: [{ command: "bun install" }] },
 };
 
 // Copy node_modules from the host into the worktree before each sandbox
@@ -51,7 +51,8 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
   console.log(`\n=== Iteration ${iteration}/${MAX_ITERATIONS} ===\n`);
 
   // Generate a unique branch name for this iteration.
-  const branch = `sandcastle/sequential-reviewer/${Date.now()}`;
+  // const branch = `sandcastle/sequential-reviewer/${Date.now()}`;
+  const branch = `SANDCASTLE`;
 
   // Create a single sandbox that both the implementer and reviewer share.
   // This gives both agents a real, named branch that persists across phases.
@@ -103,7 +104,7 @@ for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
     await sandbox.run({
       name: "reviewer",
       maxIterations: 1,
-      agent: sandcastle.codex("gpt-5.4"),
+      agent: sandcastle.codex("gpt-5.6-terra"),
       promptFile: "./.sandcastle/review-prompt.md",
       promptArgs: {
         BRANCH: branch,
