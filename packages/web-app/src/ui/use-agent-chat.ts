@@ -118,14 +118,6 @@ export function appendAgentActivity(
   );
 }
 
-export function appendSubagentActivity(
-  current: DisplayAgentActivity[],
-  update: SubagentActivityUpdate,
-  id = createId(),
-): DisplayAgentActivity[] {
-  return appendAgentActivity(current, update, id);
-}
-
 export type AgentChat = {
   messages: DisplayMessage[];
   visibleMessages: DisplayMessage[];
@@ -165,10 +157,11 @@ export function previewAssistantTextFromActivity(raw: string): string {
   return (firstStructuredLine === -1 ? raw : raw.slice(0, firstStructuredLine)).trim();
 }
 
-export function appendAssistantChunk(
+function updateAssistantMessage(
   current: DisplayMessage[],
   text: string,
   id: string,
+  combine: (existing: string, incoming: string) => string,
 ): DisplayMessage[] {
   const index = current.findIndex((message) => message.id === id);
   if (index === -1) {
@@ -177,9 +170,17 @@ export function appendAssistantChunk(
 
   return current.map((message, messageIndex) =>
     messageIndex === index
-      ? { ...message, content: appendChunk(message.content, text), streaming: true }
+      ? { ...message, content: combine(message.content, text), streaming: true }
       : message,
   );
+}
+
+export function appendAssistantChunk(
+  current: DisplayMessage[],
+  text: string,
+  id: string,
+): DisplayMessage[] {
+  return updateAssistantMessage(current, text, id, appendChunk);
 }
 
 export function replaceAssistantMessage(
@@ -187,14 +188,7 @@ export function replaceAssistantMessage(
   text: string,
   id: string,
 ): DisplayMessage[] {
-  const index = current.findIndex((message) => message.id === id);
-  if (index === -1) {
-    return [...current, { role: "assistant", content: text, id, streaming: true }];
-  }
-
-  return current.map((message, messageIndex) =>
-    messageIndex === index ? { ...message, content: text, streaming: true } : message,
-  );
+  return updateAssistantMessage(current, text, id, () => text);
 }
 
 export function finishAssistantMessage(

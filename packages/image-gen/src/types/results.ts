@@ -5,7 +5,7 @@ import type {
   ImageGenerationSuccess,
 } from "./types.ts";
 
-export const IMAGE_GENERATION_ERROR_CODES = [
+const IMAGE_GENERATION_ERROR_CODES = [
   "validation",
   "canceled",
   "provider",
@@ -36,18 +36,6 @@ export function imageGenerationCanceled(
   message = "Image generation was canceled.",
 ): ImageGenerationError {
   return imageGenerationError("canceled", message);
-}
-
-export function isImageGenerationSuccess(
-  result: ImageGenerationResult,
-): result is ImageGenerationSuccess {
-  return result.success;
-}
-
-export function isImageGenerationError(
-  result: ImageGenerationResult,
-): result is ImageGenerationError {
-  return !result.success;
 }
 
 export function isImageGenerationResult(value: unknown): value is ImageGenerationResult {

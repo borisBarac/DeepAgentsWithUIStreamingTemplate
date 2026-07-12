@@ -10,16 +10,6 @@ export {
   parseReviewReport,
 } from "./report.ts";
 export {
-  createReviewState,
-  defaultMaxRevisions,
-  isReviewApproved,
-  lifecycleStatusForReport,
-  markReviewCaveated,
-  type ReviewTraceSummary,
-  recordReviewReport,
-  summarizeReviewForTrace,
-} from "./state.ts";
-export {
   type ReviewConfig,
   type ReviewIssue,
   type ReviewLifecycleStatus,

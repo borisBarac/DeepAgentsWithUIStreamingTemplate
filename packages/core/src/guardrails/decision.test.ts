@@ -2,11 +2,9 @@ import { describe, expect, it } from "bun:test";
 
 import { createScaffoldedAgent } from "../agent/index.ts";
 import { createTestModelRuntime } from "../agent/test-helpers.ts";
-import {
-  createGuardrailDecision,
-  DEFAULT_SAFETY_GUARDRAIL_NAME,
-  DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
-} from "./index.ts";
+import { createGuardrailDecision } from "./index.ts";
+import { DEFAULT_SAFETY_GUARDRAIL_NAME } from "./safety.ts";
+import { DEFAULT_TASK_SCOPE_GUARDRAIL_NAME } from "./task-scope.ts";
 import type {
   SafetyClassifier,
   StructuredSafetyModel,

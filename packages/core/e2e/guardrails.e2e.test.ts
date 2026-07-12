@@ -1,12 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
+import { createScaffoldedAgent, type TaskScopeClassifier } from "../src/index.ts";
 import {
-  createScaffoldedAgent,
   DEFAULT_GUARDRAIL_REFUSAL,
   DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
-  type TaskScopeClassifier,
   taskScopeDecisionSchema,
-} from "../src/index.ts";
+} from "../src/guardrails/task-scope.ts";
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,

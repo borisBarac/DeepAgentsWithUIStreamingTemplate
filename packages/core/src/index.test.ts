@@ -71,10 +71,7 @@ describe("index barrel exports", () => {
 
   it("re-exports review helpers from the review module", () => {
     expect(index.createReviewConfig).toBe(review.createReviewConfig);
-    expect(index.createReviewState).toBe(review.createReviewState);
     expect(index.parseReviewReport).toBe(review.parseReviewReport);
-    expect(index.recordReviewReport).toBe(review.recordReviewReport);
-    expect(index.isReviewApproved).toBe(review.isReviewApproved);
     expect(index.DEFAULT_REVIEW_MAX_REVISIONS).toBe(review.DEFAULT_REVIEW_MAX_REVISIONS);
     expect(index.DEFAULT_REVIEW_AGENT_NAME).toBe(review.DEFAULT_REVIEW_AGENT_NAME);
     expect(index.reviewReportSchema).toBe(review.reviewReportSchema);

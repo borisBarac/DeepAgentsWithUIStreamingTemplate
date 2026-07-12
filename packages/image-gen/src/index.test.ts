@@ -12,7 +12,6 @@ describe("package exports", () => {
       createImageGenerationQueue: expect.any(Function),
       createReplicateImageGenerationProvider: expect.any(Function),
       createFixedImageGenerationProvider: expect.any(Function),
-      IMAGE_GENERATION_ERROR_CODES: ["validation", "canceled", "provider", "internal"],
     });
   });
 });

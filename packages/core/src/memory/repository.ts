@@ -1,6 +1,7 @@
 import type { BaseStore, Item, Operation, OperationResults } from "@langchain/langgraph";
 
 import { createUserMemoryNamespace } from "./namespace.ts";
+import { stringOrFallback } from "./string-or-fallback.ts";
 
 export type MemoryFileInfo = {
   path: string;
@@ -234,10 +235,6 @@ function assertStringContent(content: string): void {
   if (typeof content !== "string") {
     throw new Error("Memory content must be a string.");
   }
-}
-
-function stringOrFallback(value: unknown, fallback: string): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function isUnderVirtualRoot(path: string, rootPath: string): boolean {

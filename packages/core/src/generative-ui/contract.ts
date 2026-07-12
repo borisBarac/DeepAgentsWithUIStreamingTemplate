@@ -75,6 +75,37 @@ export const componentPropsSchemas = {
 
 const componentTypeUnion = componentTypes.map((type) => JSON.stringify(type)).join(" | ");
 
+// biome-ignore lint/suspicious/noExplicitAny: runtime zod v4 schema introspection requires any due to $ZodType/ZodType mismatch
+function describeZodType(schema: any): { type: string; optional: boolean } {
+  if (schema instanceof z.ZodOptional) {
+    return { ...describeZodType(schema.unwrap()), optional: true };
+  }
+  if (schema instanceof z.ZodString) {
+    return { type: "string", optional: false };
+  }
+  if (schema instanceof z.ZodEnum) {
+    const options = schema.options as readonly string[];
+    return { type: options.map((o) => JSON.stringify(o)).join(" | "), optional: false };
+  }
+  return { type: "unknown", optional: false };
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: runtime zod v4 schema introspection requires any due to $ZodType/ZodType mismatch
+function describePropsSchema(schema: any): string {
+  if (!(schema instanceof z.ZodObject)) {
+    return "{}";
+  }
+  const parts = Object.entries(schema.shape).map(([key, propSchema]) => {
+    const { type, optional } = describeZodType(propSchema);
+    return optional ? `"${key}"?: ${type}` : `"${key}": ${type}`;
+  });
+  return `{${parts.join(", ")}}`;
+}
+
+const componentPropsCatalog = componentTypes
+  .map((type) => `- ${type}: ${describePropsSchema(componentPropsSchemas[type])}`)
+  .join("\n");
+
 /**
  * Catalog-specific portion of the generative-UI prompt.
  *
@@ -94,15 +125,7 @@ export const catalogPrompt = `JsonRenderSpec is:
 }
 
 Allowed component props:
-- Button: {"label": string, "action"?: string}
-- Card: {"title"?: string}
-- ImagePlaceholder: {"alt"?: string, "prompt"?: string}
-- ProductCard: {"title": string, "description": string, "imageAlt"?: string, "imagePrompt"?: string}
-- ProductGrid: {"heading"?: string}
-- Stack: {"direction"?: "row" | "column", "gap"?: "xs" | "sm" | "md" | "lg"}
-- Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
-- TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
-- product-card: {"id": string, "title": string, "description": string, "imageUrl"?: string, "status"?: "streaming" | "complete"}
+${componentPropsCatalog}
 
 Rules:
 - Use unique element keys.

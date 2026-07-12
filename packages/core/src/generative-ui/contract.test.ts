@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { z } from "zod";
 
 import {
   catalogPrompt,
@@ -134,6 +135,18 @@ describe("generative-ui contract", () => {
   it("keeps the catalog prompt aligned with the component list", () => {
     for (const type of componentTypes) {
       expect(catalogPrompt).toContain(type);
+    }
+  });
+
+  it("derives the catalog prompt prop descriptions from the schemas", () => {
+    for (const type of componentTypes) {
+      const schema = componentPropsSchemas[type];
+      const shape = schema instanceof z.ZodObject ? schema.shape : {};
+      for (const [key, propSchema] of Object.entries(shape)) {
+        const optional = (propSchema as z.ZodTypeAny).isOptional();
+        const suffix = optional ? "?" : "";
+        expect(catalogPrompt).toContain(`"${key}"${suffix}:`);
+      }
     }
   });
 });

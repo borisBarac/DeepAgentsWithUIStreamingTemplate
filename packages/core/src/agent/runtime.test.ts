@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import {
-  DEFAULT_SAFETY_GUARDRAIL_NAME,
-  DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
-} from "../guardrails/index.ts";
+import { DEFAULT_SAFETY_GUARDRAIL_NAME } from "../guardrails/safety.ts";
+import { DEFAULT_TASK_SCOPE_GUARDRAIL_NAME } from "../guardrails/task-scope.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
 import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";

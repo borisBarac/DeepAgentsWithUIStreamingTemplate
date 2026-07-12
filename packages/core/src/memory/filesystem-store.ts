@@ -10,6 +10,7 @@ import {
 } from "@langchain/langgraph";
 
 import { normalizeVirtualPath } from "./repository.ts";
+import { stringOrFallback } from "./string-or-fallback.ts";
 
 export type FileSystemMemoryStoreOptions = {
   rootDir: string;
@@ -379,10 +380,6 @@ function readContent(item: Item): string {
     throw new Error(`FileSystemMemoryStore only supports string content: ${item.key}`);
   }
   return item.value.content;
-}
-
-function stringOrFallback(value: unknown, fallback: string): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function isNotFoundError(error: unknown): boolean {

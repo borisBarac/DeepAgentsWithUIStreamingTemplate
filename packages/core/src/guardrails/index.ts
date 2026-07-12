@@ -5,25 +5,8 @@ export {
   MarkdownGuardrailPolicyLoader,
   type TaskScopePolicyBundle,
 } from "./policies.ts";
-export {
-  classifySafetyRequest,
-  createSafetyGuardrail,
-  createSafetyPrompt,
-  DEFAULT_SAFETY_GUARDRAIL_NAME,
-  DEFAULT_SAFETY_REFUSAL,
-  type SafetyDecision,
-  safetyDecisionSchema,
-} from "./safety.ts";
-export {
-  classifyTaskScopeRequest,
-  createTaskScopeGuardrail,
-  createTaskScopePrompt,
-  DEFAULT_GUARDRAIL_REFUSAL,
-  DEFAULT_TASK_SCOPE_GUARDRAIL_NAME,
-  resolveTaskScopePolicies,
-  type TaskScopeDecision,
-  taskScopeDecisionSchema,
-} from "./task-scope.ts";
+export { createSafetyGuardrail } from "./safety.ts";
+export { createTaskScopeGuardrail } from "./task-scope.ts";
 export type {
   CreateGuardrailDecisionOptions,
   DeepAgentMiddleware,

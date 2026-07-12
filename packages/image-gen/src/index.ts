@@ -24,13 +24,10 @@ export {
 } from "./services/service.ts";
 export {
   errorMessage,
-  IMAGE_GENERATION_ERROR_CODES,
   imageGenerationCanceled,
   imageGenerationError,
   imageGenerationSuccess,
-  isImageGenerationError,
   isImageGenerationResult,
-  isImageGenerationSuccess,
   isSyntacticUrl,
   validateImageGenerationPrompt,
   validateImageGenerationUrl,
