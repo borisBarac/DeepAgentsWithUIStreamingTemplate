@@ -71,12 +71,13 @@ export const componentPropsSchemas = {
   Text: textPropsSchema,
   TextInput: textInputPropsSchema,
   "product-card": scaffoldProductCardSchema,
-} satisfies Record<ComponentTypeName, z.ZodType<Record<string, unknown>>>;
+} satisfies Record<ComponentTypeName, z.ZodObject>;
 
 const componentTypeUnion = componentTypes.map((type) => JSON.stringify(type)).join(" | ");
 
-// biome-ignore lint/suspicious/noExplicitAny: runtime zod v4 schema introspection requires any due to $ZodType/ZodType mismatch
-function describeZodType(schema: any): { type: string; optional: boolean } {
+type PropDescription = { type: string; optional: boolean };
+
+function describeZodType(schema: z.core.$ZodType): PropDescription {
   if (schema instanceof z.ZodOptional) {
     return { ...describeZodType(schema.unwrap()), optional: true };
   }
@@ -90,11 +91,7 @@ function describeZodType(schema: any): { type: string; optional: boolean } {
   return { type: "unknown", optional: false };
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: runtime zod v4 schema introspection requires any due to $ZodType/ZodType mismatch
-function describePropsSchema(schema: any): string {
-  if (!(schema instanceof z.ZodObject)) {
-    return "{}";
-  }
+function describePropsSchema(schema: z.ZodObject): string {
   const parts = Object.entries(schema.shape).map(([key, propSchema]) => {
     const { type, optional } = describeZodType(propSchema);
     return optional ? `"${key}"?: ${type}` : `"${key}": ${type}`;

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { z } from "zod";
 
 import {
   catalogPrompt,
@@ -141,9 +140,8 @@ describe("generative-ui contract", () => {
   it("derives the catalog prompt prop descriptions from the schemas", () => {
     for (const type of componentTypes) {
       const schema = componentPropsSchemas[type];
-      const shape = schema instanceof z.ZodObject ? schema.shape : {};
-      for (const [key, propSchema] of Object.entries(shape)) {
-        const optional = (propSchema as z.ZodTypeAny).isOptional();
+      for (const [key, propSchema] of Object.entries(schema.shape)) {
+        const optional = propSchema.isOptional();
         const suffix = optional ? "?" : "";
         expect(catalogPrompt).toContain(`"${key}"${suffix}:`);
       }
