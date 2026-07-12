@@ -82,7 +82,36 @@ describe("clarification orchestration", () => {
     expect(decision.canFinalize).toBeTrue();
   });
 
-  it("returns blocked when the clarification state is blocked", () => {
+  it("returns blocked when the clarifier explicitly blocks before the cap", () => {
+    const state = applyClarificationResult(
+      createClarificationState("Launch the product.", { maxRounds: 10 }),
+      {
+        status: "blocked",
+        readyToProceed: false,
+        questions: [],
+        missingInformation: ["market"],
+        answeredInformation: [],
+        reasoningSummary: "The request cannot be safely executed.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Launch the product.",
+      state,
+    });
+
+    expect(state.status).toBe("blocked");
+    expect(state.readyToProceed).toBeFalse();
+    expect(decision.phase).toBe("blocked");
+    expect(decision.canPlan).toBeFalse();
+    expect(decision.canDelegate).toBeFalse();
+    expect(decision.canFinalize).toBeFalse();
+  });
+
+  it("forces ready_to_proceed at the round cap and enters the normal execution flow", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 2 }),
       {
@@ -97,7 +126,7 @@ describe("clarification orchestration", () => {
       },
     );
 
-    const blockedState = applyClarificationResult(state, {
+    const cappedState = applyClarificationResult(state, {
       status: "needs_clarification",
       readyToProceed: false,
       questions: [{ id: "market", question: "Which market launches first?" }],
@@ -108,18 +137,55 @@ describe("clarification orchestration", () => {
       maxRounds: 2,
     });
 
+    expect(cappedState.status).toBe("ready_to_proceed");
+
     const decision = resolveClarificationGate({
       isNewRequest: false,
       request: "Launch the product.",
-      state: blockedState,
+      state: cappedState,
     });
 
-    expect(blockedState.status).toBe("blocked");
-    expect(blockedState.readyToProceed).toBeFalse();
-    expect(decision.phase).toBe("blocked");
-    expect(decision.canPlan).toBeFalse();
-    expect(decision.canDelegate).toBeFalse();
-    expect(decision.canFinalize).toBeFalse();
+    expect(decision.phase).toBe("execution");
+    expect(decision.canPlan).toBeTrue();
+    expect(decision.canDelegate).toBeTrue();
+    expect(decision.canFinalize).toBeTrue();
+  });
+
+  it("routes cap-completed generative UI requests to product generation", () => {
+    const state = applyClarificationResult(
+      createClarificationState("Build product cards.", { maxRounds: 2 }),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "audience", question: "Who is the audience?" }],
+        missingInformation: ["audience"],
+        answeredInformation: [],
+        reasoningSummary: "Audience changes the product design.",
+        roundCount: 1,
+        maxRounds: 2,
+      },
+    );
+
+    const cappedState = applyClarificationResult(state, {
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [{ id: "audience", question: "Who is the audience?" }],
+      missingInformation: ["audience"],
+      answeredInformation: [],
+      reasoningSummary: "The audience is still unknown.",
+      roundCount: 2,
+      maxRounds: 2,
+    });
+
+    const decision = resolveClarificationGate({
+      isNewRequest: false,
+      request: "Build product cards.",
+      state: cappedState,
+      generativeUiEnabled: true,
+    });
+
+    expect(decision.phase).toBe("product_generation");
+    expect(decision.requiredSubagent).toBe("product-generator");
   });
 
   it("routes ready clarified generative UI requests to product generation before execution", () => {

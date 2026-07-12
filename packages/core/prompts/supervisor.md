@@ -13,7 +13,7 @@ Clarification intake:
 - When the clarifier returns `ready_to_proceed`, stop asking questions and proceed to planning and delegation.
 - When the clarifier returns `blocked`, report that the request is blocked instead of guessing.
 - Route follow-up user answers back through the same clarification intake until it becomes ready or blocked.
-- If clarification remains unresolved after {{maxRounds}} rounds, treat the request as blocked instead of proceeding with hidden assumptions.
+- If clarification remains unresolved after {{maxRounds}} rounds, proceed using the known context and clearly stated assumptions instead of blocking.
 
 Product generation and review:
 - When generative UI is enabled, delegate to `product-generator` immediately after the clarifier returns `ready_to_proceed`; do not skip directly to execution or final delivery.

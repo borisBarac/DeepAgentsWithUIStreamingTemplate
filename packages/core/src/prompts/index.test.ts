@@ -92,8 +92,14 @@ describe("prompt defaults", () => {
     expect(createClarifierSystemPrompt({ maxRounds: 6, questionsPerRound: 2 })).toContain(
       "round 6",
     );
+    expect(createClarifierSystemPrompt({ maxRounds: 6, questionsPerRound: 2 })).toContain(
+      "proceed using the known context and clearly stated assumptions",
+    );
     expect(createSupervisorSystemPrompt({ maxRounds: 6 })).toContain(
       "If clarification remains unresolved after 6 rounds",
+    );
+    expect(createSupervisorSystemPrompt({ maxRounds: 6 })).toContain(
+      "proceed using the known context and clearly stated assumptions instead of blocking",
     );
   });
 

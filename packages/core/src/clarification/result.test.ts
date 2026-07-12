@@ -106,7 +106,7 @@ describe("clarification result application", () => {
     ]);
   });
 
-  it("returns a blocked clarification state when the round cap is reached unresolved", () => {
+  it("forces ready_to_proceed when the round cap is reached unresolved", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 2 }),
       {
@@ -121,7 +121,7 @@ describe("clarification result application", () => {
       },
     );
 
-    const blockedState = applyClarificationResult(state, {
+    const cappedState = applyClarificationResult(state, {
       status: "needs_clarification",
       readyToProceed: false,
       questions: [{ id: "market", question: "Which market launches first?" }],
@@ -132,7 +132,58 @@ describe("clarification result application", () => {
       maxRounds: 2,
     });
 
-    expect(blockedState.status).toBe("blocked");
-    expect(blockedState.readyToProceed).toBeFalse();
+    expect(cappedState.status).toBe("ready_to_proceed");
+    expect(cappedState.readyToProceed).toBeTrue();
+    expect(cappedState.openQuestions).toEqual([]);
+    expect(cappedState.missingInformation).toEqual([]);
+  });
+
+  it("preserves supplied answers when forcing ready_to_proceed at the cap", () => {
+    const state = applyClarificationResult(
+      createClarificationState("Launch the product.", { maxRounds: 2 }),
+      {
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "market", question: "Which market launches first?" }],
+        missingInformation: ["market"],
+        answeredInformation: [{ key: "budget", value: "unlimited" }],
+        reasoningSummary: "Budget confirmed, market still open.",
+        roundCount: 1,
+        maxRounds: 2,
+      },
+    );
+
+    const cappedState = applyClarificationResult(state, {
+      status: "needs_clarification",
+      readyToProceed: false,
+      questions: [{ id: "market", question: "Which market launches first?" }],
+      missingInformation: ["market"],
+      answeredInformation: [{ key: "budget", value: "unlimited" }],
+      reasoningSummary: "The launch market is still missing.",
+      roundCount: 2,
+      maxRounds: 2,
+    });
+
+    expect(cappedState.status).toBe("ready_to_proceed");
+    expect(cappedState.answeredInformation).toEqual([{ key: "budget", value: "unlimited" }]);
+  });
+
+  it("preserves explicit blocked results before the round cap", () => {
+    const state = applyClarificationResult(
+      createClarificationState("Launch the product.", { maxRounds: 10 }),
+      {
+        status: "blocked",
+        readyToProceed: false,
+        questions: [],
+        missingInformation: ["market"],
+        answeredInformation: [],
+        reasoningSummary: "The request cannot be safely executed.",
+        roundCount: 1,
+        maxRounds: 10,
+      },
+    );
+
+    expect(state.status).toBe("blocked");
+    expect(state.readyToProceed).toBeFalse();
   });
 });

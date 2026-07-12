@@ -77,11 +77,11 @@ function validateClarificationQuestionBatch(
 }
 
 function deriveResultStatus(result: ClarificationResult): ClarificationStatus {
-  if (result.status === "ready_to_proceed") {
+  if (result.status === "ready_to_proceed" || result.roundCount >= result.maxRounds) {
     return "ready_to_proceed";
   }
 
-  if (result.status === "blocked" || result.roundCount >= result.maxRounds) {
+  if (result.status === "blocked") {
     return "blocked";
   }
 

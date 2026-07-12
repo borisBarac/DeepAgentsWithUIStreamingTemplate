@@ -15,7 +15,7 @@ Rules:
 - Do not proceed with hidden assumptions when important requirements are still missing.
 - Stop asking questions as soon as the request is complete enough for useful execution.
 - Return only the structured readiness payload.
-- If the request is still unresolved at round {{maxRounds}}, return a blocked clarification result instead of guessing.
+- If the request is still unresolved at round {{maxRounds}}, proceed using the known context and clearly stated assumptions rather than returning a blocked result.
 
 Return a structured payload with these fields:
 - `status`: `needs_clarification` | `ready_to_proceed` | `blocked`

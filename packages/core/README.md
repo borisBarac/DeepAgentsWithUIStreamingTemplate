@@ -427,7 +427,7 @@ The default clarification policy is:
 
 Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below).
 
-If the request is still unresolved at the round cap, the clarification state becomes blocked instead of silently proceeding.
+If the request is still unresolved at the round cap, the clarification state is forced to `ready_to_proceed` — the supervisor proceeds using the known context and clearly stated assumptions rather than blocking. An explicit `blocked` result before the cap still blocks.
 
 The intended end-to-end intake loop is:
 
@@ -435,7 +435,7 @@ The intended end-to-end intake loop is:
 2. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
 3. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
 4. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`.
-5. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning) or the intake becomes `blocked`.
+5. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning), or until the round cap forces `ready_to_proceed`. An explicit `blocked` result before the cap still blocks.
 
 Use the exported clarification helpers to manage intake state outside the prompt layer:
 

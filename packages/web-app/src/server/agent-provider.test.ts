@@ -49,4 +49,28 @@ describe("createAgentProvider", () => {
     expect(agent).toBeTruthy();
     expect(typeof agent.invoke).toBe("function");
   });
+
+  it("passes WEB_APP_CLARIFICATION_MAX_ROUNDS to the scaffold without error", () => {
+    const agent = withEnv({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "1" }, () => createAgentProvider());
+    expect(agent).toBeTruthy();
+    expect(typeof agent.invoke).toBe("function");
+  });
+
+  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is zero", () => {
+    expect(() =>
+      withEnv({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "0" }, () => createAgentProvider()),
+    ).toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
+  });
+
+  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is non-numeric", () => {
+    expect(() =>
+      withEnv({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "abc" }, () => createAgentProvider()),
+    ).toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
+  });
+
+  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is a decimal", () => {
+    expect(() =>
+      withEnv({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "1.5" }, () => createAgentProvider()),
+    ).toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
+  });
 });
