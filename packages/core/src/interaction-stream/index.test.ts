@@ -1,9 +1,11 @@
 import { describe, expect, it } from "bun:test";
+import { StructuredOutputParsingError } from "langchain";
 
 import { validateStreamingSpec } from "../generative-ui/contract.ts";
 import {
   createInteractionStream,
   finalTextToMessageFallback,
+  type ModelUiOutput,
   productBatchTextToUiUpdates,
   type StreamableAgent,
   type UiUpdate,
@@ -23,7 +25,10 @@ type FakeStreamRun = {
     }>;
     output?: Promise<unknown>;
   }>;
-  output: Promise<{ messages: Array<{ content: string; role: "assistant" }> }>;
+  output: Promise<{
+    messages: Array<{ content: string; role: "assistant" }>;
+    structuredResponse?: unknown;
+  }>;
 };
 
 type FakeAgent = {
@@ -98,6 +103,31 @@ function createStreamingAgent(outputs: string[]): FakeAgent {
         ]),
         output: Promise.resolve({
           messages: [{ content: text, role: "assistant" }],
+        }),
+      };
+    },
+  };
+}
+
+function createStructuredAgent(
+  outputs: Array<{ structuredResponse: unknown; text?: string }>,
+): InspectableAgent {
+  let index = 0;
+  const inputs: InspectableAgent["inputs"] = [];
+  return {
+    inputs,
+    async streamEvents(input) {
+      if (input) inputs.push(input);
+      const output = outputs[Math.min(index, outputs.length - 1)] ?? {
+        structuredResponse: undefined,
+      };
+      index += 1;
+      const text = output.text ?? "";
+      return {
+        messages: asyncIterableFrom([{ text: asyncIterableFrom([text]) }]),
+        output: Promise.resolve({
+          messages: [{ content: text, role: "assistant" }],
+          structuredResponse: output.structuredResponse,
         }),
       };
     },
@@ -327,7 +357,391 @@ describe("finalTextToMessageFallback", () => {
   });
 });
 
+describe("workflow delivery streaming", () => {
+  it("keeps intermediate narration out of the visible result", async () => {
+    const agent = createInspectableAgent(
+      ["I will route this through clarification."],
+      [{ content: "Reviewed final response", role: "assistant" }],
+    );
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "build it", role: "user" }],
+      sessionId: "accepted-final",
+    });
+    for await (const _update of interaction.updates) {
+      /* drain */
+    }
+    expect((await interaction.result).finalText).toBe("Reviewed final response");
+  });
+
+  it("emits product-generator batches even when debug activity is disabled", async () => {
+    const batch = JSON.stringify({
+      products: [{ id: "board", title: "Kanban board", description: "Four-column office board" }],
+    });
+    const agent: FakeAgent = {
+      async streamEvents() {
+        return {
+          messages: asyncIterableFrom([{ text: asyncIterableFrom(["Reviewed final response"]) }]),
+          subagents: asyncIterableFrom([
+            {
+              name: "product-generator",
+              output: Promise.resolve({ messages: [{ content: batch, role: "assistant" }] }),
+            },
+          ]),
+          output: Promise.resolve({
+            messages: [{ content: "Reviewed final response", role: "assistant" }],
+          }),
+        };
+      },
+    };
+    const updates = await collectUpdates(agent);
+    expect(updates.some((update) => update.type === "ui")).toBeTrue();
+    expect(
+      updates.some(
+        (update) => update.type === "message" && update.text === "Reviewed final response",
+      ),
+    ).toBeTrue();
+  });
+
+  it("prefers a product-generator structured response over its assistant text", async () => {
+    const agent: FakeAgent = {
+      async streamEvents() {
+        return {
+          messages: asyncIterableFrom([]),
+          subagents: asyncIterableFrom([
+            {
+              name: "product-generator",
+              output: Promise.resolve({
+                messages: [{ content: "not json", role: "assistant" }],
+                structuredResponse: {
+                  products: [
+                    { id: "structured", title: "Structured card", description: "Accepted" },
+                  ],
+                },
+              }),
+            },
+          ]),
+          output: Promise.resolve({
+            messages: [],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "message", text: "Done" }],
+            },
+          }),
+        };
+      },
+    };
+
+    const updates = await collectUpdates(agent);
+    expect(updates).toContainEqual(expect.objectContaining({ type: "ui" }));
+    expect(updates).toContainEqual({ type: "message", text: "Done" });
+  });
+
+  it("emits only the last UI update for a duplicate spec root", async () => {
+    const batch = JSON.stringify({
+      products: [{ id: "same", title: "Product agent", description: "Earlier value" }],
+    });
+    const supervisorSpec = {
+      root: "same",
+      elements: {
+        same: {
+          type: "product-card",
+          props: { id: "same", title: "Supervisor", description: "Final value" },
+        },
+      },
+    };
+    const agent: FakeAgent = {
+      async streamEvents() {
+        return {
+          messages: asyncIterableFrom([]),
+          subagents: asyncIterableFrom([
+            {
+              name: "product-generator",
+              output: Promise.resolve({ messages: [{ content: batch, role: "assistant" }] }),
+            },
+          ]),
+          output: Promise.resolve({
+            messages: [],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "ui", spec: supervisorSpec }],
+            },
+          }),
+        };
+      },
+    };
+
+    await expect(collectUpdates(agent)).resolves.toEqual([{ type: "ui", spec: supervisorSpec }]);
+  });
+
+  it("accepts a maximum product batch plus a supervisor message", async () => {
+    let calls = 0;
+    const products = Array.from({ length: 32 }, (_, index) => ({
+      id: `card-${index}`,
+      title: `Card ${index}`,
+      description: "Description",
+    }));
+    const agent: FakeAgent = {
+      async streamEvents() {
+        calls += 1;
+        return {
+          messages: asyncIterableFrom([]),
+          subagents: asyncIterableFrom([
+            {
+              name: "product-generator",
+              output: Promise.resolve({ structuredResponse: { products } }),
+            },
+          ]),
+          output: Promise.resolve({
+            messages: [],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "message", text: "All products generated" }],
+            },
+          }),
+        };
+      },
+    };
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "generate concepts", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "combined-update-cap",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+    const result = await interaction.result;
+
+    expect(updates).toHaveLength(33);
+    expect(updates.at(-1)).toEqual({ type: "message", text: "All products generated" });
+    expect(calls).toBe(1);
+    expect(result.failure).toBeNull();
+  });
+
+  it("deduplicates a repeated supervisor product after merging bounded outputs", async () => {
+    const products = Array.from({ length: 32 }, (_, index) => ({
+      id: `card-${index}`,
+      title: `Card ${index}`,
+      description: "Earlier value",
+    }));
+    const finalSpec = {
+      root: "card-0",
+      elements: {
+        "card-0": {
+          type: "product-card",
+          props: {
+            id: "card-0",
+            title: "Updated card",
+            description: "Final value",
+          },
+        },
+      },
+    };
+    const agent: FakeAgent = {
+      async streamEvents() {
+        return {
+          messages: asyncIterableFrom([]),
+          subagents: asyncIterableFrom([
+            {
+              name: "product-generator",
+              output: Promise.resolve({ structuredResponse: { products } }),
+            },
+          ]),
+          output: Promise.resolve({
+            messages: [],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "ui", spec: finalSpec }],
+            },
+          }),
+        };
+      },
+    };
+
+    const updates = await collectUpdates(agent);
+
+    expect(updates).toHaveLength(32);
+    expect(
+      updates.filter((update) => update.type === "ui" && update.spec.root === "card-0"),
+    ).toEqual([{ type: "ui", spec: finalSpec }]);
+  });
+});
+
 describe("createInteractionStream", () => {
+  it("prefers validated structured output over conflicting assistant prose", async () => {
+    const structuredOutput = {
+      version: 1,
+      updates: [{ type: "message", text: "Structured answer" }],
+    } satisfies ModelUiOutput;
+    const interaction = createInteractionStream({
+      agent: asStreamable(
+        createStructuredAgent([
+          {
+            structuredResponse: structuredOutput,
+            text: '{"type":"message","text":"Legacy answer"}',
+          },
+        ]),
+      ),
+      messages: [{ content: "generate concepts", role: "user" }],
+      sessionId: "structured-precedence",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+
+    expect(updates).toEqual([{ type: "message", text: "Structured answer" }]);
+    expect((await interaction.result).structuredOutput).toEqual(structuredOutput);
+  });
+
+  it("retries an invalid structured object once with validation feedback", async () => {
+    const agent = createStructuredAgent([
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [{ type: "error", message: "model-owned error" }],
+        },
+      },
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [{ type: "message", text: "Corrected answer" }],
+        },
+      },
+    ]);
+    const updates = await collectUpdates(agent);
+
+    expect(updates).toEqual([{ type: "message", text: "Corrected answer" }]);
+    expect(agent.inputs).toHaveLength(2);
+    expect(agent.inputs[1]?.messages.at(-1)?.content).toContain("updates.0.type");
+  });
+
+  it("returns a typed failure after the corrected structured object is still invalid", async () => {
+    const invalid = {
+      version: 1,
+      updates: [{ type: "main_agent_activity", event: "completed" }],
+    };
+    const agent = createStructuredAgent([
+      { structuredResponse: invalid },
+      { structuredResponse: invalid },
+    ]);
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "generate concepts", role: "user" }],
+      sessionId: "structured-failure",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+    const result = await interaction.result;
+
+    expect(updates).toEqual([{ type: "message", text: SAFE_FALLBACK_MESSAGE }]);
+    expect(agent.inputs).toHaveLength(2);
+    expect(result.structuredOutput).toBeNull();
+    expect(result.failure).toMatchObject({
+      code: "invalid_model_output",
+      attempts: 2,
+      issues: [expect.objectContaining({ path: "updates.0.type" })],
+    });
+  });
+
+  it("centrally retries a structured parsing error with corrected-object feedback", async () => {
+    const agent = createStructuredAgent([
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [{ type: "message", text: "Recovered answer" }],
+        },
+      },
+    ]);
+    const delegate = agent.streamEvents;
+    let calls = 0;
+    agent.streamEvents = async (input) => {
+      calls += 1;
+      if (calls === 1) {
+        if (input) agent.inputs.push(input);
+        return {
+          messages: asyncIterableFrom([]),
+          output: Promise.reject(new StructuredOutputParsingError("providerStrategy", ["bad"])),
+        };
+      }
+      return delegate(input);
+    };
+
+    await expect(collectUpdates(agent)).resolves.toEqual([
+      { type: "message", text: "Recovered answer" },
+    ]);
+    expect(agent.inputs).toHaveLength(2);
+    expect(agent.inputs[1]?.messages.at(-1)?.content).toContain("complete corrected JSON object");
+  });
+
+  it("waits for failed-attempt streams to settle before starting the repair", async () => {
+    const drain = createDeferred<void>();
+    let calls = 0;
+    const agent: FakeAgent = {
+      async streamEvents() {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            messages: {
+              [Symbol.asyncIterator]() {
+                return {
+                  async next() {
+                    await drain.promise;
+                    return { done: true as const, value: undefined };
+                  },
+                };
+              },
+            },
+            output: Promise.reject(new StructuredOutputParsingError("providerStrategy", ["bad"])),
+          };
+        }
+        return {
+          messages: asyncIterableFrom([]),
+          output: Promise.resolve({
+            messages: [],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "message", text: "Recovered" }],
+            },
+          }),
+        };
+      },
+    };
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "generate concepts", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "settled-repair",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toBe(1);
+
+    drain.resolve();
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+    expect(updates).toEqual([{ type: "message", text: "Recovered" }]);
+    expect(calls).toBe(2);
+  });
+
+  it("rejects missing structured output instead of accepting model-owned activity", async () => {
+    const agent = createInspectableAgent([
+      '{"type":"main_agent_activity","event":"completed"}',
+      '{"type":"main_agent_activity","event":"completed"}',
+    ]);
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "generate concepts", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "required-structured-output",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+    const result = await interaction.result;
+
+    expect(updates).toEqual([{ type: "message", text: SAFE_FALLBACK_MESSAGE }]);
+    expect(updates.some((update) => update.type === "main_agent_activity")).toBeFalse();
+    expect(agent.inputs).toHaveLength(2);
+    expect(result.failure).toMatchObject({ code: "invalid_model_output", attempts: 2 });
+  });
+
   it("buffers chunked main-agent output until the run completes", async () => {
     const output = createDeferred<{ messages: Array<{ content: string; role: "assistant" }> }>();
     const text = '{"type":"message","text":"chunked"}';
@@ -606,6 +1020,36 @@ async function collectWithValidator(
 }
 
 describe("createInteractionStream — NDJSON UI repair", () => {
+  it("commits structured attempts atomically after catalog validation", async () => {
+    const agent = createStructuredAgent([
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [
+            { type: "message", text: "Do not leak" },
+            { type: "ui", spec: unknownComponentSpec },
+          ],
+        },
+      },
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [
+            { type: "message", text: "Accepted" },
+            { type: "ui", spec: textSpec("fixed", "Ready") },
+          ],
+        },
+      },
+    ]);
+    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+
+    expect(updates).toEqual([
+      { type: "message", text: "Accepted" },
+      { type: "ui", spec: textSpec("fixed", "Ready") },
+    ]);
+    expect(updates).not.toContainEqual({ type: "message", text: "Do not leak" });
+  });
+
   it("repairs rejected UI candidates using path-specific feedback and succeeds on retry", async () => {
     const agent = createInspectableAgent([
       uiLine(unknownComponentSpec),
@@ -637,21 +1081,16 @@ describe("createInteractionStream — NDJSON UI repair", () => {
     expect(proseUpdates).toEqual([
       { type: "message", text: "This is plain prose, not a UI update." },
     ]);
-    expect(proseAgent.inputs).toHaveLength(2);
-    const retryMessages = proseAgent.inputs[1]?.messages;
-    expect(retryMessages).toEqual([{ content: "build ui", role: "user" }]);
+    expect(proseAgent.inputs).toHaveLength(1);
   });
 
-  it("preserves valid components alongside repaired ones without duplication", async () => {
+  it("commits only the accepted repair attempt without duplication", async () => {
     const attempt1 = [uiLine(textSpec("ok", "kept")), uiLine(unknownComponentSpec)].join("\n");
     const repair = uiLine(buttonSpec("btn", "Fixed"));
     const agent = createInspectableAgent([attempt1, repair]);
     const { updates } = await collectWithValidator(agent, validateStreamingSpec);
 
-    expect(updates).toEqual([
-      { type: "ui", spec: textSpec("ok", "kept") },
-      { type: "ui", spec: buttonSpec("btn", "Fixed") },
-    ]);
+    expect(updates).toEqual([{ type: "ui", spec: buttonSpec("btn", "Fixed") }]);
     expect(agent.inputs).toHaveLength(2);
   });
 

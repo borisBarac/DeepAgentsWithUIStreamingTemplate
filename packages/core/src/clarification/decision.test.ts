@@ -295,7 +295,7 @@ describe("clarification orchestration", () => {
     expect(decision.canFinalize).toBeTrue();
   });
 
-  it("blocks execution when review blocks a generated product batch", () => {
+  it("routes blocked review back as actionable product revision feedback", () => {
     const state = applyClarificationResult(createClarificationState("Build product cards."), {
       status: "ready_to_proceed",
       readyToProceed: true,
@@ -317,10 +317,11 @@ describe("clarification orchestration", () => {
       reviewFeedback: "Cannot validate product requirements.",
     });
 
-    expect(decision.phase).toBe("blocked");
+    expect(decision.phase).toBe("product_generation");
+    expect(decision.requiredSubagent).toBe("product-generator");
     expect(decision.reviewFeedback).toBe("Cannot validate product requirements.");
     expect(decision.canPlan).toBeFalse();
-    expect(decision.canDelegate).toBeFalse();
+    expect(decision.canDelegate).toBeTrue();
     expect(decision.canFinalize).toBeFalse();
   });
 

@@ -1,5 +1,6 @@
 import { AIMessage, createMiddleware } from "langchain";
 import { z } from "zod";
+import { CORE_PROMPT_TEMPLATES, renderPromptTemplate } from "../prompts/index.ts";
 
 import { DEFAULT_GUARDRAIL_POLICY_LOADER, type TaskScopePolicyBundle } from "./policies.ts";
 import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
@@ -28,23 +29,10 @@ const blockedUpdate = (message: string): { messages: AIMessage[]; jumpTo: "end" 
 });
 
 export function createTaskScopePrompt(request: string, policies: TaskScopePolicyBundle): string {
-  return [
-    "Classify whether the user request is inside the agent's task scope.",
-    "Use required context to decide whether the request needs clarification, but do not mark it out of scope solely because context is missing.",
-    "Mark the request out of scope when it asks for a disallowed task or clearly falls outside the allowed task list.",
-    "",
-    "Required context policy:",
-    policies.requiredContext,
-    "",
-    "Allowed tasks policy:",
-    policies.allowedTasks,
-    "",
-    "Disallowed tasks policy:",
-    policies.disallowedTasks,
-    "",
-    "User request:",
+  return renderPromptTemplate(CORE_PROMPT_TEMPLATES.taskScopeClassification, {
+    ...policies,
     request,
-  ].join("\n");
+  });
 }
 
 export function resolveTaskScopePolicies(
@@ -68,8 +56,7 @@ export async function classifyTaskScopeRequest(
     await classifier.invoke([
       {
         role: "system",
-        content:
-          "You are a strict task-scope classifier. Return only the requested structured decision as a JSON object.",
+        content: CORE_PROMPT_TEMPLATES.structuredJson.trim(),
       },
       {
         role: "user",

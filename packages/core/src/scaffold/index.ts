@@ -11,14 +11,18 @@ export {
 export { createVirtualFilesystemLayout } from "./filesystem.ts";
 export { createDefaultPermissions } from "./permissions.ts";
 export { createRuntimeScaffold } from "./runtime.ts";
+export {
+  createStructuredJsonMiddleware,
+  STRUCTURED_JSON_MIDDLEWARE_NAME,
+  type StructuredJsonMiddlewareOptions,
+  withStructuredJsonPrompt,
+} from "./structured-json.ts";
 export { createDefaultSubagentCatalog } from "./subagents.ts";
 export type {
-  BaselineRuntimeScaffold,
   CreateCompositeBackendOptions,
   CreateDefaultPermissionsOptions,
   CreateDefaultSubagentCatalogOptions,
   CreateRuntimeScaffoldOptions,
-  DeepAgentBlueprint,
   DefaultSubagentCatalog,
   RuntimeScaffold,
   RuntimeScaffoldArchitecture,

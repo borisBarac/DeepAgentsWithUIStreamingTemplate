@@ -77,10 +77,9 @@ export type UiZone = "chat" | "interaction";
 /**
  * A UI update emitted by a generative-UI agent stream.
  *
- * The wire protocol is a newline-delimited stream of these objects (NDJSON):
- * the model emits one `UiUpdate` per line, the server frames the stream with
- * {@link StreamingLineBuffer}, and each line is validated by
- * {@link normalizeUiUpdate} (or parsed by {@link parseUpdateLine} on the client).
+ * The server sends these objects to the browser as NDJSON. The model returns a
+ * separate versioned JSON object containing only model-owned update variants.
+ * The application validates that object before it emits any updates.
  */
 export type UiUpdate =
   | {

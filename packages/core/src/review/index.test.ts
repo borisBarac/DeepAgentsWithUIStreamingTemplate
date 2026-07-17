@@ -34,12 +34,15 @@ const changesReport: ReviewReport = {
 };
 
 describe("createReviewConfig", () => {
-  it("defaults maxRevisions to 2", () => {
+  it("defaults maxRevisions to four real reviewer calls", () => {
     expect(createReviewConfig().maxRevisions).toBe(DEFAULT_REVIEW_MAX_REVISIONS);
   });
 
   it("honours explicit maxRevisions overrides", () => {
-    expect(createReviewConfig({ maxRevisions: 4 }).maxRevisions).toBe(4);
+    expect(createReviewConfig({ maxRevisions: 7 }).maxRevisions).toBe(7);
+    expect(createReviewConfig({ maxRevisions: 7 }).maxRevisions).not.toBe(
+      DEFAULT_REVIEW_MAX_REVISIONS,
+    );
   });
 
   it("rejects non-positive maxRevisions", () => {

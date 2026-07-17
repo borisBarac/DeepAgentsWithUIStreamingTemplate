@@ -1,6 +1,8 @@
 import {
   type AgentInputMessage,
   createInteractionStream,
+  type InteractionStreamFailure,
+  type ModelUiOutput,
   type StreamableAgent,
   type UiUpdate,
 } from "@deep-agent-template/core/interaction-stream";
@@ -14,7 +16,13 @@ export const runtime = "nodejs";
 type Agent = StreamableAgent;
 
 const MAX_SESSIONS = 100;
-const sessions = new Map<string, unknown[]>();
+type SessionState = {
+  failure: InteractionStreamFailure | null;
+  history: unknown[];
+  structuredOutput: ModelUiOutput | null;
+};
+
+const sessions = new Map<string, SessionState>();
 
 function getHistory(sessionId: string): unknown[] {
   const history = sessions.get(sessionId);
@@ -23,17 +31,21 @@ function getHistory(sessionId: string): unknown[] {
   }
   sessions.delete(sessionId);
   sessions.set(sessionId, history);
-  return history;
+  return history.history;
 }
 
-function saveHistory(sessionId: string, history: unknown[]): void {
+function saveSession(sessionId: string, state: SessionState): void {
   sessions.delete(sessionId);
-  sessions.set(sessionId, history);
+  sessions.set(sessionId, state);
   while (sessions.size > MAX_SESSIONS) {
     const oldest = sessions.keys().next().value;
     if (oldest === undefined) break;
     sessions.delete(oldest);
   }
+}
+
+export function getSessionStateForTest(sessionId: string): SessionState | null {
+  return sessions.get(sessionId) ?? null;
 }
 
 function createAgent(): Agent {
@@ -110,6 +122,7 @@ export async function POST(request: Request): Promise<Response> {
           includeActivity: parsedRequest.includeSubagentActivity,
           messages,
           normalizeSpec: normalizeStreamingSpec,
+          requireStructuredOutput: true,
           validateSpec: validateStreamingSpec,
           sessionId: parsedRequest.sessionId,
         });
@@ -120,7 +133,11 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         const result = await interaction.result;
-        saveHistory(parsedRequest.sessionId, result.history);
+        saveSession(parsedRequest.sessionId, {
+          failure: result.failure,
+          history: result.history,
+          structuredOutput: result.structuredOutput,
+        });
       } catch (error) {
         controller.enqueue(
           encodeUpdate({

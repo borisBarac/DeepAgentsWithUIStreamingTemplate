@@ -42,8 +42,16 @@ export {
   type ValidateSpec,
 } from "./envelope.ts";
 export {
+  type ModelUiOutput,
+  type ModelUiUpdate,
+  modelUiOutputSchema,
+  modelUiUpdateSchema,
+  normalizeModelUiOutput,
+} from "./model-output.ts";
+export {
   composeGenerativeUiPrompt,
   composeProductGeneratorPrompt,
+  GENERATIVE_UI_JSON_OBJECT_PROMPT,
   GENERATIVE_UI_NDJSON_PROMPT,
   PRODUCT_CARD_CATALOG_PROMPT,
 } from "./prompt.ts";

@@ -1,5 +1,6 @@
-import type { Spec, UIElement } from "@json-render/core";
+import { type Spec, type UIElement, VisibilityConditionSchema } from "@json-render/core";
 import { z } from "zod";
+import { CORE_PROMPT_TEMPLATES, renderPromptTemplate } from "../prompts/index.ts";
 import type { SpecValidationIssue, SpecValidationResult } from "./envelope.ts";
 import { productCardSchema as scaffoldProductCardSchema } from "./envelope.ts";
 
@@ -18,6 +19,10 @@ export const componentTypes = [
 ] as const;
 
 export type ComponentTypeName = (typeof componentTypes)[number];
+
+export const MAX_SPEC_ELEMENTS = 100;
+export const MAX_SPEC_STRING_LENGTH = 4_096;
+export const MAX_SPEC_JSON_BYTES = 128 * 1_024;
 
 export const cardPropsSchema = z.object({
   title: z.string().optional(),
@@ -109,30 +114,10 @@ const componentPropsCatalog = componentTypes
  * This stays core-owned so the agent prompt and the UI contract share the same
  * component list and prop shapes.
  */
-export const catalogPrompt = `JsonRenderSpec is:
-{
-  "root": "elementKey",
-  "elements": {
-    "elementKey": {
-      "type": ${componentTypeUnion},
-      "props": {},
-      "children": ["childElementKey"]
-    }
-  }
-}
-
-Allowed component props:
-${componentPropsCatalog}
-
-Rules:
-- Use unique element keys.
-- Every element must include props and children, even when empty.
-- Every child key must exist in elements.
-- Never use component types outside the allowed catalog.
-- Qualification questions must be emitted as {"type":"question",...} updates, not as JsonRenderSpec UI.
-- Product details belong in JsonRenderSpec UI updates. Use ProductGrid as the root when showing multiple products.
-- A product card must include a clear title, description, and either imagePrompt or a child ImagePlaceholder.
-- When streaming more than one product over time, emit a complete ProductGrid spec each time with the previous products preserved plus the new product.`;
+export const catalogPrompt = renderPromptTemplate(CORE_PROMPT_TEMPLATES.jsonRenderCatalog, {
+  componentPropsCatalog,
+  componentTypeUnion,
+});
 
 const knownComponentTypes = new Set<string>(componentTypes);
 
@@ -142,6 +127,81 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isComponentType(value: unknown): value is ComponentTypeName {
   return typeof value === "string" && knownComponentTypes.has(value);
+}
+
+function getPayloadIssue(value: unknown): SpecValidationIssue | null {
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    return {
+      path: "$",
+      code: "invalid_payload",
+      message: "Spec must be JSON serializable.",
+    };
+  }
+
+  if (serialized === undefined) {
+    return {
+      path: "$",
+      code: "invalid_payload",
+      message: "Spec must be JSON serializable.",
+    };
+  }
+
+  const byteLength = new TextEncoder().encode(serialized).byteLength;
+  if (byteLength > MAX_SPEC_JSON_BYTES) {
+    return {
+      path: "$",
+      code: "payload_too_large",
+      message: `Spec must not exceed ${MAX_SPEC_JSON_BYTES} bytes.`,
+    };
+  }
+
+  return null;
+}
+
+function findOversizedString(value: unknown, path = "$"): SpecValidationIssue | null {
+  if (typeof value === "string") {
+    return value.length > MAX_SPEC_STRING_LENGTH
+      ? {
+          path,
+          code: "string_too_long",
+          message: `Strings must not exceed ${MAX_SPEC_STRING_LENGTH} characters.`,
+        }
+      : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      const issue = findOversizedString(item, `${path}.${index}`);
+      if (issue) {
+        return issue;
+      }
+    }
+    return null;
+  }
+
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  for (const [key, item] of Object.entries(value)) {
+    if (key.length > MAX_SPEC_STRING_LENGTH) {
+      return {
+        path,
+        code: "string_too_long",
+        message: `Object keys must not exceed ${MAX_SPEC_STRING_LENGTH} characters.`,
+      };
+    }
+    const itemPath = path === "$" ? key : `${path}.${key}`;
+    const issue = findOversizedString(item, itemPath);
+    if (issue) {
+      return issue;
+    }
+  }
+
+  return null;
 }
 
 function normalizeElement(value: unknown): UIElement | null {
@@ -168,11 +228,17 @@ function normalizeElement(value: unknown): UIElement | null {
     return null;
   }
 
+  const parsedVisible =
+    value.visible === undefined ? null : VisibilityConditionSchema.safeParse(value.visible);
+  if (parsedVisible && !parsedVisible.success) {
+    return null;
+  }
+
   return {
     type,
     props: parsedProps.data,
     children: rawChildren,
-    ...(value.visible !== undefined ? { visible: value.visible as UIElement["visible"] } : {}),
+    ...(parsedVisible ? { visible: parsedVisible.data } : {}),
   };
 }
 
@@ -228,6 +294,16 @@ function diagnoseElement(key: string, value: unknown): SpecValidationIssue[] {
     ];
   }
 
+  if (value.visible !== undefined && !VisibilityConditionSchema.safeParse(value.visible).success) {
+    return [
+      {
+        path: `elements.${key}.visible`,
+        code: "invalid_visibility",
+        message: `Element "${key}" has an invalid visibility condition.`,
+      },
+    ];
+  }
+
   return [
     {
       path: `elements.${key}`,
@@ -246,6 +322,16 @@ function diagnoseElement(key: string, value: unknown): SpecValidationIssue[] {
  * to fix.
  */
 export function validateStreamingSpec(value: unknown): SpecValidationResult {
+  const payloadIssue = getPayloadIssue(value);
+  if (payloadIssue) {
+    return { ok: false, issues: [payloadIssue] };
+  }
+
+  const stringIssue = findOversizedString(value);
+  if (stringIssue) {
+    return { ok: false, issues: [stringIssue] };
+  }
+
   if (!isRecord(value)) {
     return {
       ok: false,
@@ -276,7 +362,20 @@ export function validateStreamingSpec(value: unknown): SpecValidationResult {
       ],
     };
   }
-  if (!(value.root in value.elements)) {
+  const elementCount = Object.keys(value.elements).length;
+  if (elementCount > MAX_SPEC_ELEMENTS) {
+    return {
+      ok: false,
+      issues: [
+        {
+          path: "elements",
+          code: "too_many_elements",
+          message: `Spec must not contain more than ${MAX_SPEC_ELEMENTS} elements.`,
+        },
+      ],
+    };
+  }
+  if (!Object.hasOwn(value.elements, value.root)) {
     return {
       ok: false,
       issues: [
@@ -289,13 +388,13 @@ export function validateStreamingSpec(value: unknown): SpecValidationResult {
     };
   }
 
-  const elements: Spec["elements"] = {};
+  const normalizedElements: Array<[string, UIElement]> = [];
   const issues: SpecValidationIssue[] = [];
 
   for (const [key, elementValue] of Object.entries(value.elements)) {
     const normalized = normalizeElement(elementValue);
     if (normalized) {
-      elements[key] = normalized;
+      normalizedElements.push([key, normalized]);
     } else {
       issues.push(...diagnoseElement(key, elementValue));
     }
@@ -305,9 +404,11 @@ export function validateStreamingSpec(value: unknown): SpecValidationResult {
     return { ok: false, issues };
   }
 
+  const elements: Spec["elements"] = Object.fromEntries(normalizedElements);
+
   for (const [key, element] of Object.entries(elements)) {
     for (const child of element.children ?? []) {
-      if (!(child in elements)) {
+      if (!Object.hasOwn(elements, child)) {
         return {
           ok: false,
           issues: [
@@ -332,6 +433,62 @@ export function validateStreamingSpec(value: unknown): SpecValidationResult {
         };
       }
     }
+  }
+
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  let cycleIssue: SpecValidationIssue | null = null;
+  const visit = (key: string): void => {
+    if (cycleIssue || visited.has(key)) {
+      return;
+    }
+    visiting.add(key);
+    for (const child of elements[key]?.children ?? []) {
+      if (visiting.has(child)) {
+        cycleIssue = {
+          path: `elements.${key}.children`,
+          code: "cyclic_reference",
+          message: `Child "${child}" creates a cycle in the element graph.`,
+        };
+        return;
+      }
+      visit(child);
+    }
+    visiting.delete(key);
+    visited.add(key);
+  };
+
+  for (const key of Object.keys(elements)) {
+    visit(key);
+    if (cycleIssue) {
+      return { ok: false, issues: [cycleIssue] };
+    }
+  }
+
+  const reachable = new Set<string>();
+  const pending = [value.root];
+  while (pending.length > 0) {
+    const key = pending.pop();
+    if (!key || reachable.has(key)) {
+      continue;
+    }
+    reachable.add(key);
+    pending.push(...(elements[key]?.children ?? []));
+  }
+
+  const unreachableIssues = Object.keys(elements).flatMap((key): SpecValidationIssue[] =>
+    reachable.has(key)
+      ? []
+      : [
+          {
+            path: `elements.${key}`,
+            code: "unreachable_element",
+            message: `Element "${key}" is not reachable from root "${value.root}".`,
+          },
+        ],
+  );
+  if (unreachableIssues.length > 0) {
+    return { ok: false, issues: unreachableIssues };
   }
 
   return { ok: true, spec: { root: value.root, elements } };

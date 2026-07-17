@@ -16,7 +16,6 @@ export function createTestModelRuntime() {
     },
     assignments: {
       default: "normal",
-      baseline: "normal",
       supervisor: "pro",
     },
   });

@@ -29,20 +29,17 @@ type DeepAgentScaffoldOptions = Pick<
  */
 export type { GenerativeUiOptions } from "../generative-ui/index.ts";
 
-export type CreateBaselineAgentOptions = DeepAgentScaffoldOptions &
+export type CreateScaffoldedAgentOptions = Omit<
+  DeepAgentScaffoldOptions,
+  "backend" | "interruptOn" | "permissions" | "subagents"
+> &
   ModelRuntimeOptions & {
     guardrails?: false | CreateGuardrailDecisionOptions;
     name?: string;
     promptLoader?: PromptLoader;
     langSmith?: LangSmithTracingOptions;
     generativeUi?: GenerativeUiOptions;
-  };
-
-export type CreateScaffoldedAgentOptions = Omit<
-  CreateBaselineAgentOptions,
-  "backend" | "interruptOn" | "permissions" | "subagents"
-> &
-  Omit<
+  } & Omit<
     CreateRuntimeScaffoldOptions,
     | "promptLoader"
     | "researcher"

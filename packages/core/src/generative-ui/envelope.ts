@@ -104,7 +104,7 @@ export const productCardSchema = z.object({
  * Validates a batch of product cards returned by a product-generator specialist.
  */
 export const productCardBatchSchema = z.object({
-  products: z.array(productCardSchema).min(1),
+  products: z.array(productCardSchema).min(1).max(32),
 }) satisfies z.ZodType<ProductCardBatch>;
 
 /**

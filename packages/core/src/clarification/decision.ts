@@ -1,3 +1,4 @@
+import { createWorkflowState, resolveWorkflowDecision } from "../workflow/reducer.ts";
 import { createClarificationConfig } from "./config.ts";
 import { createClarificationState } from "./state.ts";
 import type { ClarificationGateDecision, ResolveClarificationGateOptions } from "./types.ts";
@@ -44,20 +45,7 @@ function executionDecision(
     };
   }
 
-  if (options.reviewStatus === "blocked") {
-    return {
-      phase: "blocked",
-      shouldDelegateToClarifier: false,
-      canPlan: false,
-      canDelegate: false,
-      canFinalize: false,
-      reviewFeedback: options.reviewFeedback,
-      state,
-      config,
-    };
-  }
-
-  if (options.reviewStatus === "changes_required") {
+  if (options.reviewStatus === "changes_required" || options.reviewStatus === "blocked") {
     return {
       phase: "product_generation",
       shouldDelegateToClarifier: false,
@@ -104,11 +92,17 @@ export function resolveClarificationGate(
     options.state ??
     (options.isNewRequest ? createClarificationState(options.request, config) : null);
 
+  // Compatibility projection: the unified workflow controller owns new runtime
+  // behavior; this legacy API retains its result shape for existing callers.
+  const workflowState = createWorkflowState(options.request);
+  workflowState.phase = state?.readyToProceed ? "execution" : "clarification";
+  const workflowDecision = resolveWorkflowDecision(workflowState);
+
   if (!state) {
     return {
       phase: "clarification",
       shouldDelegateToClarifier: true,
-      requiredSubagent: "clarifier",
+      requiredSubagent: workflowDecision.requiredSubagent as "clarifier",
       canPlan: false,
       canDelegate: false,
       canFinalize: false,

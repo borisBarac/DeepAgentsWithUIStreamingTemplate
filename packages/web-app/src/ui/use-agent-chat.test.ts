@@ -3,12 +3,54 @@ import { describe, expect, it } from "bun:test";
 import {
   appendAgentActivity,
   appendAssistantChunk,
+  appendUiSpec,
   type DisplayMessage,
   finishAssistantMessage,
   formatQuestionAnswers,
   previewAssistantTextFromActivity,
   replaceAssistantMessage,
 } from "./use-agent-chat.ts";
+
+describe("generative UI state", () => {
+  it("preserves specs with distinct roots in arrival order", () => {
+    const first = {
+      root: "first",
+      elements: {
+        first: { type: "Text", props: { text: "First" }, children: [] },
+      },
+    };
+    const second = {
+      root: "second",
+      elements: {
+        second: { type: "Text", props: { text: "Second" }, children: [] },
+      },
+    };
+
+    expect(appendUiSpec(appendUiSpec([], first, "spec-1"), second, "spec-2")).toEqual([
+      { id: "spec-1", spec: first },
+      { id: "spec-2", spec: second },
+    ]);
+  });
+
+  it("replaces a spec with the same root and keeps its display id", () => {
+    const first = {
+      root: "card",
+      elements: {
+        card: { type: "Text", props: { text: "Streaming" }, children: [] },
+      },
+    };
+    const complete = {
+      root: "card",
+      elements: {
+        card: { type: "Text", props: { text: "Complete" }, children: [] },
+      },
+    };
+
+    expect(appendUiSpec(appendUiSpec([], first, "spec-1"), complete, "spec-2")).toEqual([
+      { id: "spec-1", spec: complete },
+    ]);
+  });
+});
 
 describe("agent activity state", () => {
   it("keeps one main-agent block through started, delta, completed", () => {
@@ -309,6 +351,20 @@ describe("streaming assistant message state", () => {
 
   it("suppresses partial structured prefixes until a full update can be parsed", () => {
     expect(previewAssistantTextFromActivity('{"type"')).toBe("");
+  });
+
+  it("extracts message text from a versioned model output", () => {
+    expect(
+      previewAssistantTextFromActivity(
+        JSON.stringify({
+          version: 1,
+          updates: [
+            { type: "message", text: "Short final answer." },
+            { type: "ui", spec: { root: "demo", elements: {} } },
+          ],
+        }),
+      ),
+    ).toBe("Short final answer.");
   });
 
   it("keeps one assistant message with the same id while streaming and after completion", () => {

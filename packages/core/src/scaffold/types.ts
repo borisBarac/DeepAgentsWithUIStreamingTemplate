@@ -12,6 +12,7 @@ import type { ClarificationConfig } from "../clarification/index.ts";
 import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
+import type { ReviewConfig } from "../review/index.ts";
 import type { SandboxBackend } from "../sandbox/index.ts";
 
 export type SpecialistRole =
@@ -65,10 +66,9 @@ export type DefaultSubagentCatalog = {
   all: SubAgent[];
 };
 
-export type RuntimeScaffoldArchitecture = "baseline" | "supervisor-specialists";
+export type RuntimeScaffoldArchitecture = "supervisor-specialists";
 
 type RuntimeScaffoldBase = {
-  architecture: RuntimeScaffoldArchitecture;
   virtualFilesystem: VirtualFilesystemLayout;
   memoryFilePaths: readonly string[];
   interruptOn: CreateDeepAgentParams["interruptOn"];
@@ -79,7 +79,6 @@ type RuntimeScaffoldBase = {
 };
 
 export type SupervisorSpecialistsRuntimeScaffold = RuntimeScaffoldBase & {
-  architecture: "supervisor-specialists";
   permissions: NonNullable<CreateDeepAgentParams["permissions"]>;
   subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
   clarification: {
@@ -91,27 +90,18 @@ export type SupervisorSpecialistsRuntimeScaffold = RuntimeScaffoldBase & {
     requiredSubagent?: "product-generator";
   };
   review: {
+    config: ReviewConfig;
     requiredSubagent: "review-agent";
   };
 };
 
-export type BaselineRuntimeScaffold = RuntimeScaffoldBase & {
-  architecture: "baseline";
-  permissions: CreateDeepAgentParams["permissions"];
-  subagents: NonNullable<CreateDeepAgentParams["subagents"]>;
-  clarification?: never;
-  productGeneration?: never;
-  review?: never;
-};
-
-export type DeepAgentBlueprint = SupervisorSpecialistsRuntimeScaffold | BaselineRuntimeScaffold;
-export type RuntimeScaffold = DeepAgentBlueprint;
+export type RuntimeScaffold = SupervisorSpecialistsRuntimeScaffold;
 
 export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions & {
-  mode?: RuntimeScaffoldArchitecture;
   backend?: CreateDeepAgentParams["backend"];
   backendOptions?: CreateCompositeBackendOptions;
   clarificationOptions?: Partial<ClarificationConfig>;
+  reviewOptions?: Partial<ReviewConfig>;
   interruptOn?: CreateDeepAgentParams["interruptOn"];
   memory?: CreateDeepAgentParams["memory"];
   memoryFilePaths?: readonly string[];

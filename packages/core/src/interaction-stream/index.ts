@@ -1,7 +1,12 @@
+import { StructuredOutputParsingError } from "langchain";
+
 import {
   type ClassifiedUpdates,
   classifyUpdateText,
+  type ModelUiOutput,
+  modelUiOutputSchema,
   type NormalizeSpec,
+  normalizeModelUiOutput,
   normalizeSpecToValidateSpec,
   normalizeUiUpdate,
   productCardBatchSchema,
@@ -10,9 +15,11 @@ import {
   type UiUpdate,
   type ValidateSpec,
 } from "../generative-ui/index.ts";
+import { CORE_PROMPT_TEMPLATES } from "../prompts/index.ts";
 
 export type {
   ClassifiedUpdates,
+  ModelUiOutput,
   SpecValidationIssue,
   SpecValidationResult,
   UiUpdate,
@@ -26,6 +33,7 @@ export type AgentInputMessage = {
 
 export type AgentResult = {
   messages?: unknown[];
+  structuredResponse?: unknown;
 };
 
 type StreamTextMessage = {
@@ -57,14 +65,23 @@ export type InteractionStreamOptions = {
   includeActivity?: boolean;
   messages: AgentInputMessage[];
   normalizeSpec?: NormalizeSpec;
+  requireStructuredOutput?: boolean;
   sessionId: string;
   validateSpec?: ValidateSpec;
 };
 
 export type InteractionStreamResult = {
+  failure: InteractionStreamFailure | null;
   finalText: string;
   history: unknown[];
   result: AgentResult | null;
+  structuredOutput: ModelUiOutput | null;
+};
+
+export type InteractionStreamFailure = {
+  attempts: number;
+  code: "invalid_model_output" | "invalid_ui_spec";
+  issues: Array<{ code: string; message: string; path: string }>;
 };
 
 export type InteractionStream = {
@@ -72,7 +89,7 @@ export type InteractionStream = {
   updates: AsyncIterable<UiUpdate>;
 };
 
-const UNRENDERABLE_UI_MESSAGE =
+export const UNRENDERABLE_UI_MESSAGE =
   "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.";
 
 export function createInteractionStream(options: InteractionStreamOptions): InteractionStream {
@@ -157,7 +174,11 @@ export function productBatchTextToUiUpdates(
     return [];
   }
 
-  const batch = productCardBatchSchema.safeParse(parsed);
+  return productBatchValueToUiUpdates(parsed, normalizeSpec);
+}
+
+function productBatchValueToUiUpdates(value: unknown, normalizeSpec?: NormalizeSpec): UiUpdate[] {
+  const batch = productCardBatchSchema.safeParse(value);
   if (!batch.success) {
     return [];
   }
@@ -183,53 +204,62 @@ type Attempt = {
   finalText: string;
   result: AgentResult | null;
   classification: ClassifiedUpdates;
+  hasStructuredResponse: boolean;
+  structuredOutput: ModelUiOutput | null;
 };
 
 async function runInteraction(
   options: InteractionStreamOptions,
   onUpdate: (update: UiUpdate) => void,
 ): Promise<InteractionStreamResult> {
-  const stats = { valid: 0 };
   const validateSpec = resolveValidator(options);
 
-  const attempt1 = await runAttempt(options.messages, options, validateSpec, stats, onUpdate);
+  const attempt1 = await runAttempt(options.messages, options, validateSpec, onUpdate);
   let lastAttempt: Attempt = attempt1;
   let hadRepair = false;
 
   if (attempt1.classification.rejectedUiCandidates.length > 0) {
     const feedback = buildRepairFeedback(attempt1.classification.rejectedUiCandidates);
+    const attemptedOutput = attemptedOutputContent(attempt1);
     const repairMessages: AgentInputMessage[] = [
       ...options.messages,
-      { content: finalTextToAssistantContent(attempt1.finalText), role: "assistant" },
+      ...(attemptedOutput
+        ? ([{ content: attemptedOutput, role: "assistant" }] satisfies AgentInputMessage[])
+        : []),
       { content: feedback, role: "user" },
     ];
-    lastAttempt = await runAttempt(repairMessages, options, validateSpec, stats, onUpdate);
+    lastAttempt = await runAttempt(repairMessages, options, validateSpec, onUpdate);
     hadRepair = true;
-  } else if (stats.valid === 0) {
-    emitUpdates(
-      productBatchTextToUiUpdates(attempt1.finalText, options.normalizeSpec),
-      stats,
-      onUpdate,
-    );
-    if (stats.valid === 0) {
-      lastAttempt = await runAttempt(options.messages, options, validateSpec, stats, onUpdate);
-      emitUpdates(
-        productBatchTextToUiUpdates(lastAttempt.finalText, options.normalizeSpec),
-        stats,
-        onUpdate,
-      );
-    }
   }
 
-  if (stats.valid === 0) {
-    const uiIntended = lastAttempt.classification.rejectedUiCandidates.length > 0;
-    emitUpdates([messageFallbackFor(lastAttempt.finalText, uiIntended)], stats, onUpdate);
-  }
+  const stillRejected = lastAttempt.classification.rejectedUiCandidates.length > 0;
+  const committedUpdates = dedupeUiUpdatesByRoot(
+    stillRejected
+      ? [{ type: "message", text: UNRENDERABLE_UI_MESSAGE } satisfies UiUpdate]
+      : lastAttempt.classification.accepted.length > 0
+        ? lastAttempt.classification.accepted
+        : [messageFallbackFor(lastAttempt.finalText, false)],
+  );
+  emitUpdates(committedUpdates, onUpdate);
+
+  const structuredOutput =
+    stillRejected || lastAttempt.structuredOutput === null
+      ? null
+      : normalizeModelUiOutput({ version: 1, updates: committedUpdates });
+  const failure = stillRejected ? failureFromAttempt(lastAttempt, hadRepair ? 2 : 1) : null;
 
   return {
+    failure,
     finalText: lastAttempt.finalText,
-    history: buildHistory(options.messages, lastAttempt, hadRepair),
+    history: buildHistory(
+      options.messages,
+      lastAttempt,
+      hadRepair,
+      committedUpdates,
+      structuredOutput,
+    ),
     result: lastAttempt.result,
+    structuredOutput,
   };
 }
 
@@ -247,19 +277,131 @@ async function runAttempt(
   messages: AgentInputMessage[],
   options: InteractionStreamOptions,
   validateSpec: ValidateSpec | undefined,
-  stats: { valid: number },
   onUpdate: (update: UiUpdate) => void,
 ): Promise<Attempt> {
-  const { finalText, result } = await streamWithEvents(
-    options.agent,
-    { messages },
-    options.sessionId,
-    options.includeActivity ? onUpdate : undefined,
-    options.includeActivity ? onUpdate : undefined,
+  const productUpdates: UiUpdate[] = [];
+  let streamResult: { finalText: string; result: AgentResult | null };
+  try {
+    streamResult = await streamWithEvents(
+      options.agent,
+      { messages },
+      options.sessionId,
+      options.includeActivity ? onUpdate : undefined,
+      options.includeActivity ? onUpdate : undefined,
+      (value) => productUpdates.push(...productBatchValueToUiUpdates(value, options.normalizeSpec)),
+    );
+  } catch (error) {
+    if (!hasStructuredOutputParsingCause(error)) throw error;
+    return {
+      finalText: "",
+      result: null,
+      classification: classifyInvalidModelUiOutput(undefined),
+      hasStructuredResponse: false,
+      structuredOutput: null,
+    };
+  }
+  const { finalText, result } = streamResult;
+  const hasStructuredResponse = result?.structuredResponse !== undefined;
+  const expectsStructuredOutput = hasStructuredResponse || options.requireStructuredOutput === true;
+  const structuredOutput = hasStructuredResponse
+    ? normalizeModelUiOutput(result?.structuredResponse)
+    : null;
+  const mainClassification = structuredOutput
+    ? classifyModelUiOutput(structuredOutput, validateSpec)
+    : expectsStructuredOutput
+      ? classifyInvalidModelUiOutput(result?.structuredResponse)
+      : classifyUpdateText(finalText, validateSpec);
+  const legacyProductUpdates = expectsStructuredOutput
+    ? []
+    : productBatchTextToUiUpdates(finalText, options.normalizeSpec);
+  if (
+    !expectsStructuredOutput &&
+    mainClassification.accepted.length === 0 &&
+    mainClassification.rejectedUiCandidates.length === 0 &&
+    legacyProductUpdates.length === 0 &&
+    finalText.trim()
+  ) {
+    mainClassification.accepted.push(finalTextToMessageFallback(finalText));
+  }
+  const accepted = [...productUpdates, ...legacyProductUpdates, ...mainClassification.accepted];
+  const rejectedUiCandidates = [...mainClassification.rejectedUiCandidates];
+  const classification = { accepted, rejectedUiCandidates };
+  return { finalText, result, classification, hasStructuredResponse, structuredOutput };
+}
+
+function hasStructuredOutputParsingCause(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current != null && !seen.has(current)) {
+    if (current instanceof StructuredOutputParsingError) return true;
+    seen.add(current);
+    if (typeof current !== "object" || !("cause" in current)) return false;
+    current = current.cause;
+  }
+  return false;
+}
+
+function classifyModelUiOutput(
+  output: ModelUiOutput,
+  validateSpec?: ValidateSpec,
+): ClassifiedUpdates {
+  const accepted: UiUpdate[] = [];
+  const rejectedUiCandidates: RejectedUiCandidate[] = [];
+  for (const update of output.updates) {
+    if (update.type !== "ui" || !validateSpec) {
+      accepted.push(update as UiUpdate);
+      continue;
+    }
+    const result = validateSpec(update.spec);
+    if (result.ok) {
+      accepted.push({ type: "ui", spec: result.spec });
+    } else {
+      rejectedUiCandidates.push({ line: JSON.stringify(update), issues: result.issues });
+    }
+  }
+  return { accepted, rejectedUiCandidates };
+}
+
+function classifyInvalidModelUiOutput(value: unknown): ClassifiedUpdates {
+  const result = modelUiOutputSchema.safeParse(value);
+  const issues = result.success
+    ? []
+    : result.error.issues.map((issue) => ({
+        path: issue.path.length > 0 ? issue.path.join(".") : "$",
+        code: "invalid_model_output",
+        message: issue.message,
+      }));
+  return {
+    accepted: [],
+    rejectedUiCandidates: [
+      {
+        line: stringifyForFeedback(value),
+        issues:
+          issues.length > 0
+            ? issues
+            : [
+                {
+                  path: "$",
+                  code: "invalid_model_output",
+                  message: "The model response did not match the required JSON object.",
+                },
+              ],
+      },
+    ],
+  };
+}
+
+function failureFromAttempt(attempt: Attempt, attempts: number): InteractionStreamFailure {
+  const issues = attempt.classification.rejectedUiCandidates.flatMap(
+    (candidate) => candidate.issues,
   );
-  const classification = classifyUpdateText(finalText, validateSpec);
-  emitUpdates(classification.accepted, stats, onUpdate);
-  return { finalText, result, classification };
+  return {
+    attempts,
+    code: issues.some((issue) => issue.code !== "invalid_model_output")
+      ? "invalid_ui_spec"
+      : "invalid_model_output",
+    issues,
+  };
 }
 
 function messageFallbackFor(finalText: string, uiIntended: boolean): UiUpdate {
@@ -273,17 +415,41 @@ function buildHistory(
   messages: AgentInputMessage[],
   attempt: Attempt,
   hadRepair: boolean,
+  committedUpdates: UiUpdate[],
+  structuredOutput: ModelUiOutput | null,
 ): unknown[] {
+  if (structuredOutput) {
+    return [...messages, { content: JSON.stringify(structuredOutput), role: "assistant" }];
+  }
   if (!hadRepair) {
     const outputMessages = attempt.result?.messages;
     if (Array.isArray(outputMessages) && outputMessages.length > 0) {
       return outputMessages;
     }
   }
-  return [
-    ...messages,
-    { content: finalTextToAssistantContent(attempt.finalText), role: "assistant" },
-  ];
+  const visibleText = committedUpdates
+    .filter((update): update is Extract<UiUpdate, { type: "message" }> => update.type === "message")
+    .map((update) => update.text.trim())
+    .filter(Boolean)
+    .join("\n");
+  if (visibleText) {
+    return [...messages, { content: visibleText, role: "assistant" }];
+  }
+  if (!attempt.hasStructuredResponse && attempt.finalText.trim()) {
+    return [...messages, { content: attempt.finalText.trim(), role: "assistant" }];
+  }
+  return messages;
+}
+
+function dedupeUiUpdatesByRoot(updates: UiUpdate[]): UiUpdate[] {
+  const lastIndexByRoot = new Map<string, number>();
+  for (let index = 0; index < updates.length; index += 1) {
+    const update = updates[index];
+    if (update?.type === "ui") lastIndexByRoot.set(update.spec.root, index);
+  }
+  return updates.filter(
+    (update, index) => update.type !== "ui" || lastIndexByRoot.get(update.spec.root) === index,
+  );
 }
 
 const feedbackEncoder = new TextEncoder();
@@ -293,8 +459,7 @@ function byteLength(text: string): number {
 }
 
 function buildRepairFeedback(candidates: RejectedUiCandidate[]): string {
-  const header =
-    'The following UI updates were rejected during validation. Replace ONLY the rejected updates with valid NDJSON. Do not repeat already-accepted updates. If you cannot produce valid UI, respond with a single {"type":"message","text":"..."} update.';
+  const header = CORE_PROMPT_TEMPLATES.uiRepairFeedback.trim();
   const blocks: string[] = [header];
   let size = byteLength(header);
   const capped = candidates.slice(0, MAX_REJECTED_LINES);
@@ -321,14 +486,24 @@ function formatRejectedCandidate(index: number, candidate: RejectedUiCandidate):
   return `Rejected update ${index}:\n${candidate.line}\nIssues:\n${issues.join("\n")}`;
 }
 
-function emitUpdates(
-  updates: UiUpdate[],
-  stats: { valid: number },
-  onUpdate: (update: UiUpdate) => void,
-): void {
+function emitUpdates(updates: UiUpdate[], onUpdate: (update: UiUpdate) => void): void {
   for (const update of updates) {
     onUpdate(update);
-    stats.valid += 1;
+  }
+}
+
+function attemptedOutputContent(attempt: Attempt): string | null {
+  if (attempt.hasStructuredResponse) {
+    return stringifyForFeedback(attempt.result?.structuredResponse);
+  }
+  return attempt.finalText.trim() || null;
+}
+
+function stringifyForFeedback(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
   }
 }
 
@@ -338,6 +513,7 @@ async function streamWithEvents(
   sessionId: string,
   onMainAgentActivity?: (update: Extract<UiUpdate, { type: "main_agent_activity" }>) => void,
   onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
+  onProductBatch?: (value: unknown) => void,
 ): Promise<{ finalText: string; result: AgentResult | null }> {
   if (!agent.streamEvents) {
     const result = (await agent.invoke(input)) as AgentResult;
@@ -364,23 +540,23 @@ async function streamWithEvents(
   };
 
   const drainSubagents = async () => {
-    if (!run.subagents || !onSubagentActivity) {
+    if (!run.subagents) {
       return;
     }
 
     const activityStreams: Promise<void>[] = [];
     for await (const subagent of run.subagents) {
-      activityStreams.push(drainSubagentActivity(subagent, onSubagentActivity));
+      activityStreams.push(drainSubagentActivity(subagent, onSubagentActivity, onProductBatch));
     }
     await Promise.all(activityStreams);
   };
 
-  try {
-    const [result] = await Promise.all([run.output, drainMessages(), drainSubagents()]);
-    onMainAgentActivity?.({ type: "main_agent_activity", event: "completed" });
-    const finalText = streamedText || extractFinalResponse(result);
-    return { finalText, result };
-  } catch (error) {
+  const settlements = await Promise.allSettled([run.output, drainMessages(), drainSubagents()]);
+  const failure = settlements.find(
+    (settlement): settlement is PromiseRejectedResult => settlement.status === "rejected",
+  );
+  if (failure) {
+    const error = failure.reason;
     onMainAgentActivity?.({
       type: "main_agent_activity",
       event: "error",
@@ -388,16 +564,24 @@ async function streamWithEvents(
     });
     throw error;
   }
+  const output = settlements[0];
+  if (output?.status !== "fulfilled") {
+    throw new Error("Agent output did not settle.");
+  }
+  onMainAgentActivity?.({ type: "main_agent_activity", event: "completed" });
+  const finalText = extractFinalResponse(output.value) || streamedText;
+  return { finalText, result: output.value };
 }
 
 async function drainSubagentActivity(
   subagent: StreamSubagent,
-  onSubagentActivity: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
+  onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
+  onProductBatch?: (value: unknown) => void,
 ): Promise<void> {
   const subagentName = subagentNameFrom(subagent);
   const subagentRunId = crypto.randomUUID();
   try {
-    onSubagentActivity({
+    onSubagentActivity?.({
       type: "subagent_activity",
       subagentRunId,
       subagentName,
@@ -409,7 +593,7 @@ async function drainSubagentActivity(
       for await (const message of subagent.messages) {
         for await (const token of message.text) {
           if (token) {
-            onSubagentActivity({
+            onSubagentActivity?.({
               type: "subagent_activity",
               subagentRunId,
               subagentName,
@@ -421,15 +605,30 @@ async function drainSubagentActivity(
       }
     }
 
-    await subagent.output;
-    onSubagentActivity({
+    const output = await subagent.output;
+    if (subagentName === "product-generator") {
+      const structuredResponse = extractStructuredResponse(output);
+      if (structuredResponse !== undefined) {
+        onProductBatch?.(structuredResponse);
+      } else {
+        const text = extractSubagentOutputText(output);
+        if (text) {
+          try {
+            onProductBatch?.(JSON.parse(text));
+          } catch {
+            // Invalid legacy product output is ignored.
+          }
+        }
+      }
+    }
+    onSubagentActivity?.({
       type: "subagent_activity",
       subagentRunId,
       subagentName,
       event: "completed",
     });
   } catch (error) {
-    onSubagentActivity({
+    onSubagentActivity?.({
       type: "subagent_activity",
       subagentRunId,
       subagentName,
@@ -437,6 +636,21 @@ async function drainSubagentActivity(
       message: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function extractStructuredResponse(output: unknown): unknown {
+  if (typeof output !== "object" || output === null || !("structuredResponse" in output)) {
+    return undefined;
+  }
+  return output.structuredResponse;
+}
+
+function extractSubagentOutputText(output: unknown): string | undefined {
+  if (typeof output === "string") return output;
+  if (typeof output !== "object" || output === null) return undefined;
+  if ("content" in output) return extractTextContent(output.content);
+  if ("messages" in output) return extractFinalResponse(output as AgentResult);
+  return undefined;
 }
 
 function extractTextContent(content: unknown): string | undefined {

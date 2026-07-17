@@ -2,6 +2,7 @@
 
 import {
   applyUiUpdate,
+  normalizeModelUiOutput,
   parseUpdateLine,
   type UiUpdate,
   type UpdateHandlers,
@@ -26,6 +27,11 @@ export type DisplayMessage = ChatMessage & {
 export type DisplayAgentActivity = (MainAgentActivityUpdate | SubagentActivityUpdate) & {
   id: string;
   rawText?: string;
+};
+
+export type DisplayUiSpec = {
+  id: string;
+  spec: Spec;
 };
 
 function createId(): string {
@@ -124,6 +130,8 @@ export type AgentChat = {
   agentActivity: DisplayAgentActivity[];
   assistantText: string;
   input: string;
+  uiSpecs: DisplayUiSpec[];
+  latestSpecs: Spec[];
   latestSpec: Spec | null;
   error: string | null;
   loading: boolean;
@@ -138,10 +146,20 @@ function appendChunk(current: string, delta: string): string {
 }
 
 export function previewAssistantTextFromActivity(raw: string): string {
-  const parsedMessages = raw
-    .split("\n")
-    .map((line) => parseUpdateLine(line.trim()))
-    .flatMap((update) => (update?.type === "message" ? [update.text] : []))
+  let modelOutput = null;
+  try {
+    modelOutput = normalizeModelUiOutput(JSON.parse(raw));
+  } catch {
+    // The streamed value may be incomplete or use the legacy line format.
+  }
+  const updates =
+    modelOutput?.updates ??
+    raw
+      .split("\n")
+      .map((line) => parseUpdateLine(line.trim()))
+      .filter((update): update is UiUpdate => update !== null);
+  const parsedMessages = updates
+    .flatMap((update) => (update.type === "message" ? [update.text] : []))
     .map((text) => text.trim())
     .filter(Boolean);
 
@@ -225,11 +243,23 @@ export function formatQuestionAnswers(
   return lines.length > 0 ? `Here are my answers:\n${lines.join("\n")}` : "";
 }
 
+export function appendUiSpec(
+  current: readonly DisplayUiSpec[],
+  spec: Spec,
+  id = createId(),
+): DisplayUiSpec[] {
+  const existingIndex = current.findIndex((entry) => entry.spec.root === spec.root);
+  if (existingIndex === -1) {
+    return [...current, { id, spec }];
+  }
+  return current.map((entry, index) => (index === existingIndex ? { ...entry, spec } : entry));
+}
+
 export function useAgentChat(): AgentChat {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [agentActivity, setAgentActivity] = useState<DisplayAgentActivity[]>([]);
   const [input, setInput] = useState("");
-  const [latestSpec, setLatestSpec] = useState<Spec | null>(null);
+  const [uiSpecs, setUiSpecs] = useState<DisplayUiSpec[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [answeredQuestionIds, setAnsweredQuestionIds] = useState<Set<string>>(() => new Set());
@@ -261,6 +291,8 @@ export function useAgentChat(): AgentChat {
       "",
     [messages],
   );
+  const latestSpecs = useMemo(() => uiSpecs.map((entry) => entry.spec), [uiSpecs]);
+  const latestSpec = latestSpecs.at(-1) ?? null;
 
   const submitText = useCallback(async (rawMessage: string) => {
     const message = rawMessage.trim();
@@ -270,6 +302,7 @@ export function useAgentChat(): AgentChat {
 
     loadingRef.current = true;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
+    setUiSpecs([]);
     setError(null);
     setInput("");
     setLoading(true);
@@ -318,7 +351,7 @@ export function useAgentChat(): AgentChat {
         ]);
       },
       onSpec: (spec) => {
-        setLatestSpec(spec);
+        setUiSpecs((current) => appendUiSpec(current, spec));
       },
       onError: (errorMessage) => setError(errorMessage),
       onMainAgentActivity: (update) => {
@@ -452,6 +485,8 @@ export function useAgentChat(): AgentChat {
     agentActivity,
     assistantText,
     input,
+    uiSpecs,
+    latestSpecs,
     latestSpec,
     error,
     loading,

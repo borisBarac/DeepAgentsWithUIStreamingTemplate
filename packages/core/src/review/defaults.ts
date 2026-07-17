@@ -1,8 +1,9 @@
-export const DEFAULT_REVIEW_MAX_REVISIONS = 2;
+/** Total real reviewer calls allowed per top-level invocation. */
+export const DEFAULT_REVIEW_MAX_REVISIONS = 4;
 
 export const DEFAULT_REVIEW_AGENT_NAME = "review-agent";
 
 export const DEFAULT_REVIEW_AGENT_DESCRIPTION =
-  "Reviews completed work for correctness, completeness, safety, and adherence to the user request.";
+  "Review one complete outcome packet and return specific, executor-routable revision instructions.";
 
 export const APPROVED_REVIEW_MIN_SCORE = 85;

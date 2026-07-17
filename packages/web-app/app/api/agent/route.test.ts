@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import {
   finalTextToMessageFallback,
+  type ModelUiOutput,
   productBatchTextToUiUpdates,
 } from "@deep-agent-template/core/interaction-stream";
 
@@ -20,7 +21,10 @@ type FakeStreamRun = {
     }>;
     output?: Promise<unknown>;
   }>;
-  output: Promise<{ messages: Array<{ content: string; role: "assistant" }> }>;
+  output: Promise<{
+    messages: Array<{ content: string; role: "assistant" }>;
+    structuredResponse?: unknown;
+  }>;
 };
 
 type FakeAgent = {
@@ -59,6 +63,36 @@ function asyncIterableFrom<T>(items: T[]): AsyncIterable<T> {
   };
 }
 
+function structuredOutputFromText(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) return undefined;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "version" in parsed &&
+      "updates" in parsed
+    ) {
+      return parsed;
+    }
+    return { version: 1, updates: [parsed] };
+  } catch {
+    return { version: 1, updates: [{ type: "message", text: trimmed }] };
+  }
+}
+
+function addStructuredOutput(result: {
+  messages: Array<{ content: string; role: "assistant" }>;
+  structuredResponse?: unknown;
+}): typeof result {
+  if (result.structuredResponse !== undefined) return result;
+  return {
+    ...result,
+    structuredResponse: structuredOutputFromText(result.messages.at(-1)?.content ?? ""),
+  };
+}
+
 function createBufferedCompletionAgent(
   chunks: string[],
   output: Deferred<{ messages: Array<{ content: string; role: "assistant" }> }>,
@@ -71,7 +105,7 @@ function createBufferedCompletionAgent(
             text: asyncIterableFrom(chunks),
           },
         ]),
-        output: output.promise,
+        output: output.promise.then(addStructuredOutput),
       };
     },
   };
@@ -89,9 +123,41 @@ function createStreamingAgent(outputs: string[]): FakeAgent {
             text: asyncIterableFrom([text]),
           },
         ]),
+        output: Promise.resolve(
+          addStructuredOutput({ messages: [{ content: text, role: "assistant" }] }),
+        ),
+      };
+    },
+  };
+}
+
+function createStructuredAgent(structuredResponse: unknown): FakeAgent {
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([]),
         output: Promise.resolve({
-          messages: [{ content: text, role: "assistant" }],
+          messages: [],
+          structuredResponse,
         }),
+      };
+    },
+  };
+}
+
+function createInspectableStructuredAgent(structuredResponses: unknown[]): InspectableAgent {
+  let index = 0;
+  const inputs: InspectableAgent["inputs"] = [];
+  return {
+    inputs,
+    async streamEvents(input) {
+      if (input) inputs.push(input);
+      const structuredResponse =
+        structuredResponses[Math.min(index, structuredResponses.length - 1)];
+      index += 1;
+      return {
+        messages: asyncIterableFrom([]),
+        output: Promise.resolve({ messages: [], structuredResponse }),
       };
     },
   };
@@ -117,7 +183,7 @@ function createLiveSubagentAgent(
             output: Promise.resolve({}),
           },
         ]),
-        output: output.promise,
+        output: output.promise.then(addStructuredOutput),
       };
     },
   };
@@ -143,9 +209,11 @@ function createInspectableAgent(
             text: asyncIterableFrom([text]),
           },
         ]),
-        output: Promise.resolve({
-          messages: resultMessages ?? [{ content: text, role: "assistant" }],
-        }),
+        output: Promise.resolve(
+          addStructuredOutput({
+            messages: resultMessages ?? [{ content: text, role: "assistant" }],
+          }),
+        ),
       };
     },
   };
@@ -173,9 +241,9 @@ function createSubagentStreamingAgent(): FakeAgent {
             output: Promise.resolve({}),
           },
         ]),
-        output: Promise.resolve({
-          messages: [{ content: text, role: "assistant" }],
-        }),
+        output: Promise.resolve(
+          addStructuredOutput({ messages: [{ content: text, role: "assistant" }] }),
+        ),
       };
     },
   };
@@ -213,9 +281,9 @@ function createRepeatedSameNameSubagentAgent(): FakeAgent {
             output: Promise.resolve({}),
           },
         ]),
-        output: Promise.resolve({
-          messages: [{ content: text, role: "assistant" }],
-        }),
+        output: Promise.resolve(
+          addStructuredOutput({ messages: [{ content: text, role: "assistant" }] }),
+        ),
       };
     },
   };
@@ -322,6 +390,128 @@ describe("finalTextToMessageFallback", () => {
 });
 
 describe("POST", () => {
+  it("persists validated structured output separately from message history", async () => {
+    const route = await import("./route.ts");
+    const structuredOutput = {
+      version: 1,
+      updates: [{ type: "message", text: "Structured result" }],
+    } satisfies ModelUiOutput;
+    route.setAgentForTest(
+      createStructuredAgent(structuredOutput) as unknown as Parameters<
+        typeof route.setAgentForTest
+      >[0],
+    );
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "generate concepts", sessionId: "structured-session" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    await expect(readNdjson(response)).resolves.toEqual([
+      { type: "message", text: "Structured result" },
+    ]);
+    expect(route.getSessionStateForTest("structured-session")).toEqual({
+      failure: null,
+      history: [
+        { content: "generate concepts", role: "user" },
+        { content: JSON.stringify(structuredOutput), role: "assistant" },
+      ],
+      structuredOutput,
+    });
+  });
+
+  it("carries committed structured output into the next turn without repair context", async () => {
+    const route = await import("./route.ts");
+    const firstOutput = {
+      version: 1,
+      updates: [
+        {
+          type: "ui",
+          spec: {
+            root: "one",
+            elements: { one: { type: "Text", props: { text: "One" } } },
+          },
+        },
+      ],
+    };
+    const agent = createInspectableStructuredAgent([
+      firstOutput,
+      { version: 1, updates: [{ type: "message", text: "Updated" }] },
+    ]);
+    route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
+
+    await readNdjson(
+      await POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "first", sessionId: "structured-continuation" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    );
+    await readNdjson(
+      await POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "second", sessionId: "structured-continuation" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    );
+
+    const committedFirstOutput = {
+      version: 1,
+      updates: [
+        {
+          type: "ui",
+          spec: {
+            root: "one",
+            elements: {
+              one: { type: "Text", props: { text: "One" }, children: [] },
+            },
+          },
+        },
+      ],
+    };
+    expect(agent.inputs[1]?.messages).toEqual([
+      { content: "first", role: "user" },
+      { content: JSON.stringify(committedFirstOutput), role: "assistant" },
+      { content: "second", role: "user" },
+    ]);
+  });
+
+  it("persists typed structured-output failure state after the bounded retry", async () => {
+    const route = await import("./route.ts");
+    const invalid = {
+      version: 1,
+      updates: [{ type: "error", message: "model error" }],
+    };
+    const agent = createInspectableStructuredAgent([invalid, invalid]);
+    route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
+
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "generate", sessionId: "structured-failure-state" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+
+    await expect(readNdjson(response)).resolves.toEqual([
+      {
+        type: "message",
+        text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+      },
+    ]);
+    expect(route.getSessionStateForTest("structured-failure-state")).toMatchObject({
+      failure: { attempts: 2, code: "invalid_model_output" },
+      structuredOutput: null,
+    });
+  });
+
   it("buffers chunked main-agent output until the run completes", async () => {
     const route = await import("./route.ts");
     const output = createDeferred<{ messages: Array<{ content: string; role: "assistant" }> }>();

@@ -4,6 +4,9 @@ import {
   catalogPrompt,
   componentPropsSchemas,
   componentTypes,
+  MAX_SPEC_ELEMENTS,
+  MAX_SPEC_JSON_BYTES,
+  MAX_SPEC_STRING_LENGTH,
   normalizeStreamingSpec,
   validateStreamingSpec,
 } from "./contract.ts";
@@ -240,6 +243,189 @@ describe("generative-ui contract", () => {
           expect.objectContaining({
             path: "elements.grid.children",
             code: "missing_child",
+          }),
+        ],
+      });
+    });
+
+    it("does not treat inherited object keys as child elements", () => {
+      const result = validateStreamingSpec({
+        root: "grid",
+        elements: {
+          grid: {
+            type: "ProductGrid",
+            props: {},
+            children: ["toString"],
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.grid.children",
+            code: "missing_child",
+          }),
+        ],
+      });
+    });
+
+    it("accepts a valid visibility condition", () => {
+      expect(
+        normalizeStreamingSpec({
+          root: "text",
+          elements: {
+            text: {
+              type: "Text",
+              props: { text: "Hello" },
+              children: [],
+              visible: { auth: "signedIn" },
+            },
+          },
+        }),
+      ).toEqual({
+        root: "text",
+        elements: {
+          text: {
+            type: "Text",
+            props: { text: "Hello" },
+            children: [],
+            visible: { auth: "signedIn" },
+          },
+        },
+      });
+    });
+
+    it("rejects an invalid visibility condition", () => {
+      const result = validateStreamingSpec({
+        root: "text",
+        elements: {
+          text: {
+            type: "Text",
+            props: { text: "Hello" },
+            children: [],
+            visible: { auth: "admin" },
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.text.visible",
+            code: "invalid_visibility",
+          }),
+        ],
+      });
+    });
+
+    it("rejects indirect child cycles", () => {
+      const result = validateStreamingSpec({
+        root: "a",
+        elements: {
+          a: { type: "Stack", props: {}, children: ["b"] },
+          b: { type: "Card", props: {}, children: ["c"] },
+          c: { type: "Text", props: { text: "Loop" }, children: ["a"] },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            code: "cyclic_reference",
+          }),
+        ],
+      });
+    });
+
+    it("rejects elements that are unreachable from the root", () => {
+      const result = validateStreamingSpec({
+        root: "root",
+        elements: {
+          root: { type: "Text", props: { text: "Hello" }, children: [] },
+          orphan: { type: "Text", props: { text: "Hidden" }, children: [] },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.orphan",
+            code: "unreachable_element",
+          }),
+        ],
+      });
+    });
+
+    it("rejects specs with too many elements", () => {
+      const elements = Object.fromEntries(
+        Array.from({ length: MAX_SPEC_ELEMENTS + 1 }, (_, index) => [
+          `text-${index}`,
+          { type: "Text", props: { text: String(index) }, children: [] },
+        ]),
+      );
+
+      const result = validateStreamingSpec({ root: "text-0", elements });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements",
+            code: "too_many_elements",
+          }),
+        ],
+      });
+    });
+
+    it("rejects oversized strings", () => {
+      const result = validateStreamingSpec({
+        root: "text",
+        elements: {
+          text: {
+            type: "Text",
+            props: { text: "x".repeat(MAX_SPEC_STRING_LENGTH + 1) },
+            children: [],
+          },
+        },
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "elements.text.props.text",
+            code: "string_too_long",
+          }),
+        ],
+      });
+    });
+
+    it("rejects oversized JSON payloads", () => {
+      const elementCount = 80;
+      const elements = Object.fromEntries(
+        Array.from({ length: elementCount }, (_, index) => [
+          `text-${index}`,
+          {
+            type: "Text",
+            props: { text: "x".repeat(Math.floor(MAX_SPEC_JSON_BYTES / elementCount)) },
+            children: index + 1 < elementCount ? [`text-${index + 1}`] : [],
+          },
+        ]),
+      );
+
+      const result = validateStreamingSpec({ root: "text-0", elements });
+
+      expect(result).toEqual({
+        ok: false,
+        issues: [
+          expect.objectContaining({
+            path: "$",
+            code: "payload_too_large",
           }),
         ],
       });

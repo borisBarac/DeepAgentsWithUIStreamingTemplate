@@ -72,7 +72,6 @@ class CapturingChatModel extends BaseChatModel {
 }
 
 const testPromptLoader: PromptLoader = {
-  getBaselinePrompt: () => "baseline prompt",
   getSupervisorPrompt: () => "supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",

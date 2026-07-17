@@ -111,7 +111,7 @@ export default function Home() {
     visibleMessages,
     agentActivity,
     input,
-    latestSpec,
+    uiSpecs,
     error,
     loading,
     canSubmit,
@@ -122,7 +122,7 @@ export default function Home() {
   const { bottomAnchorRef, containerRef: messageListRef } = useStickyBottomScroll([
     visibleMessages,
     agentActivity,
-    latestSpec,
+    uiSpecs,
     error,
   ]);
 
@@ -185,8 +185,10 @@ export default function Home() {
           <span>{loading ? "Processing" : "Idle"}</span>
         </div>
         <div className="preview-surface">
-          {latestSpec ? (
-            <JsonRenderPreview loading={loading} spec={latestSpec} />
+          {uiSpecs.length > 0 ? (
+            uiSpecs.map(({ id, spec }) => (
+              <JsonRenderPreview key={id} loading={loading} spec={spec} />
+            ))
           ) : (
             <div className="preview-empty">Product details appear here.</div>
           )}

@@ -98,6 +98,12 @@ describe("productCardBatchSchema", () => {
     expect(productCardBatchSchema.safeParse({ products: [] }).success).toBe(false);
     expect(productCardBatchSchema.safeParse({ products: [completeCard] }).success).toBe(true);
   });
+
+  it("rejects more than 32 products", () => {
+    expect(
+      productCardBatchSchema.safeParse({ products: Array(33).fill(completeCard) }).success,
+    ).toBe(false);
+  });
 });
 
 describe("productCardsToUiUpdates", () => {

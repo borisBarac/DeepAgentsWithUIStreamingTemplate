@@ -1,11 +1,30 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
-import baselinePromptText from "../../prompts/baseline.md" with { type: "text" };
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
+import generativeUiJsonObjectPromptText from "../../prompts/generative-ui-json-object.md" with {
+  type: "text",
+};
 import imageDesignerPromptText from "../../prompts/image-designer.md" with { type: "text" };
+import jsonRenderCatalogPromptText from "../../prompts/json-render-catalog.md" with {
+  type: "text",
+};
+import productCardCatalogPromptText from "../../prompts/product-card-catalog.md" with {
+  type: "text",
+};
 import productGeneratorPromptText from "../../prompts/product-generator.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
+import safetyClassificationPromptText from "../../prompts/safety-classification.md" with {
+  type: "text",
+};
+import structuredJsonPromptText from "../../prompts/structured-json.md" with { type: "text" };
+import structuredJsonCorrectionPromptText from "../../prompts/structured-json-correction.md" with {
+  type: "text",
+};
 import supervisorPromptText from "../../prompts/supervisor.md" with { type: "text" };
+import taskScopeClassificationPromptText from "../../prompts/task-scope-classification.md" with {
+  type: "text",
+};
+import uiRepairFeedbackPromptText from "../../prompts/ui-repair-feedback.md" with { type: "text" };
 import {
   type ClarificationConfig,
   createClarificationConfig,
@@ -14,7 +33,6 @@ import {
 } from "../clarification/index.ts";
 
 export interface PromptLoader {
-  getBaselinePrompt(): string;
   getSupervisorPrompt(config: Partial<ClarificationConfig>): string;
   getClarifierPrompt(config: Partial<ClarificationConfig>): string;
   getResearcherPrompt(): string;
@@ -24,12 +42,26 @@ export interface PromptLoader {
   getReviewAgentPrompt(): string;
 }
 
-function renderPromptTemplate(template: string, values: Record<string, string | number>): string {
+export function renderPromptTemplate(
+  template: string,
+  values: Record<string, string | number> = {},
+): string {
   return Object.entries(values).reduce(
     (rendered, [key, value]) => rendered.replaceAll(`{{${key}}}`, String(value)),
     template,
   );
 }
+
+export const CORE_PROMPT_TEMPLATES = {
+  generativeUiJsonObject: generativeUiJsonObjectPromptText,
+  jsonRenderCatalog: jsonRenderCatalogPromptText,
+  productCardCatalog: productCardCatalogPromptText,
+  safetyClassification: safetyClassificationPromptText,
+  structuredJson: structuredJsonPromptText,
+  structuredJsonCorrection: structuredJsonCorrectionPromptText,
+  taskScopeClassification: taskScopeClassificationPromptText,
+  uiRepairFeedback: uiRepairFeedbackPromptText,
+} as const;
 
 function getCurrentDateTimeContext(): { currentDateTime: string; timezone: string } {
   const now = new Date();
@@ -52,10 +84,6 @@ function getCurrentDateTimeContext(): { currentDateTime: string; timezone: strin
 }
 
 export class MarkdownPromptLoader implements PromptLoader {
-  getBaselinePrompt(): string {
-    return renderPromptTemplate(baselinePromptText, getCurrentDateTimeContext());
-  }
-
   getSupervisorPrompt(config: Partial<ClarificationConfig> = {}): string {
     const clarification = createClarificationConfig(config);
 
@@ -96,8 +124,6 @@ export class MarkdownPromptLoader implements PromptLoader {
 }
 
 export const DEFAULT_PROMPT_LOADER = new MarkdownPromptLoader();
-
-export const DEFAULT_BASELINE_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getBaselinePrompt();
 
 export function createSupervisorSystemPrompt(
   clarificationOptions: Partial<ClarificationConfig> = {},

@@ -1,6 +1,5 @@
-import { HumanMessage } from "@langchain/core/messages";
 import type { SubAgent } from "deepagents";
-import { type AgentMiddleware, providerStrategy, StructuredOutputParsingError } from "langchain";
+import { providerStrategy } from "langchain";
 import type { ZodType } from "zod";
 
 import {
@@ -18,68 +17,8 @@ import {
 } from "../review/index.ts";
 import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
+import { createStructuredJsonMiddleware, withStructuredJsonPrompt } from "./structured-json.ts";
 import type { CreateDefaultSubagentCatalogOptions, DefaultSubagentCatalog } from "./types.ts";
-
-const STRUCTURED_JSON_PROMPT = "Respond with a single JSON object matching the requested schema.";
-const STRUCTURED_JSON_CORRECTION =
-  "Your previous response was not valid JSON matching the requested schema. Return one corrected JSON object only. Required JSON Schema:";
-const STRUCTURED_JSON_MIDDLEWARE_NAME = "ScaffoldStructuredJsonObject";
-
-function hasStructuredOutputParsingCause(error: unknown): boolean {
-  const seen = new Set<unknown>();
-  let current = error;
-  while (current != null && !seen.has(current)) {
-    if (current instanceof StructuredOutputParsingError) return true;
-    seen.add(current);
-    if (typeof current !== "object" || !("cause" in current)) return false;
-    current = current.cause;
-  }
-  return false;
-}
-
-function createStructuredJsonMiddleware(schema: unknown): AgentMiddleware {
-  return {
-    name: STRUCTURED_JSON_MIDDLEWARE_NAME,
-    wrapModelCall: async (request, handler) => {
-      const enforcedRequest = {
-        ...request,
-        modelSettings: {
-          ...request.modelSettings,
-          response_format: { type: "json_object" },
-          outputConfig: undefined,
-          responseSchema: undefined,
-          ls_structured_output_format: undefined,
-          strict: undefined,
-        },
-      };
-
-      try {
-        return await handler(enforcedRequest);
-      } catch (error) {
-        if (!hasStructuredOutputParsingCause(error)) {
-          throw error;
-        }
-
-        return handler({
-          ...enforcedRequest,
-          messages: [
-            ...request.messages,
-            new HumanMessage(`${STRUCTURED_JSON_CORRECTION}\n${JSON.stringify(schema)}`),
-          ],
-        });
-      }
-    },
-  };
-}
-
-/**
- * Required for OpenAI-compatible providers that use `response_format:
- * json_object`: DeepSeek rejects requests whose prompt does not mention "json"
- * (`400 Prompt must contain the word 'json'`).
- */
-function withStructuredJsonPrompt(prompt: string): string {
-  return `${prompt}\n\n${STRUCTURED_JSON_PROMPT}`;
-}
 
 function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
   if (!override) {
@@ -112,7 +51,9 @@ function structuredSubagent<TSchema extends ZodType>(
   return {
     ...subagent,
     responseFormat,
-    middleware: [createStructuredJsonMiddleware(responseFormat.schema)],
+    middleware: [
+      createStructuredJsonMiddleware(responseFormat.schema, { retryOnParsingError: true }),
+    ],
   };
 }
 
@@ -133,7 +74,7 @@ export function createDefaultSubagentCatalog(
     structuredSubagent({
       name: "clarifier",
       description:
-        "Gate new requests, ask only the missing high-value questions, and return structured readiness decisions.",
+        "Advance requests to execution readiness with bounded high-value questions and explicit assumptions at the cap.",
       systemPrompt: withStructuredJsonPrompt(promptLoader.getClarifierPrompt(clarification)),
       responseFormat: clarificationResultSchema,
       model: options.modelRuntime?.getModelForRole("clarifier"),
@@ -207,7 +148,7 @@ export function createDefaultSubagentCatalog(
       structuredSubagent({
         name: "product-generator",
         description:
-          "Turn clarified product requests into a batch of structured product cards (title, description, image) for the streaming interaction zone.",
+          "Generate or revise the complete enabled product-card batch from the completed outcome and review feedback.",
         systemPrompt: withStructuredJsonPrompt(promptLoader.getProductGeneratorPrompt()),
         responseFormat: productCardBatchSchema,
         model: options.modelRuntime?.getModelForRole("product-generator"),

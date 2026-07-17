@@ -5,7 +5,6 @@ import type { PromptLoader } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "./runtime.ts";
 
 const testPromptLoader: PromptLoader = {
-  getBaselinePrompt: () => "baseline prompt",
   getSupervisorPrompt: () => "supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",
@@ -32,7 +31,6 @@ describe("runtime scaffold defaults", () => {
   it("creates the default runtime shape", () => {
     const scaffold = createRuntimeScaffold({ imageGenerationService: testImageGenerationService });
 
-    expect(scaffold.architecture).toBe("supervisor-specialists");
     expect(scaffold.memoryFilePaths).toEqual([
       "/memory/project-facts.md",
       "/memory/user-preferences.md",
@@ -50,7 +48,10 @@ describe("runtime scaffold defaults", () => {
       },
     });
     expect(scaffold.productGeneration).toEqual({ enabled: false });
-    expect(scaffold.review).toEqual({ requiredSubagent: "review-agent" });
+    expect(scaffold.review).toEqual({
+      config: { maxRevisions: 4 },
+      requiredSubagent: "review-agent",
+    });
   });
 
   it("lets explicit runtime overrides win over defaults", () => {
@@ -106,12 +107,19 @@ describe("runtime scaffold defaults", () => {
     expect(scaffold.generativeUi).toBeUndefined();
     expect(scaffold.productGeneration).toEqual({ enabled: false });
     expect(scaffold.review.requiredSubagent).toBe("review-agent");
+    expect(scaffold.review.config.maxRevisions).toBe(4);
     expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).not.toContain(
       "product-generator",
     );
   });
 
-  it("appends the product-generator NDJSON prompt, metadata, and subagent when generativeUi is enabled", () => {
+  it("honours review revision overrides", () => {
+    const scaffold = createRuntimeScaffold({ reviewOptions: { maxRevisions: 7 } });
+    expect(scaffold.review.config.maxRevisions).toBe(7);
+    expect(scaffold.review.config.maxRevisions).not.toBe(4);
+  });
+
+  it("appends the product-generator JSON object prompt, metadata, and subagent when generativeUi is enabled", () => {
     const scaffold = createRuntimeScaffold({
       promptLoader: testPromptLoader,
       imageGenerationService: testImageGenerationService,
@@ -125,33 +133,11 @@ describe("runtime scaffold defaults", () => {
     });
     expect(scaffold.review.requiredSubagent).toBe("review-agent");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("supervisor prompt");
-    expect(JSON.stringify(scaffold.systemPrompt)).toContain("newline-delimited JSON");
+    expect(JSON.stringify(scaffold.systemPrompt)).toContain("Return one JSON object");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("product-card");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("EXTRA CATALOG");
     expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).toContain(
       "product-generator",
     );
-  });
-
-  it("creates a baseline scaffold without supervisor-specialist defaults", () => {
-    const scaffold = createRuntimeScaffold({
-      mode: "baseline",
-      promptLoader: testPromptLoader,
-      generativeUi: { catalogPrompt: "BASELINE CATALOG" },
-    });
-
-    expect(scaffold.architecture).toBe("baseline");
-    expect(scaffold.systemPrompt).toContain("baseline prompt");
-    expect(scaffold.systemPrompt).toContain("BASELINE CATALOG");
-    expect(scaffold.systemPrompt).toContain("newline-delimited JSON");
-    expect(scaffold.backend).toBeUndefined();
-    expect(scaffold.memory).toBeUndefined();
-    expect(scaffold.memoryFilePaths).toEqual([]);
-    expect(scaffold.permissions).toBeUndefined();
-    expect(scaffold.subagents).toEqual([]);
-    expect(scaffold.clarification).toBeUndefined();
-    expect(scaffold.productGeneration).toBeUndefined();
-    expect(scaffold.review).toBeUndefined();
-    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
   });
 });

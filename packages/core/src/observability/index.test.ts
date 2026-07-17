@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { createBaselineAgent, createScaffoldedAgent } from "../agent/index.ts";
+import { createScaffoldedAgent } from "../agent/index.ts";
 import { createTestModelRuntime } from "../agent/test-helpers.ts";
 import { configureLangSmithTracing } from "./index.ts";
 
@@ -112,18 +112,6 @@ describe("configureLangSmithTracing", () => {
 });
 
 describe("LangSmith factory integration", () => {
-  it("applies typed tracing options in the baseline factory", () => {
-    createBaselineAgent({
-      guardrails: false,
-      modelRuntime: createTestModelRuntime(),
-      langSmith: { apiKey: "baseline-langsmith-key", projectName: "baseline-project" },
-    });
-
-    expect(process.env.LANGSMITH_API_KEY).toBe("baseline-langsmith-key");
-    expect(process.env.LANGSMITH_PROJECT).toBe("baseline-project");
-    expect(process.env.LANGSMITH_TRACING).toBe("true");
-  });
-
   it("applies typed tracing options in the scaffolded factory", () => {
     createScaffoldedAgent({
       guardrails: false,

@@ -1,5 +1,6 @@
 import { AIMessage, createMiddleware } from "langchain";
 import { z } from "zod";
+import { CORE_PROMPT_TEMPLATES, renderPromptTemplate } from "../prompts/index.ts";
 
 import { type AgentStateLike, getLatestHumanMessageText } from "./state.ts";
 import type { DeepAgentMiddleware, GuardrailSafetyOptions, SafetyClassifier } from "./types.ts";
@@ -21,17 +22,7 @@ const refusal = (reason: string): AIMessage =>
   new AIMessage(`I cannot help with that request because it failed a guardrail check: ${reason}.`);
 
 export function createSafetyPrompt(request: string): string {
-  return [
-    "You are a content-safety classifier. Decide whether the user request is unsafe.",
-    "Flag a request when it solicits, describes, or facilitates genuinely harmful content,",
-    "such as hate, harassment, violence, self-harm, sexual content involving minors, or",
-    "illegal activity. Do not flag ordinary software-engineering or research requests.",
-    "",
-    "Return only the requested structured decision as a JSON object.",
-    "",
-    "User request:",
-    request,
-  ].join("\n");
+  return renderPromptTemplate(CORE_PROMPT_TEMPLATES.safetyClassification, { request });
 }
 
 export async function classifySafetyRequest(
@@ -42,8 +33,7 @@ export async function classifySafetyRequest(
     await classifier.invoke([
       {
         role: "system",
-        content:
-          "You are a strict content-safety classifier. Return only the requested structured decision as a JSON object.",
+        content: CORE_PROMPT_TEMPLATES.structuredJson.trim(),
       },
       {
         role: "user",
