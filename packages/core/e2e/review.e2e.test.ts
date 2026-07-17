@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import { createAgentFromRuntimeScaffold } from "../src/agent/runtime.ts";
 import {
   createDefaultSubagentCatalog,
   createRuntimeScaffold,
-  createScaffoldedAgent,
   reviewReportSchema,
 } from "../src/index.ts";
 import {
@@ -22,6 +22,12 @@ const REVIEW_PROMPT = [
   "Submit this candidate to your review subagent and relay the structured review report unchanged.",
 ].join("\n");
 
+const REVIEW_SUPERVISOR_PROMPT = [
+  "You are a deterministic review supervisor for a live e2e test.",
+  "Use the `task` tool exactly once with `subagent_type: review-agent`.",
+  "Relay the review-agent result unchanged.",
+].join("\n");
+
 describe.skipIf(!hasLiveLLMCredentials)(
   "createRuntimeScaffold reviewer live structured output",
   () => {
@@ -34,16 +40,18 @@ describe.skipIf(!hasLiveLLMCredentials)(
 
       const scaffold = createRuntimeScaffold({
         modelRuntime,
+        systemPrompt: REVIEW_SUPERVISOR_PROMPT,
         subagents: [reviewer],
       });
       if (scaffold.subagents.length !== 1) {
         throw new Error("createRuntimeScaffold did not surface exactly one subagent.");
       }
 
-      const agent = createScaffoldedAgent({
+      const agent = createAgentFromRuntimeScaffold({
+        factoryName: "createScaffoldedAgent",
+        scaffold,
         modelRuntime,
         guardrails: false,
-        subagents: scaffold.subagents,
       });
 
       const result = (await agent.invoke({

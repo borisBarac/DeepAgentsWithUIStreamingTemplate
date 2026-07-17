@@ -1,10 +1,10 @@
 import { describe, expect, it } from "bun:test";
+import { InMemoryStore } from "@langchain/langgraph";
 import type { SubAgent } from "deepagents";
-
+import { createAgentFromRuntimeScaffold } from "../src/agent/runtime.ts";
 import {
   createDefaultSubagentCatalog,
   createRuntimeScaffold,
-  createScaffoldedAgent,
   productCardBatchSchema,
 } from "../src/index.ts";
 import {
@@ -57,14 +57,15 @@ describe.skipIf(!hasLiveLLMCredentials)(
         throw new Error("createRuntimeScaffold did not surface exactly one subagent.");
       }
 
-      expect(JSON.stringify(scaffold.systemPrompt)).toContain("newline-delimited JSON");
+      expect(JSON.stringify(scaffold.systemPrompt)).toContain("Return one JSON object");
       expect(JSON.stringify(scaffold.systemPrompt)).toContain("product-card");
 
-      const agent = createScaffoldedAgent({
+      const agent = createAgentFromRuntimeScaffold({
+        factoryName: "createScaffoldedAgent",
+        scaffold,
         modelRuntime,
         guardrails: false,
-        systemPrompt: PRODUCT_SUPERVISOR_PROMPT,
-        subagents: scaffold.subagents,
+        store: new InMemoryStore(),
       });
 
       const result = (await agent.invoke({

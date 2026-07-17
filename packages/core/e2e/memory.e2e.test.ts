@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-
+import { createAgentFromRuntimeScaffold } from "../src/agent/runtime.ts";
 import {
   createInMemoryMemoryStore,
   createMemoryRepository,
-  createScaffoldedAgent,
+  createRuntimeScaffold,
   DEFAULT_PROJECT_FACTS_PATH,
   DEFAULT_USER_PREFERENCES_PATH,
 } from "../src/index.ts";
@@ -37,11 +37,18 @@ function transcriptOf(messages: unknown[] | undefined): string {
 function buildMemoryAgent() {
   const store = createInMemoryMemoryStore();
   const repo = createMemoryRepository({ store, userId: MEMORY_USER_ID });
-  const agent = createScaffoldedAgent({
-    modelRuntime: createDefaultModelRuntime(false),
+  const modelRuntime = createDefaultModelRuntime(false);
+  const scaffold = createRuntimeScaffold({
+    backendOptions: { memoryStore: store, memoryUserId: MEMORY_USER_ID },
+    modelRuntime,
+    subagents: [],
+  });
+  const agent = createAgentFromRuntimeScaffold({
+    factoryName: "createScaffoldedAgent",
+    scaffold,
+    modelRuntime,
     guardrails: false,
     store,
-    memoryUserId: MEMORY_USER_ID,
   });
   return { agent, repo };
 }

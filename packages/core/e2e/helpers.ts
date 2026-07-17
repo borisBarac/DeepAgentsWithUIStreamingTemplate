@@ -25,6 +25,9 @@ export function createDefaultModelRuntime(thinking: boolean) {
       fast: {
         connection: "default",
         model: MODEL_ID,
+        temperature: 0,
+        maxRetries: 3,
+        timeout: 30_000,
         providerOptions: {
           modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
         },
@@ -32,6 +35,9 @@ export function createDefaultModelRuntime(thinking: boolean) {
       normal: {
         connection: "default",
         model: MODEL_ID,
+        temperature: 0,
+        maxRetries: 3,
+        timeout: 30_000,
         providerOptions: {
           modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
         },
@@ -39,6 +45,9 @@ export function createDefaultModelRuntime(thinking: boolean) {
       pro: {
         connection: "default",
         model: MODEL_ID,
+        temperature: 0,
+        maxRetries: 3,
+        timeout: 30_000,
         providerOptions: {
           modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
         },
@@ -66,17 +75,60 @@ export function findTaskToolMessage(messages: unknown[] | undefined): TaskToolMe
 
 const JSON_FENCE_PATTERN = /```(?:json)?\s*([\s\S]*?)```/;
 
+function braceBalancedSpans(content: string): string[] {
+  const spans: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+    if (char === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === "}") {
+      if (depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start !== -1) {
+          spans.push(content.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+  }
+  return spans;
+}
+
 function extractJsonObject(content: string): string {
+  const candidates: string[] = [];
   const fenced = content.match(JSON_FENCE_PATTERN);
-  if (fenced?.[1]) {
-    return fenced[1].trim();
+  if (fenced?.[1]) candidates.push(fenced[1].trim());
+  candidates.push(content.trim());
+  for (const span of braceBalancedSpans(content)) candidates.push(span);
+
+  for (const candidate of candidates) {
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // try the next candidate
+    }
   }
-  const start = content.indexOf("{");
-  const end = content.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    return content.slice(start, end + 1);
-  }
-  return content.trim();
+  return candidates[candidates.length - 1] ?? content.trim();
 }
 
 export function parseTaskToolPayload(message: TaskToolMessage | undefined): StructuredPayload {
@@ -91,4 +143,37 @@ export function parseTaskToolPayload(message: TaskToolMessage | undefined): Stru
   } catch {
     throw new Error(`The task tool content was not valid JSON: ${message.content.slice(0, 200)}`);
   }
+}
+
+export function findTaskToolMessageWithValidPayload(
+  messages: unknown[] | undefined,
+  validate: (payload: StructuredPayload) => boolean,
+): TaskToolMessage | undefined {
+  if (!messages) return undefined;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as Record<string, unknown> | undefined;
+    if (!message || typeof message !== "object") continue;
+    if (typeof message.tool_call_id !== "string" || message.name !== "task") continue;
+    if (typeof message.content !== "string" || message.content.length === 0) continue;
+    let payload: StructuredPayload;
+    try {
+      payload = JSON.parse(extractJsonObject(message.content)) as StructuredPayload;
+    } catch {
+      continue;
+    }
+    let accepted = false;
+    try {
+      accepted = validate(payload);
+    } catch {
+      accepted = false;
+    }
+    if (accepted) {
+      return {
+        name: message.name,
+        content: message.content,
+        tool_call_id: message.tool_call_id,
+      };
+    }
+  }
+  return undefined;
 }

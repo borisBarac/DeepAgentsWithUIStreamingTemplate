@@ -1,13 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { StateBackend } from "deepagents";
 import type { AgentMiddleware } from "langchain";
-
+import { createAgentFromRuntimeScaffold } from "../src/agent/runtime.ts";
 import {
   connectLinkloomResearchTools,
   createAppConfig,
   createDefaultSubagentCatalog,
   createRuntimeScaffold,
-  createScaffoldedAgent,
 } from "../src/index.ts";
 import {
   type AgentInvokeResult,
@@ -110,13 +109,11 @@ describe.skipIf(!hasLiveLLMCredentials)(
           throw new Error("createRuntimeScaffold did not surface exactly one subagent.");
         }
 
-        const agent = createScaffoldedAgent({
-          backend: scaffold.backend,
+        const agent = createAgentFromRuntimeScaffold({
+          factoryName: "createScaffoldedAgent",
+          scaffold,
           modelRuntime,
-          permissions: scaffold.permissions,
           guardrails: false,
-          systemPrompt: scaffold.systemPrompt,
-          subagents: scaffold.subagents,
         });
 
         const result = (await agent.invoke({
