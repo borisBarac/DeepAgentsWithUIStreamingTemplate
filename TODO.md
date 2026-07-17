@@ -1,3 +1,4 @@
 # TODO
-- handle response with no UI spec
-- add mode for single clarification
+- optimize prompts to finish the flow
+- clean up promts and move all to promts folder
+- delete the unused functions
