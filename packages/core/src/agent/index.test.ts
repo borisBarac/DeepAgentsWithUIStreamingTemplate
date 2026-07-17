@@ -1,12 +1,13 @@
 import { describe, expect, it } from "bun:test";
+import { providerStrategy } from "langchain";
+import { z } from "zod";
 
 import { createInMemoryMemoryStore, createUserMemoryNamespace } from "../memory/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
-import { createBaselineAgent, createScaffoldedAgent } from "./index.ts";
+import { createScaffoldedAgent } from "./index.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";
 
 const testPromptLoader: PromptLoader = {
-  getBaselinePrompt: () => "custom baseline prompt",
   getSupervisorPrompt: () => "custom supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
   getResearcherPrompt: () => "custom researcher prompt",
@@ -141,67 +142,15 @@ describe("createScaffoldedAgent", () => {
     expectSystemPromptToContain(agent.options.systemPrompt, "product-card");
     expectSystemPromptToContain(agent.options.systemPrompt, "APP CATALOG");
   });
-});
 
-describe("createBaselineAgent", () => {
-  it("uses the bundled baseline prompt by default", () => {
-    const agent = createBaselineAgent({
-      modelRuntime: createTestModelRuntime(),
-    });
-
-    expectSystemPromptToContain(agent.options.systemPrompt, "helpful general-purpose deep agent");
-  });
-
-  it("uses a custom prompt loader for the baseline prompt", () => {
-    const agent = createBaselineAgent({
-      modelRuntime: createTestModelRuntime(),
-      promptLoader: testPromptLoader,
-    });
-
-    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
-  });
-
-  it("does not allow untyped callers to override the baseline prompt inline", () => {
-    const agent = createBaselineAgent({
-      modelRuntime: createTestModelRuntime(),
-      promptLoader: testPromptLoader,
-      systemPrompt: "inline override",
-    } as Parameters<typeof createBaselineAgent>[0]);
-
-    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
-    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("inline override");
-  });
-
-  it("uses the baseline role assignment", () => {
-    const agent = createBaselineAgent({
-      guardrails: false,
-      modelRuntime: createTestModelRuntime(),
-    });
-
-    expect((agent.options.model as { model?: string }).model).toBe("normal-model");
-  });
-
-  it("appends the generative-UI prompt when generativeUi is set", () => {
-    const agent = createBaselineAgent({
-      modelRuntime: createTestModelRuntime(),
-      promptLoader: testPromptLoader,
-      generativeUi: { catalogPrompt: "CATALOG PROMPT FOR BUTTONS" },
-    });
-
-    expectSystemPromptToContain(agent.options.systemPrompt, "custom baseline prompt");
-    expectSystemPromptToContain(agent.options.systemPrompt, "CATALOG PROMPT FOR BUTTONS");
-    expectSystemPromptToContain(agent.options.systemPrompt, "newline-delimited JSON");
-    expectSystemPromptToContain(agent.options.systemPrompt, "JsonRenderSpec");
-  });
-
-  it("does not append the generative-UI prompt when generativeUi is absent", () => {
-    const agent = createBaselineAgent({
-      modelRuntime: createTestModelRuntime(),
-      promptLoader: testPromptLoader,
-    });
-
-    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("JsonRenderSpec");
-    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("NDJSON");
+  it("rejects a custom response format when generative UI owns the contract", () => {
+    expect(() =>
+      createScaffoldedAgent({
+        modelRuntime: createTestModelRuntime(),
+        generativeUi: {},
+        responseFormat: providerStrategy(z.object({ answer: z.string() })),
+      }),
+    ).toThrow("cannot combine generativeUi with a custom responseFormat");
   });
 });
 

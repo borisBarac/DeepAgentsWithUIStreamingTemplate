@@ -5,13 +5,12 @@
   "type": "module",
   "scripts": {
     "test": "bun test",
-    "test:e2e": "RUN_LIVE_E2E=1 bun --env-file=../../.env --env-file=.env test e2e",
+    "test:e2e": "RUN_LIVE_E2E=1 LANGSMITH_TRACING=false bun --env-file=../../.env --env-file=.env test --parallel=1 e2e",
     "setup:browser": "cd node_modules/@boris.barac/linkloom && bun run setup:browser"
   },
   "exports": {
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
-    "./agent/baseline": "./src/agent/baseline.ts",
     "./generative-ui": "./src/generative-ui/index.ts",
     "./interaction-stream": "./src/interaction-stream/index.ts",
     "./models": "./src/models/index.ts",

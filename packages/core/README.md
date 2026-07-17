@@ -113,17 +113,17 @@ const modelRuntime = createModelRuntimeFromEnv();
 const agent = createScaffoldedAgent({ modelRuntime });
 ```
 
-The CLI and web app both use this factory. The CLI's `--model` flag (and a
-`normalModel` option) override the normal tier; pass `profiles` to set
-per-category options like `temperature` or `providerOptions`, and `assignments`
-to override the default role→category mapping.
+The web app uses this factory. Pass a `normalModel` option to override the
+normal tier; pass `profiles` to set per-category options like `temperature` or
+`providerOptions`, and `assignments` to override the default role→category
+mapping.
 
 ### Default role → category table
 
 | Category | Roles |
 |----------|-------|
 | `fast`   | `clarifier`, *(task-scope guardrail classifier)* |
-| `normal` | `baseline`, `researcher`, `image-designer`, `product-generator`, `coder` |
+| `normal` | `researcher`, `image-designer`, `product-generator`, `coder` |
 | `pro`    | `supervisor`, `analyst`, `reviewer`, `finalizer` |
 
 `assignments.default` resolves to `normal`. The guardrail task-scope classifier
@@ -270,12 +270,6 @@ const result = await agent.invoke({
 });
 ```
 
-`createBaselineAgent` provides a thinner single-agent control variant.
-
-`createBaselineAgent` always gets its system prompt from `PromptLoader.getBaselinePrompt()`. With
-the default loader, that is `packages/core/prompts/baseline.md`; callers cannot bypass the loader
-with an inline `systemPrompt`.
-
 The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists. Supplying `imageGenerationService` adds the default `image-designer` specialist with its image-generation tool; without that service, the specialist is omitted. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
 The default `clarifier` subagent is wired with the bundled `clarify-deeply` skill via `skills: ["/skills/clarify-deeply/"]`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
@@ -322,10 +316,9 @@ Use a custom loader when your application wants to source prompts from another p
 import type { PromptLoader } from "@deep-agent-template/core";
 
 const promptLoader: PromptLoader = {
-  getBaselinePrompt: () => "Baseline prompt",
   getSupervisorPrompt: (config) => `Supervisor prompt with ${config.maxRounds} rounds`,
   getClarifierPrompt: (config) => `Clarifier prompt with ${config.questionsPerRound} questions`,
-  getResearcherPrompt: () => "Researcher prompt",
+  getResearcherPrompt: () => "Research prompt",
   getAnalystPrompt: () => "Analyst prompt",
   getReviewAgentPrompt: () => "Review prompt",
 };
@@ -338,11 +331,11 @@ For scaffolded agents, explicit `systemPrompt` values and
 
 ## Guardrails
 
-The scaffolded and baseline factories install two LangChain middleware guardrails by default. Pass
+The scaffolded factory installs two LangChain middleware guardrails by default. Pass
 `guardrails: false` only when a caller explicitly needs to opt out:
 
 - `ContentSafetyGuardrail` runs before the agent and classifies the latest user message with the configured model runtime, blocking requests the model flags as unsafe.
-- `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope. The scaffolded and baseline factories default this classifier to the `fast` model category.
+- `TaskScopeGuardrailMiddleware` runs before the agent and uses structured output to classify whether the request is inside the project task scope. The scaffolded factory defaults this classifier to the `fast` model category.
 
 Task-scope policy is controlled by markdown files under `packages/core/guardrails/`. These files are
 loaded by `DEFAULT_GUARDRAIL_POLICY_LOADER` and passed into `TaskScopeGuardrailMiddleware` before the

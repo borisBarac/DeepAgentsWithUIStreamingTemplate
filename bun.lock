@@ -12,17 +12,6 @@
         "typescript": "^5.9.3",
       },
     },
-    "packages/cli": {
-      "name": "@deep-agent-template/cli",
-      "version": "0.1.0",
-      "bin": {
-        "deep-agent-template": "./src/index.ts",
-      },
-      "dependencies": {
-        "@deep-agent-template/core": "workspace:*",
-        "@deep-agent-template/image-gen": "workspace:*",
-      },
-    },
     "packages/core": {
       "name": "@deep-agent-template/core",
       "version": "0.1.0",
@@ -126,8 +115,6 @@
     "@csstools/css-syntax-patches-for-csstree": ["@csstools/css-syntax-patches-for-csstree@1.1.5", "", { "peerDependencies": { "css-tree": "^3.2.1" }, "optionalPeers": ["css-tree"] }, "sha512-oNjBvzLq2GPZtJphCjLqXow/cHySHSgtxvKZb7OqSZ/xHgw6NWNhfad+6AB9cLeVm6eA9d/qMll3JdEHjy6M+A=="],
 
     "@csstools/css-tokenizer": ["@csstools/css-tokenizer@4.0.0", "", {}, "sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA=="],
-
-    "@deep-agent-template/cli": ["@deep-agent-template/cli@workspace:packages/cli"],
 
     "@deep-agent-template/core": ["@deep-agent-template/core@workspace:packages/core"],
 

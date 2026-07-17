@@ -55,7 +55,6 @@ describe("index barrel exports", () => {
 
   it("re-exports prompt constants from the prompts module", () => {
     expect(index.DEFAULT_ANALYST_SYSTEM_PROMPT).toBe(prompts.DEFAULT_ANALYST_SYSTEM_PROMPT);
-    expect(index.DEFAULT_BASELINE_SYSTEM_PROMPT).toBe(prompts.DEFAULT_BASELINE_SYSTEM_PROMPT);
     expect(index.DEFAULT_CLARIFIER_SYSTEM_PROMPT).toBe(prompts.DEFAULT_CLARIFIER_SYSTEM_PROMPT);
     expect(index.DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT).toBe(
       prompts.DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
