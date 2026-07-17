@@ -53,7 +53,6 @@ export {
   composeGenerativeUiPrompt,
   composeProductGeneratorPrompt,
   GENERATIVE_UI_JSON_OBJECT_PROMPT,
-  GENERATIVE_UI_NDJSON_PROMPT,
   type GenerativeUiOptions,
   imagePlaceholderPropsSchema,
   type ModelUiOutput,

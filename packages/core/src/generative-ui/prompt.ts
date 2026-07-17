@@ -3,9 +3,6 @@ import { CORE_PROMPT_TEMPLATES } from "../prompts/index.ts";
 /** The model-facing versioned JSON object contract. */
 export const GENERATIVE_UI_JSON_OBJECT_PROMPT = CORE_PROMPT_TEMPLATES.generativeUiJsonObject;
 
-/** @deprecated Use {@link GENERATIVE_UI_JSON_OBJECT_PROMPT}. */
-export const GENERATIVE_UI_NDJSON_PROMPT = GENERATIVE_UI_JSON_OBJECT_PROMPT;
-
 /**
  * The product-card catalog fragment. Describes the `product-card` json-render
  * component that streamed product details must use, plus the multi-product

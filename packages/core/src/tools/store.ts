@@ -23,7 +23,7 @@ function freezeToolDefinitions<TRole extends RoleId>(
   );
 }
 
-function freezeRoleToolsets<TRole extends RoleId>(
+export function freezeSpecializedRoleToolsets<TRole extends RoleId>(
   roles: readonly SpecializedRoleToolset<TRole>[],
 ): readonly SpecializedRoleToolset<TRole>[] {
   return Object.freeze(
@@ -107,7 +107,7 @@ export function createSpecializedToolStore<TRole extends RoleId = RoleId>(
   assertRoleToolIdsExist(options.tools, options.roles);
 
   const toolDefinitions = freezeToolDefinitions(options.tools);
-  const roleToolsets = freezeRoleToolsets(options.roles);
+  const roleToolsets = freezeSpecializedRoleToolsets(options.roles);
   const toolDefinitionsById = new Map(
     toolDefinitions.map((toolDefinition) => [toolDefinition.id, toolDefinition]),
   );

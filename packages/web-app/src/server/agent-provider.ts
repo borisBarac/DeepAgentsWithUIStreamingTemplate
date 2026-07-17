@@ -1,8 +1,7 @@
 import { createScaffoldedAgent, type DeepAgent } from "@deep-agent-template/core/agent";
+import { catalogPrompt } from "@deep-agent-template/core/generative-ui";
 import { createModelRuntimeFromEnv } from "@deep-agent-template/core/models";
 import { createImageGenerationServiceFromEnv } from "@deep-agent-template/image-gen";
-
-import { catalogPrompt } from "../ui/schema.ts";
 
 function parseClarificationMaxRounds(): number | undefined {
   const raw = process.env.WEB_APP_CLARIFICATION_MAX_ROUNDS;

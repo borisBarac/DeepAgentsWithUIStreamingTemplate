@@ -1,12 +1,5 @@
 "use client";
 
-import type { Spec, UIElement } from "@json-render/core";
-import { defineCatalog } from "@json-render/core";
-import type { ComponentRegistry } from "@json-render/react";
-import { JSONUIProvider, Renderer, schema, useDataBinding } from "@json-render/react";
-import { createContext, useContext, useState } from "react";
-import { z } from "zod";
-
 import {
   buttonPropsSchema,
   cardPropsSchema,
@@ -17,7 +10,13 @@ import {
   stackPropsSchema,
   textInputPropsSchema,
   textPropsSchema,
-} from "./schema.ts";
+} from "@deep-agent-template/core/generative-ui";
+import type { Spec, UIElement } from "@json-render/core";
+import { defineCatalog } from "@json-render/core";
+import type { ComponentRegistry } from "@json-render/react";
+import { JSONUIProvider, Renderer, schema, useDataBinding } from "@json-render/react";
+import { createContext, useContext, useState } from "react";
+import { z } from "zod";
 
 export const uiCatalog = defineCatalog(schema, {
   components: {

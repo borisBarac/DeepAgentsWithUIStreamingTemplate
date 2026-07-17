@@ -9,7 +9,7 @@ export type StructuredJsonMiddlewareOptions = {
   retryOnParsingError?: boolean;
 };
 
-function hasStructuredOutputParsingCause(error: unknown): boolean {
+export function hasStructuredOutputParsingCause(error: unknown): boolean {
   const seen = new Set<unknown>();
   let current = error;
   while (current != null && !seen.has(current)) {

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "bun:test";
-
-import { registry } from "./catalog.tsx";
 import {
   catalogPrompt,
   componentPropsSchemas,
   componentTypes,
   normalizeStreamingSpec,
   productCardSchema,
-} from "./schema.ts";
+} from "@deep-agent-template/core/generative-ui";
+
+import { registry } from "./catalog.tsx";
 
 const validSamples = {
   Button: { label: "Continue", action: "demo_action" },

@@ -659,7 +659,11 @@ describe("createInteractionStream", () => {
         if (input) agent.inputs.push(input);
         return {
           messages: asyncIterableFrom([]),
-          output: Promise.reject(new StructuredOutputParsingError("providerStrategy", ["bad"])),
+          output: Promise.reject(
+            new Error("inner middleware", {
+              cause: new StructuredOutputParsingError("providerStrategy", ["bad"]),
+            }),
+          ),
         };
       }
       return delegate(input);

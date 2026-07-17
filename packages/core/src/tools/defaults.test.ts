@@ -4,7 +4,9 @@ import { createDefaultSpecialistRoleToolsets } from "./defaults.ts";
 
 describe("default specialist role toolsets", () => {
   it("provides explicit default specialist role bundles", () => {
-    expect(createDefaultSpecialistRoleToolsets()).toEqual([
+    const roles = createDefaultSpecialistRoleToolsets();
+
+    expect(roles).toEqual([
       {
         role: "clarifier",
         toolIds: [],
@@ -38,5 +40,10 @@ describe("default specialist role toolsets", () => {
         purpose: "Final quality review, approval decisions, and required-change verification.",
       },
     ]);
+    expect(Object.isFrozen(roles)).toBeTrue();
+    for (const role of roles) {
+      expect(Object.isFrozen(role)).toBeTrue();
+      expect(Object.isFrozen(role.toolIds)).toBeTrue();
+    }
   });
 });

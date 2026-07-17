@@ -1,5 +1,3 @@
-import { StructuredOutputParsingError } from "langchain";
-
 import {
   type ClassifiedUpdates,
   classifyUpdateText,
@@ -16,6 +14,7 @@ import {
   type ValidateSpec,
 } from "../generative-ui/index.ts";
 import { CORE_PROMPT_TEMPLATES } from "../prompts/index.ts";
+import { hasStructuredOutputParsingCause } from "../scaffold/structured-json.ts";
 
 export type {
   ClassifiedUpdates,
@@ -327,18 +326,6 @@ async function runAttempt(
   const rejectedUiCandidates = [...mainClassification.rejectedUiCandidates];
   const classification = { accepted, rejectedUiCandidates };
   return { finalText, result, classification, hasStructuredResponse, structuredOutput };
-}
-
-function hasStructuredOutputParsingCause(error: unknown): boolean {
-  const seen = new Set<unknown>();
-  let current = error;
-  while (current != null && !seen.has(current)) {
-    if (current instanceof StructuredOutputParsingError) return true;
-    seen.add(current);
-    if (typeof current !== "object" || !("cause" in current)) return false;
-    current = current.cause;
-  }
-  return false;
 }
 
 function classifyModelUiOutput(
