@@ -30,3 +30,15 @@ bd close <id>         # Complete work
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
 
+## Quality Gates
+
+Run these safe offline gates after code changes:
+
+```bash
+bun test
+bun run typecheck
+bun run check
+bun run --filter @deep-agent-template/web-app build
+```
+
+Live LLM, LangSmith, and Replicate tests are separate opt-in checks.
