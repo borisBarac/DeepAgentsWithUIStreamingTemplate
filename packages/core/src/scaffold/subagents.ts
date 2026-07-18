@@ -2,7 +2,11 @@ import type { SubAgent } from "deepagents";
 
 import { type ClarificationConfig, createClarificationConfig } from "../clarification/index.ts";
 import { createImageDesignerTool } from "../image-designer/index.ts";
-import { DEFAULT_PROMPT_LOADER, type PromptLoader } from "../prompts/index.ts";
+import {
+  DEFAULT_PROMPT_LOADER,
+  type PromptLoader,
+  withFilesystemContract,
+} from "../prompts/index.ts";
 import { DEFAULT_REVIEW_AGENT_DESCRIPTION, DEFAULT_REVIEW_AGENT_NAME } from "../review/index.ts";
 import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
@@ -10,10 +14,10 @@ import type { CreateDefaultSubagentCatalogOptions, DefaultSubagentCatalog } from
 
 function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
   if (!override) {
-    return base;
+    return { ...base, systemPrompt: withFilesystemContract(base.systemPrompt) };
   }
 
-  return {
+  const merged = {
     ...base,
     ...override,
     tools: override.tools ?? base.tools,
@@ -24,6 +28,7 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
     responseFormat: override.responseFormat ?? base.responseFormat,
     permissions: override.permissions ?? base.permissions,
   };
+  return { ...merged, systemPrompt: withFilesystemContract(merged.systemPrompt) };
 }
 
 export function createDefaultSubagentCatalog(

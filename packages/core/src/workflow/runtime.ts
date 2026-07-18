@@ -63,10 +63,19 @@ export class WorkflowRuntimeError extends Error {
     readonly terminalError: WorkflowError,
     readonly subagent?: string,
   ) {
-    super(`[${terminalError.code}] ${terminalError.message}`);
+    super(USER_FACING_WORKFLOW_ERRORS[terminalError.code] ?? terminalError.message);
     this.name = "WorkflowRuntimeError";
   }
 }
+
+const USER_FACING_WORKFLOW_ERRORS: Record<WorkflowError["code"], string> = {
+  controller_retry_exhausted:
+    "The agent could not complete this task after multiple attempts. Please rephrase the request or try again.",
+  invalid_transition:
+    "The workflow entered an unexpected state. Please rephrase the request or try again.",
+  malformed_output_limit_exceeded:
+    "The agent could not produce a valid response. Please try again.",
+};
 
 function looksLikeWorkflowState(value: unknown): value is WorkflowState {
   if (typeof value !== "object" || value === null) return false;
@@ -105,14 +114,20 @@ function hasToolCalls(message: unknown): boolean {
   );
 }
 
+const CONTROLLER_FEEDBACK_ENVELOPE = "WORKFLOW_CONTROLLER_FEEDBACK";
+
 function feedbackMessage(state: WorkflowState): string {
   const decision = resolveWorkflowDecision(state);
+  const feedback =
+    decision.feedback && !decision.feedback.startsWith(CONTROLLER_FEEDBACK_ENVELOPE)
+      ? decision.feedback
+      : undefined;
   return [
-    "WORKFLOW_CONTROLLER_FEEDBACK",
+    CONTROLLER_FEEDBACK_ENVELOPE,
     `phase=${decision.phase}`,
     `requiredAction=${decision.requiredAction}`,
     decision.requiredSubagent ? `requiredSubagent=${decision.requiredSubagent}` : undefined,
-    decision.feedback ? `reviewFeedback=${decision.feedback}` : undefined,
+    feedback ? `reviewFeedback=${feedback}` : undefined,
     "Do the required action now. Do not narrate or finalize early.",
   ]
     .filter(Boolean)
@@ -129,7 +144,7 @@ function toolMessage(request: ToolCallRequest, content: unknown): ToolMessage {
 
 export function createWorkflowControllerMiddleware(options: WorkflowControllerOptions) {
   const states = new Map<string, WorkflowState>();
-  const retryLimit = options.controllerRetryLimit ?? 2;
+  const retryLimit = options.controllerRetryLimit ?? 4;
   const triageEnabled = options.triageEnabled !== false && Boolean(options.triageClassifier);
 
   const persist = async (runtime: unknown, state: WorkflowState) => {
@@ -177,6 +192,13 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
    *
    * Memoized via `state.lastTriageMessage` so the same user message is not
    * re-classified on subsequent `beforeAgent` invocations within a turn.
+   *
+   * Only fires when no clarifier round has happened yet for this thread —
+   * i.e. `state.clarification` and `state.clarificationResult` are both null.
+   * Once the user has answered (or even seen) clarifier questions, subsequent
+   * user messages must go through the clarifier subagent so answers are
+   * processed normally; re-triaging them risks the skip branch advancing the
+   * state machine to execution without ever consuming the user's answers.
    */
   const runTriageIfNeeded = async (
     state: WorkflowState,
@@ -184,6 +206,7 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
   ): Promise<WorkflowState> => {
     if (!triageEnabled || !options.triageClassifier) return state;
     if (state.phase !== "clarification") return state;
+    if (state.clarification || state.clarificationResult) return state;
     if (!latestUserMessage || state.lastTriageMessage === latestUserMessage) return state;
 
     let decision = PROCEED_TRIAGE_DECISION;
@@ -206,10 +229,27 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
 
     if (decision.decision !== "skip") return memoed;
 
+    // After the early-return guard above, `state.clarification` is
+    // guaranteed null on this path (triage only runs on the first user
+    // message of a thread). We still capture the user's message in
+    // `answeredInformation` so downstream phases can see what was
+    // short-circuited, and propagate any prior `answeredInformation`
+    // defensively in case the guard is relaxed later.
+    const priorClarification = state.clarification as ClarificationState | null;
+    const priorAnsweredInformation = priorClarification
+      ? priorClarification.answeredInformation
+      : [];
+    const answeredInformation = latestUserMessage.trim()
+      ? [
+          ...priorAnsweredInformation,
+          { key: "triage_user_message", value: latestUserMessage.trim().slice(0, 500) },
+        ]
+      : priorAnsweredInformation;
+
     const clarificationState: ClarificationState = {
       originalRequest: state.originalRequest,
       missingInformation: [],
-      answeredInformation: [],
+      answeredInformation,
       openQuestions: [],
       status: "ready_to_proceed",
       readyToProceed: true,
@@ -218,13 +258,17 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
       questionsPerRound: options.questionsPerRound,
     };
 
+    const reasoningSummary = priorClarification
+      ? `Triaged as execution-ready after clarification. ${decision.reason}. User message: ${latestUserMessage.trim().slice(0, 200)}`
+      : `Triaged as execution-ready: ${decision.reason}`;
+
     const synthetic: ClarificationResult = {
       status: "ready_to_proceed",
       readyToProceed: true,
       questions: [],
       missingInformation: [],
-      answeredInformation: [],
-      reasoningSummary: `Triaged as execution-ready: ${decision.reason}`,
+      answeredInformation,
+      reasoningSummary,
       roundCount: 0,
       maxRounds: options.maxClarificationRounds,
       skipReason: TRIAGE_SKIP_REASON,

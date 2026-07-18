@@ -2,7 +2,7 @@ import {
   createClarificationConfig,
   createClarificationTriageClassifier,
 } from "../clarification/index.ts";
-import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
+import { DEFAULT_PROMPT_LOADER, withFilesystemContract } from "../prompts/index.ts";
 import { createReviewConfig } from "../review/index.ts";
 import { createDefaultCompositeBackend } from "./backend.ts";
 import { DEFAULT_MEMORY_FILE_PATHS } from "./constants.ts";
@@ -23,7 +23,16 @@ function createSupervisorSpecialistsRuntimeScaffold(
   const review = createReviewConfig(options.reviewOptions);
   const memoryFilePaths = options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS;
 
-  const systemPrompt = options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification);
+  const systemPrompt = withFilesystemContract(
+    options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification),
+  );
+  const subagents = (
+    options.subagents ?? createDefaultSubagentCatalog(options, clarification, promptLoader).all
+  ).map((subagent) =>
+    "systemPrompt" in subagent && typeof subagent.systemPrompt === "string"
+      ? { ...subagent, systemPrompt: withFilesystemContract(subagent.systemPrompt) }
+      : subagent,
+  );
 
   const triageEnabled = clarification.triage?.enabled !== false;
   const triageClassifier = triageEnabled
@@ -41,8 +50,7 @@ function createSupervisorSpecialistsRuntimeScaffold(
     interruptOn: options.interruptOn,
     memory: options.memory ?? [...memoryFilePaths],
     permissions: options.permissions ?? createDefaultPermissions(options.permissionOptions),
-    subagents:
-      options.subagents ?? createDefaultSubagentCatalog(options, clarification, promptLoader).all,
+    subagents,
     systemPrompt,
     clarification: {
       config: clarification,

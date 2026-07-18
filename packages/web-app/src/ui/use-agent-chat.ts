@@ -117,11 +117,15 @@ function mergeActivity(
   update: MainAgentActivityUpdate | SubagentActivityUpdate,
 ): DisplayAgentActivity {
   if (current.type === "subagent_activity" && update.type === "subagent_activity") {
+    const rawText = update.text
+      ? appendChunk(current.rawText ?? current.text ?? "", update.text)
+      : current.rawText;
+    const preview = rawText ? previewSubagentTextFromActivity(rawText) : current.text;
     return {
       ...current,
       ...update,
-      task: update.task ?? current.task,
-      text: update.text ? appendChunk(current.text ?? "", update.text) : current.text,
+      rawText,
+      text: preview ?? current.text,
       message: update.message ?? current.message,
     };
   }
@@ -229,6 +233,88 @@ export function previewAssistantTextFromActivity(raw: string): string {
   }
 
   return (firstStructuredLine === -1 ? raw : raw.slice(0, firstStructuredLine)).trim();
+}
+
+/**
+ * Previews a subagent activity delta. Subagent output is often a structured
+ * JSON object (e.g. a clarifier result envelope or a reviewer report) that
+ * should not be dumped raw into the debug pane. This function extracts any
+ * embedded human-readable prose (`reasoningSummary`, `message`, `text`, or
+ * `finalRecommendation` fields) and falls back to a short label when only
+ * structured content is present.
+ *
+ * Mirrors {@link previewAssistantTextFromActivity} but tolerates the broader
+ * JSON shapes a subagent emits (clarifier results, review reports, etc.).
+ */
+export function previewSubagentTextFromActivity(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const proseFromObject = (value: unknown): string | undefined => {
+    if (typeof value === "string") return value.trim() || undefined;
+    if (Array.isArray(value) || value === null || typeof value !== "object") return undefined;
+    const record = value as Record<string, unknown>;
+    const candidates = ["reasoningSummary", "message", "text", "finalRecommendation", "summary"];
+    for (const key of candidates) {
+      const field = record[key];
+      if (typeof field === "string" && field.trim()) return field.trim();
+    }
+    return undefined;
+  };
+
+  // Try parsing the whole delta as JSON first.
+  let parsedAll: unknown;
+  try {
+    parsedAll = JSON.parse(trimmed);
+  } catch {
+    // Not a single JSON object; fall through to per-line scan.
+  }
+  if (parsedAll !== undefined) {
+    const direct = proseFromObject(parsedAll);
+    if (direct) return direct;
+    // Recognised structured subagent output (clarifier/reviewer envelopes)
+    // renders as a short label instead of the raw JSON dump.
+    if (typeof parsedAll === "object" && parsedAll !== null) {
+      const record = parsedAll as Record<string, unknown>;
+      if (Array.isArray(record.questions)) return "<structured clarifier output>";
+      if (
+        "criticalIssues" in record ||
+        "majorIssues" in record ||
+        "minorIssues" in record ||
+        "score" in record
+      )
+        return "<structured reviewer output>";
+      if ("deliverables" in record || "candidateFinalResponse" in record)
+        return "<structured execution output>";
+    }
+    return "";
+  }
+
+  // Scan line-by-line: keep prose lines, summarize JSON-object lines.
+  const lines = trimmed.split("\n");
+  const prose: string[] = [];
+  for (const line of lines) {
+    const lineTrim = line.trim();
+    if (!lineTrim) continue;
+    if (lineTrim.startsWith("{") || lineTrim.startsWith("[")) {
+      let lineValue: unknown;
+      try {
+        lineValue = JSON.parse(lineTrim);
+      } catch {
+        // Treat as prose if it cannot be parsed.
+        prose.push(lineTrim);
+        continue;
+      }
+      const direct = proseFromObject(lineValue);
+      if (direct) {
+        prose.push(direct);
+      }
+      continue;
+    }
+    prose.push(lineTrim);
+  }
+  if (prose.length > 0) return prose.join("\n");
+  return "";
 }
 
 function updateAssistantMessage(

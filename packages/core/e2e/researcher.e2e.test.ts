@@ -46,6 +46,22 @@ const RESEARCH_SUPERVISOR_PROMPT = [
 ].join("\n");
 
 const LINKLOOM_EXTRACTION_TOOLS = new Set(["scrape", "extract_links"]);
+const REPORT_PATH = "/reports/kanban_board_research_report.md";
+const REPORT_MARKER = "KANBAN_RESEARCH_REPORT_CREATED";
+
+const FILE_WRITING_RESEARCHER_PROMPT = [
+  "You are a deterministic report writer.",
+  `Use write_file exactly once to create ${REPORT_PATH}.`,
+  `The file content must include ${REPORT_MARKER}.`,
+  "Return the exact file path and marker after the tool succeeds.",
+  "Never use /home/user or any other host path.",
+].join("\n");
+
+const FILE_WRITING_SUPERVISOR_PROMPT = [
+  "You are a deterministic research supervisor.",
+  "Use the task tool exactly once with subagent_type researcher.",
+  "Ask the researcher to create the requested report, then relay its result unchanged.",
+].join("\n");
 
 const linkloomExtractionOnlyMiddleware: AgentMiddleware = {
   name: "LinkloomExtractionOnlyMiddleware",
@@ -131,3 +147,52 @@ describe.skipIf(!hasLiveLLMCredentials)(
     }, 120_000);
   },
 );
+
+describe.skipIf(!hasLiveLLMCredentials)("researcher virtual filesystem live writing", () => {
+  it("creates the requested report under /reports", async () => {
+    const modelRuntime = createDefaultModelRuntime(false);
+    const researcher = createDefaultSubagentCatalog({
+      modelRuntime,
+      researcher: { systemPrompt: FILE_WRITING_RESEARCHER_PROMPT, tools: [] },
+    }).byRole.researcher;
+    if (!researcher) {
+      throw new Error("createDefaultSubagentCatalog did not produce a researcher subagent.");
+    }
+
+    const scaffold = createRuntimeScaffold({
+      backend: new StateBackend(),
+      modelRuntime,
+      systemPrompt: FILE_WRITING_SUPERVISOR_PROMPT,
+      subagents: [researcher],
+    });
+    const agent = createAgentFromRuntimeScaffold({
+      factoryName: "createScaffoldedAgent",
+      scaffold,
+      modelRuntime,
+      guardrails: false,
+    });
+
+    const result = (await agent.invoke({
+      messages: [
+        {
+          role: "user",
+          content: `Create ${REPORT_PATH} containing ${REPORT_MARKER}.`,
+        },
+      ],
+    })) as AgentInvokeResult;
+    const taskCalls = (result.messages ?? []).filter(
+      (message) =>
+        typeof message === "object" &&
+        message !== null &&
+        "name" in message &&
+        message.name === "task" &&
+        "tool_call_id" in message,
+    );
+    expect(taskCalls).toHaveLength(1);
+    expect(result.files?.[REPORT_PATH]).toBeDefined();
+    expect(JSON.stringify(result.files?.[REPORT_PATH])).toContain(REPORT_MARKER);
+    expect(
+      Object.keys(result.files ?? {}).some((path) => path.startsWith("/home/user/")),
+    ).toBeFalse();
+  }, 120_000);
+});

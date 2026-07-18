@@ -3,6 +3,9 @@ import clarificationTriagePromptText from "../../prompts/clarification-triage.md
   type: "text",
 };
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
+import filesystemContractPromptText from "../../prompts/filesystem-contract.md" with {
+  type: "text",
+};
 import generativeUiJsonObjectPromptText from "../../prompts/generative-ui-json-object.md" with {
   type: "text",
 };
@@ -40,6 +43,16 @@ export interface PromptLoader {
   getAnalystPrompt(): string;
   getImageDesignerPrompt(): string;
   getReviewAgentPrompt(): string;
+}
+
+export const FILESYSTEM_CONTRACT_PROMPT = filesystemContractPromptText.trim();
+
+export function withFilesystemContract(prompt: string): string {
+  const trimmedPrompt = prompt.trim();
+  if (trimmedPrompt.includes(FILESYSTEM_CONTRACT_PROMPT)) {
+    return trimmedPrompt;
+  }
+  return `${trimmedPrompt}\n\n${FILESYSTEM_CONTRACT_PROMPT}`;
 }
 
 export function renderPromptTemplate(
@@ -94,19 +107,23 @@ export class MarkdownPromptLoader implements PromptLoader {
   getSupervisorPrompt(config: Partial<ClarificationConfig> = {}): string {
     const clarification = createClarificationConfig(config);
 
-    return renderPromptTemplate(supervisorPromptText, {
-      maxRounds: clarification.maxRounds,
-      ...getCurrentDateTimeContext(),
-    });
+    return withFilesystemContract(
+      renderPromptTemplate(supervisorPromptText, {
+        maxRounds: clarification.maxRounds,
+        ...getCurrentDateTimeContext(),
+      }),
+    );
   }
 
   getClarifierPrompt(config: Partial<ClarificationConfig> = {}): string {
     const clarification = createClarificationConfig(config);
 
-    return renderPromptTemplate(clarifierPromptText, {
-      maxRounds: clarification.maxRounds,
-      questionsPerRound: clarification.questionsPerRound,
-    });
+    return withFilesystemContract(
+      renderPromptTemplate(clarifierPromptText, {
+        maxRounds: clarification.maxRounds,
+        questionsPerRound: clarification.questionsPerRound,
+      }),
+    );
   }
 
   getClarificationTriagePrompt(): string {
@@ -114,19 +131,19 @@ export class MarkdownPromptLoader implements PromptLoader {
   }
 
   getResearcherPrompt(): string {
-    return researcherPromptText;
+    return withFilesystemContract(researcherPromptText);
   }
 
   getAnalystPrompt(): string {
-    return analystPromptText;
+    return withFilesystemContract(analystPromptText);
   }
 
   getImageDesignerPrompt(): string {
-    return imageDesignerPromptText;
+    return withFilesystemContract(imageDesignerPromptText);
   }
 
   getReviewAgentPrompt(): string {
-    return reviewAgentPromptText;
+    return withFilesystemContract(reviewAgentPromptText);
   }
 }
 

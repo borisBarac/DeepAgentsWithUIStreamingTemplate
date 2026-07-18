@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
@@ -81,6 +81,13 @@ function QuestionControls({
   );
 }
 
+function renderActivityBody(activity: DisplayAgentActivity): ReactNode {
+  const text = "text" in activity ? activity.text : undefined;
+  const message = "message" in activity ? activity.message : undefined;
+  const body = text?.trim() ? text : message;
+  return body ? <p>{body}</p> : null;
+}
+
 function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) {
   const recentActivity = useMemo(() => activity.slice(-30), [activity]);
   const {
@@ -117,8 +124,7 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
                 </header>
               )}
               {"task" in item && item.task ? <p>{item.task}</p> : null}
-              {"text" in item && item.text ? <p>{item.text}</p> : null}
-              {"message" in item && item.message ? <p>{item.message}</p> : null}
+              {renderActivityBody(item)}
             </article>
           ))
         )}

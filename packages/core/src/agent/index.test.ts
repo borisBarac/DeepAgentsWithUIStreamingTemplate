@@ -122,6 +122,44 @@ describe("createScaffoldedAgent", () => {
     expect(await agentStore.search(createUserMemoryNamespace("u1"))).toEqual([]);
   });
 
+  it("writes and edits virtual files while denying host filesystem paths", async () => {
+    const agent = createScaffoldedAgent({
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
+    });
+    const tools = getFilesystemTools(agent);
+
+    await tools.write.invoke({ file_path: "/memory/kanban_board_research.md", content: "draft" });
+    await tools.edit.invoke({
+      file_path: "/memory/kanban_board_research.md",
+      old_string: "draft",
+      new_string: "complete",
+    });
+
+    expect(
+      JSON.stringify(await tools.read.invoke({ file_path: "/memory/kanban_board_research.md" })),
+    ).toContain("complete");
+    await expect(
+      tools.write.invoke({
+        file_path: "/home/user/kanban_board_research.md",
+        content: "no",
+      }),
+    ).rejects.toThrow("Error: permission denied for write on /home/user/kanban_board_research.md");
+    await expect(
+      tools.edit.invoke({
+        file_path: "/home/user/kanban_board_research.md",
+        old_string: "draft",
+        new_string: "complete",
+      }),
+    ).rejects.toThrow("Error: permission denied for write on /home/user/kanban_board_research.md");
+    await expect(
+      tools.read.invoke({ file_path: "/home/user/kanban_board_research.md" }),
+    ).rejects.toThrow("Error: permission denied for read on /home/user/kanban_board_research.md");
+    await expect(
+      tools.write.invoke({ file_path: "/skills/forbidden.md", content: "no" }),
+    ).rejects.toThrow("Error: permission denied for write on /skills/forbidden.md");
+  });
+
   it("creates the default scaffold without an image designer when image generation is not configured", () => {
     const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
@@ -171,4 +209,21 @@ async function writeAgentMemory(
   }
 
   await writeTool.invoke({ file_path: path, content });
+}
+
+function getFilesystemTools(agent: ReturnType<typeof createScaffoldedAgent>) {
+  const middleware = agent.options.middleware?.find(
+    (entry) => entry.name === "FilesystemMiddleware",
+  );
+  const find = (name: string) =>
+    middleware?.tools?.find((tool) => tool.name === name) as
+      | { invoke: (input: Record<string, string>) => Promise<unknown> }
+      | undefined;
+  const read = find("read_file");
+  const write = find("write_file");
+  const edit = find("edit_file");
+  if (!read || !write || !edit) {
+    throw new Error("Filesystem tools were not registered on the scaffolded agent.");
+  }
+  return { read, write, edit };
 }

@@ -9,7 +9,7 @@ export const hasLiveLLMCredentials = Boolean(
 );
 
 export type StructuredPayload = Record<string, unknown>;
-export type AgentInvokeResult = { messages?: unknown[] };
+export type AgentInvokeResult = { files?: Record<string, unknown>; messages?: unknown[] };
 export type TaskToolMessage = { name: string; content: unknown; tool_call_id: string };
 
 export function findToolMessage(

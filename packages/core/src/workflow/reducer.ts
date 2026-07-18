@@ -38,6 +38,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         phase: event.result.readyToProceed ? "execution" : "waiting_for_user",
         controllerRetryCount: 0,
         completedSubagent: undefined,
+        lastFeedback: undefined,
       };
     case "user_replied":
       return state.phase === "waiting_for_user"
@@ -52,6 +53,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         phase: "review",
         controllerRetryCount: 0,
         completedSubagent: undefined,
+        lastFeedback: undefined,
       };
     case "review_completed": {
       if (state.phase !== "review") return invalid(state, event);
@@ -63,6 +65,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
           phase: "delivery_ready",
           controllerRetryCount: 0,
           completedSubagent: undefined,
+          lastFeedback: undefined,
         };
       }
       if (reviewHistory.length >= event.maxRevisions) {
@@ -73,6 +76,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
           caveated: true,
           controllerRetryCount: 0,
           completedSubagent: undefined,
+          lastFeedback: undefined,
         };
       }
       return {
@@ -104,6 +108,9 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
   }
 }
 
+const EXECUTION_ENTRY_DIRECTIVE =
+  "Clarification complete. Begin execution now: delegate to `researcher` or `analyst`, or write deliverables directly via tools. Do NOT call the clarifier.";
+
 const actions: Record<WorkflowPhase, WorkflowDecision> = {
   clarification: {
     phase: "clarification",
@@ -116,7 +123,12 @@ const actions: Record<WorkflowPhase, WorkflowDecision> = {
     requiredAction: "wait_for_user",
     canFinalize: true,
   },
-  execution: { phase: "execution", requiredAction: "execute", canFinalize: false },
+  execution: {
+    phase: "execution",
+    requiredAction: "execute",
+    canFinalize: false,
+    feedback: EXECUTION_ENTRY_DIRECTIVE,
+  },
   review: {
     phase: "review",
     requiredAction: "review",

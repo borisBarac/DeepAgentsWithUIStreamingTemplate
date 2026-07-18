@@ -134,6 +134,64 @@ describe("workflow controller middleware", () => {
     expect(String(update.messages[0]?.content)).toContain("clarifier");
   });
 
+  it("defaults the controller retry limit to 4", async () => {
+    const middleware = createWorkflowControllerMiddleware(options);
+    const beforeAgent = middleware.beforeAgent as Hook;
+    await beforeAgent(
+      { messages: [new HumanMessage("Build a kanban board")] } as never,
+      { configurable: { thread_id: "retry-budget" } } as never,
+    );
+    const afterModel = middleware.afterModel as { hook: Hook };
+
+    let thrown: unknown;
+    let lastUpdate: { jumpTo?: unknown; messages: HumanMessage[] } | undefined;
+    // retryLimit defaults to 4: the first 4 afterModel calls inject feedback
+    // and jump back to model; the 5th call exceeds the budget and throws.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        lastUpdate = (await afterModel.hook(
+          { messages: [new AIMessage("I will narrate instead of calling tools.")] },
+          { configurable: { thread_id: "retry-budget" } },
+        )) as { jumpTo?: unknown; messages: HumanMessage[] };
+      } catch (error) {
+        thrown = error;
+        break;
+      }
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toContain("could not complete this task");
+    expect(lastUpdate?.jumpTo).toBe("model");
+  });
+
+  it("does not nest WORKFLOW_CONTROLLER_FEEDBACK envelopes across retries", async () => {
+    const middleware = createWorkflowControllerMiddleware(options);
+    const beforeAgent = middleware.beforeAgent as Hook;
+    await beforeAgent(
+      { messages: [new HumanMessage("Build a kanban board")] } as never,
+      { configurable: { thread_id: "no-nesting" } } as never,
+    );
+    const afterModel = middleware.afterModel as { hook: Hook };
+
+    const seenFeedbacks: string[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const update = (await afterModel.hook(
+          { messages: [new AIMessage("narrating again")] },
+          { configurable: { thread_id: "no-nesting" } },
+        )) as { messages: HumanMessage[] };
+        seenFeedbacks.push(String(update.messages[0]?.content ?? ""));
+      } catch {
+        break;
+      }
+    }
+    // Every emitted feedback message should contain exactly one
+    // WORKFLOW_CONTROLLER_FEEDBACK envelope header (no nesting).
+    for (const feedback of seenFeedbacks) {
+      const occurrences = feedback.split("WORKFLOW_CONTROLLER_FEEDBACK").length - 1;
+      expect(occurrences).toBe(1);
+    }
+  });
+
   it("continues readiness through execution and review", async () => {
     const middleware = createWorkflowControllerMiddleware(options);
     const beforeAgent = middleware.beforeAgent as Hook;
@@ -346,7 +404,13 @@ describe("workflow controller middleware", () => {
       expect(classifier.calls).toHaveLength(1);
     });
 
-    it("classifies a follow-up reply when the user comes back from waiting_for_user", async () => {
+    it("does NOT re-classify a follow-up reply after the first clarifier round", async () => {
+      // Regression: after the first clarifier round runs (state.clarification
+      // is non-null), subsequent user messages must go through the clarifier
+      // normally — even if they look "continuation-y" to the triage
+      // classifier. Re-triaging answers was causing the state machine to jump
+      // to execution without ever consuming the user's answers (see
+      // `controller_retry_exhausted` bug).
       const classifier = conditionalTriageClassifier((request) =>
         request.includes("continue")
           ? { decision: "skip", reason: "user said continue" }
@@ -383,15 +447,15 @@ describe("workflow controller middleware", () => {
       );
       expect(middleware.getWorkflowState("follow-up")?.phase).toBe("waiting_for_user");
 
-      // User replies "continue" — triage fires on the new message, says skip,
-      // and the run transitions straight to execution without a second
-      // clarifier round.
+      // User replies "continue" — triage must NOT fire again. The state goes
+      // back to clarification (so the supervisor can run a normal clarifier
+      // round and consume the reply) instead of jumping to execution.
       await beforeAgent({ messages: [new HumanMessage("continue")] } as never, runtime as never);
-      expect(classifier.calls).toHaveLength(2);
+      expect(classifier.calls).toHaveLength(1);
       const finalState = middleware.getWorkflowState("follow-up");
-      expect(finalState?.phase).toBe("execution");
-      expect(finalState?.clarificationResult?.skipReason).toBe("triage_classifier");
-      expect(finalState?.lastTriageMessage).toBe("continue");
+      expect(finalState?.phase).toBe("clarification");
+      expect(finalState?.clarificationResult?.skipReason).toBeUndefined();
+      expect(finalState?.lastTriageMessage).toBe("build a thing");
     });
   });
 });

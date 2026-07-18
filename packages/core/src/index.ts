@@ -196,8 +196,10 @@ export {
   DEFAULT_RESEARCHER_SYSTEM_PROMPT,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+  FILESYSTEM_CONTRACT_PROMPT,
   MarkdownPromptLoader,
   type PromptLoader,
+  withFilesystemContract,
 } from "./prompts/index.ts";
 export {
   APPROVED_REVIEW_MIN_SCORE,

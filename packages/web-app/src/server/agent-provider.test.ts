@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -10,6 +10,10 @@ import {
 } from "@deep-agent-template/core/memory";
 
 import { createAgentProvider } from "./agent-provider.ts";
+
+type WriteFileTool = {
+  invoke(input: { content: string; file_path: string }): Promise<unknown>;
+};
 
 const BASE_ENV: Record<string, string> = {
   LLM_BASE_URL: "https://example.com/v1",
@@ -68,11 +72,31 @@ async function withTempMemory<T>(
   }
 }
 
+function getWriteFileTool(agent: Awaited<ReturnType<typeof createAgentProvider>>): WriteFileTool {
+  const filesystemMiddleware = agent.options.middleware?.find(
+    (middleware) => middleware.name === "FilesystemMiddleware",
+  );
+  const writeFile = filesystemMiddleware?.tools?.find((tool) => tool.name === "write_file");
+  if (!writeFile) {
+    throw new Error("write_file was not registered on the web app agent.");
+  }
+  return writeFile as WriteFileTool;
+}
+
 describe("createAgentProvider", () => {
   it("returns the advanced scaffolded agent by default", async () => {
-    const agent = await withTempMemory({}, () => createAgentProvider());
-    expect(agent).toBeTruthy();
-    expect(typeof agent.invoke).toBe("function");
+    await withTempMemory({}, async (rootDir) => {
+      const agent = await createAgentProvider();
+      const systemPrompt = JSON.stringify(agent.options.systemPrompt);
+
+      expect(agent).toBeTruthy();
+      expect(typeof agent.invoke).toBe("function");
+      expect(systemPrompt).toContain("Virtual filesystem contract");
+      expect(systemPrompt).toContain("/home/user");
+      expect(systemPrompt).toContain("/reports");
+      expect(systemPrompt).toContain("/memory");
+      expect(systemPrompt).not.toContain(rootDir);
+    });
   });
 
   it("ignores WEB_APP_AGENT_PROVIDER_MODE and always returns the advanced agent", async () => {
@@ -138,6 +162,52 @@ describe("createAgentProvider", () => {
       for (const [memoryPath, content] of editedContents) {
         await expect(backend.read(memoryPath)).resolves.toMatchObject({ content });
       }
+    });
+  });
+
+  it("writes through the web app agent into its configured memory store", async () => {
+    await withTempMemory({}, async (rootDir) => {
+      const agent = await createAgentProvider();
+      const writeFile = getWriteFileTool(agent);
+      const virtualPath = "/memory/web-app-write-tool.md";
+      const fullPath = path.join(rootDir, "single-user", "memory", "web-app-write-tool.md");
+
+      await writeFile.invoke({
+        file_path: virtualPath,
+        content: "web app write succeeded",
+      });
+
+      const store = createFileSystemMemoryStore({ rootDir });
+      const backend = createUserMemoryBackend({ store });
+      await expect(backend.read(virtualPath)).resolves.toMatchObject({
+        content: "web app write succeeded",
+      });
+      expect(path.isAbsolute(fullPath)).toBeTrue();
+      await expect(readFile(fullPath, "utf8")).resolves.toBe("web app write succeeded");
+    });
+  });
+
+  it("writes reports to the virtual reports root and denies host paths", async () => {
+    await withTempMemory({}, async () => {
+      const agent = await createAgentProvider();
+      const writeFile = getWriteFileTool(agent);
+
+      await expect(
+        writeFile.invoke({
+          file_path: "/reports/kanban_board_research.md",
+          content: "kanban research",
+        }),
+      ).resolves.toMatchObject({
+        content: "Successfully wrote to '/reports/kanban_board_research.md'",
+      });
+      await expect(
+        writeFile.invoke({
+          file_path: "/home/user/kanban_board_research.md",
+          content: "kanban research",
+        }),
+      ).rejects.toThrow(
+        "Error: permission denied for write on /home/user/kanban_board_research.md",
+      );
     });
   });
 });

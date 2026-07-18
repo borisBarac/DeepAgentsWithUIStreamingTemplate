@@ -9,11 +9,29 @@ import {
   DEFAULT_PROMPT_LOADER,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
+  FILESYSTEM_CONTRACT_PROMPT,
   MarkdownPromptLoader,
   renderPromptTemplate,
 } from "./index.ts";
 
 describe("prompt defaults", () => {
+  it("gives every filesystem-capable role the shared virtual filesystem contract", () => {
+    const prompts = [
+      DEFAULT_PROMPT_LOADER.getSupervisorPrompt({}),
+      DEFAULT_PROMPT_LOADER.getClarifierPrompt({}),
+      DEFAULT_PROMPT_LOADER.getResearcherPrompt(),
+      DEFAULT_PROMPT_LOADER.getAnalystPrompt(),
+      DEFAULT_PROMPT_LOADER.getImageDesignerPrompt(),
+      DEFAULT_PROMPT_LOADER.getReviewAgentPrompt(),
+    ];
+
+    expect(FILESYSTEM_CONTRACT_PROMPT).toContain("`/reports`");
+    expect(FILESYSTEM_CONTRACT_PROMPT).toContain("`/home/user`");
+    for (const prompt of prompts) {
+      expect(prompt).toContain(FILESYSTEM_CONTRACT_PROMPT);
+    }
+  });
+
   it("exports the default clarifier system prompt", () => {
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You are the clarifier subagent.");
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You may use prose or JSON.");

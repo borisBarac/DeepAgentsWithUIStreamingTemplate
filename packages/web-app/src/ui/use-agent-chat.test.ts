@@ -10,6 +10,7 @@ import {
   finishAssistantMessage,
   formatQuestionAnswers,
   previewAssistantTextFromActivity,
+  previewSubagentTextFromActivity,
   replaceAssistantMessage,
 } from "./use-agent-chat.ts";
 
@@ -232,6 +233,7 @@ describe("agent activity state", () => {
         subagentName: "general-purpose",
         event: "completed",
         task: "Find public IP",
+        rawText: "Let me check",
         text: "Let me check",
       },
     ]);
@@ -292,6 +294,7 @@ describe("agent activity state", () => {
         subagentRunId: "run-a",
         subagentName: "general-purpose",
         event: "completed",
+        rawText: "First",
         text: "First",
       },
       {
@@ -300,6 +303,7 @@ describe("agent activity state", () => {
         subagentRunId: "run-b",
         subagentName: "general-purpose",
         event: "completed",
+        rawText: "Second",
         text: "Second",
       },
     ]);
@@ -413,6 +417,104 @@ describe("agent activity state", () => {
         text: "Hello!",
       },
     ]);
+  });
+
+  it("strips raw JSON envelopes from subagent activity deltas", () => {
+    let activity = appendAgentActivity(
+      [],
+      {
+        type: "subagent_activity",
+        subagentName: "clarifier",
+        event: "started",
+        task: "Clarify scope",
+      },
+      "activity-0",
+    );
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentName: "clarifier",
+        event: "delta",
+        text: '{"questions":[',
+      },
+      "activity-1",
+    );
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentName: "clarifier",
+        event: "delta",
+        text: '{"id":"scope","question":"What scope?"}],"reasoningSummary":"Need scope details.","readyToProceed":false}',
+      },
+      "activity-2",
+    );
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentName: "clarifier",
+        event: "completed",
+      },
+      "activity-3",
+    );
+
+    const entry = activity[0];
+    expect(entry?.rawText).toContain('"questions":');
+    // Prose preview comes from reasoningSummary, not the raw JSON dump.
+    expect(entry?.text).toBe("Need scope details.");
+  });
+
+  it("summarizes a structured clarifier result with a short label when no prose is present", () => {
+    expect(
+      previewSubagentTextFromActivity(
+        JSON.stringify({
+          questions: [{ id: "scope", question: "What scope?" }],
+          readyToProceed: false,
+        }),
+      ),
+    ).toBe("<structured clarifier output>");
+  });
+
+  it("does not duplicate text and message in subagent activity merge", () => {
+    let activity = appendAgentActivity(
+      [],
+      {
+        type: "subagent_activity",
+        subagentName: "researcher",
+        event: "started",
+      },
+      "activity-0",
+    );
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentName: "researcher",
+        event: "delta",
+        text: "Searching",
+      },
+      "activity-1",
+    );
+    // A subsequent update carries a `message` (e.g. error/info) that should
+    // NOT be rendered alongside the previewed `text` — text wins, message
+    // only fills in when text is empty.
+    activity = appendAgentActivity(
+      activity,
+      {
+        type: "subagent_activity",
+        subagentName: "researcher",
+        event: "delta",
+        text: " sources",
+        message: "internal note",
+      },
+      "activity-2",
+    );
+
+    const entry = activity[0];
+    expect(entry?.text).toBe("Searching sources");
+    expect(entry?.message).toBe("internal note");
   });
 });
 

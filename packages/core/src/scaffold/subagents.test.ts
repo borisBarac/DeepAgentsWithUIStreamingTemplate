@@ -139,11 +139,12 @@ describe("default subagents", () => {
       ),
     );
 
-    expect(subagents[0]?.systemPrompt).toBe("custom clarifier prompt");
-    expect(subagents[1]?.systemPrompt).toBe("custom researcher prompt");
-    expect(subagents[2]?.systemPrompt).toBe("custom analyst prompt");
-    expect(subagents[3]?.systemPrompt).toBe("custom image designer prompt");
-    expect(subagents[4]?.systemPrompt).toBe("custom review prompt");
+    expect(subagents[0]?.systemPrompt).toContain("custom clarifier prompt");
+    expect(subagents[1]?.systemPrompt).toContain("custom researcher prompt");
+    expect(subagents[2]?.systemPrompt).toContain("custom analyst prompt");
+    expect(subagents[3]?.systemPrompt).toContain("custom image designer prompt");
+    expect(subagents[4]?.systemPrompt).toContain("custom review prompt");
+    expect(subagents.every((subagent) => subagent.systemPrompt.includes("/home/user"))).toBeTrue();
   });
 
   it("lets explicit subagent prompt overrides win over the prompt loader", () => {
@@ -160,7 +161,8 @@ describe("default subagents", () => {
       ),
     );
 
-    expect(clarifier?.systemPrompt).toBe("explicit clarifier prompt");
+    expect(clarifier?.systemPrompt).toContain("explicit clarifier prompt");
+    expect(clarifier?.systemPrompt).toContain("Virtual filesystem contract");
   });
 
   it("leaves every default subagent response format and middleware unset", () => {

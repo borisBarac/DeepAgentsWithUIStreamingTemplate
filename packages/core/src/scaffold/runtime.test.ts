@@ -79,8 +79,12 @@ describe("runtime scaffold defaults", () => {
     expect(scaffold.interruptOn).toBe(customInterrupts);
     expect(scaffold.memory).toBe(customMemory);
     expect(scaffold.permissions).toBe(customPermissions);
-    expect(scaffold.subagents).toBe(customSubagents);
-    expect(scaffold.systemPrompt).toBe("explicit supervisor prompt");
+    expect(scaffold.subagents[0]?.name).toBe("custom");
+    expect(scaffold.systemPrompt).toContain("explicit supervisor prompt");
+    expect(scaffold.systemPrompt).toContain("Virtual filesystem contract");
+    expect((scaffold.subagents[0] as SubAgent).systemPrompt).toContain(
+      "Virtual filesystem contract",
+    );
   });
 
   it("applies custom clarification limits to runtime prompts and subagents", () => {
