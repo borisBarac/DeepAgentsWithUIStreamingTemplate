@@ -1,12 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { SandboxBackend, SandboxRequest, SandboxResult } from "@deep-agent-template/sandbox";
-import { createSpecializedToolStore } from "../tools/index.ts";
-import {
-  createPythonSandboxTool,
-  createPythonSandboxToolDefinition,
-  pythonSandboxInputSchema,
-} from "./tool.ts";
+import { createPythonSandboxTool, pythonSandboxInputSchema } from "./tool.ts";
 
 function makeFakeBackend(capture: {
   request?: SandboxRequest;
@@ -106,33 +101,5 @@ describe("createPythonSandboxTool", () => {
     });
     await tool.invoke({ code: "x", resourceProfile: "sandbox-medium" });
     expect(capture.request?.resourceProfile).toBe("sandbox-medium");
-  });
-});
-
-describe("createPythonSandboxToolDefinition", () => {
-  it("returns a frozen definition with restricted/execution metadata", () => {
-    const definition = createPythonSandboxToolDefinition({ backend: makeFakeBackend({}) });
-    expect(Object.isFrozen(definition)).toBe(true);
-    expect(definition.id).toBe("python-sandbox");
-    expect(definition.riskLevel).toBe("restricted");
-    expect(definition.evidenceMode).toBe("execution");
-    expect(definition.specialists).toEqual(["researcher", "analyst"]);
-    expect(definition.tool.name).toBe("execute_python");
-  });
-
-  it("registers cleanly with the SpecializedToolStore and flags both roles as restricted", () => {
-    const definition = createPythonSandboxToolDefinition({ backend: makeFakeBackend({}) });
-    const roles = [
-      { role: "researcher", toolIds: ["python-sandbox"] },
-      { role: "analyst", toolIds: ["python-sandbox"] },
-    ] as const;
-    const store = createSpecializedToolStore({ tools: [definition], roles });
-    expect(store.hasTool("python-sandbox")).toBe(true);
-    expect(store.roleHasRestrictedTools("analyst")).toBe(true);
-    expect(store.roleHasRestrictedTools("researcher")).toBe(true);
-    expect(store.resolveRoleTools("researcher").map((tool) => tool.name)).toEqual([
-      "execute_python",
-    ]);
-    expect(store.resolveRoleTools("analyst").map((tool) => tool.name)).toEqual(["execute_python"]);
   });
 });

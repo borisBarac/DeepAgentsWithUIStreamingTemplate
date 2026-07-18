@@ -7,10 +7,10 @@ import { createRuntimeScaffold } from "./runtime.ts";
 const testPromptLoader: PromptLoader = {
   getSupervisorPrompt: () => "supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
+  getClarificationTriagePrompt: () => "custom triage prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
-  getProductGeneratorPrompt: () => "custom product generator prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 
@@ -45,9 +45,10 @@ describe("runtime scaffold defaults", () => {
         maxRounds: 2,
         questionsPerRound: 3,
         mode: "mandatory-preflight",
+        triage: { enabled: true },
       },
     });
-    expect(scaffold.productGeneration).toEqual({ enabled: false });
+    expect(scaffold.triage).toEqual({ enabled: false, classifier: undefined });
     expect(scaffold.review).toEqual({
       config: { maxRevisions: 4 },
       requiredSubagent: "review-agent",
@@ -105,12 +106,8 @@ describe("runtime scaffold defaults", () => {
     expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
     expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("NDJSON");
     expect(scaffold.generativeUi).toBeUndefined();
-    expect(scaffold.productGeneration).toEqual({ enabled: false });
     expect(scaffold.review.requiredSubagent).toBe("review-agent");
     expect(scaffold.review.config.maxRevisions).toBe(4);
-    expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).not.toContain(
-      "product-generator",
-    );
   });
 
   it("honours review revision overrides", () => {
@@ -119,7 +116,7 @@ describe("runtime scaffold defaults", () => {
     expect(scaffold.review.config.maxRevisions).not.toBe(4);
   });
 
-  it("appends the product-generator JSON object prompt, metadata, and subagent when generativeUi is enabled", () => {
+  it("keeps presentation instructions out of work prompt when generativeUi is enabled", () => {
     const scaffold = createRuntimeScaffold({
       promptLoader: testPromptLoader,
       imageGenerationService: testImageGenerationService,
@@ -127,17 +124,17 @@ describe("runtime scaffold defaults", () => {
     });
 
     expect(scaffold.generativeUi).toEqual({ catalogPrompt: "EXTRA CATALOG" });
-    expect(scaffold.productGeneration).toEqual({
-      enabled: true,
-      requiredSubagent: "product-generator",
-    });
     expect(scaffold.review.requiredSubagent).toBe("review-agent");
     expect(JSON.stringify(scaffold.systemPrompt)).toContain("supervisor prompt");
-    expect(JSON.stringify(scaffold.systemPrompt)).toContain("Return one JSON object");
-    expect(JSON.stringify(scaffold.systemPrompt)).toContain("product-card");
-    expect(JSON.stringify(scaffold.systemPrompt)).toContain("EXTRA CATALOG");
-    expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).toContain(
-      "product-generator",
-    );
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("Return one JSON object");
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("product-card");
+    expect(JSON.stringify(scaffold.systemPrompt)).not.toContain("EXTRA CATALOG");
+    expect((scaffold.subagents as SubAgent[]).map((subagent) => subagent.name)).toEqual([
+      "clarifier",
+      "researcher",
+      "analyst",
+      "image-designer",
+      "review-agent",
+    ]);
   });
 });

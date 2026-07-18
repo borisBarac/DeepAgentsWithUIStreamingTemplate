@@ -27,6 +27,8 @@ function invalid(state: WorkflowState, event: WorkflowEvent): WorkflowState {
 
 export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent): WorkflowState {
   switch (event.type) {
+    case "subagent_completed":
+      return { ...state, completedSubagent: event.subagent };
     case "clarification_completed":
       if (state.phase !== "clarification") return invalid(state, event);
       return {
@@ -35,6 +37,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         clarificationResult: event.result,
         phase: event.result.readyToProceed ? "execution" : "waiting_for_user",
         controllerRetryCount: 0,
+        completedSubagent: undefined,
       };
     case "user_replied":
       return state.phase === "waiting_for_user"
@@ -46,18 +49,21 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         ...state,
         outcome: event.outcome,
         assumptions: event.outcome.assumptions,
-        productBatch: undefined,
-        phase: event.generativeUiEnabled ? "product_generation" : "review",
+        phase: "review",
         controllerRetryCount: 0,
+        completedSubagent: undefined,
       };
-    case "product_generated":
-      if (state.phase !== "product_generation") return invalid(state, event);
-      return { ...state, productBatch: event.batch, phase: "review", controllerRetryCount: 0 };
     case "review_completed": {
       if (state.phase !== "review") return invalid(state, event);
       const reviewHistory = [...state.reviewHistory, event.report];
       if (event.report.status === "approved") {
-        return { ...state, reviewHistory, phase: "delivery_ready", controllerRetryCount: 0 };
+        return {
+          ...state,
+          reviewHistory,
+          phase: "delivery_ready",
+          controllerRetryCount: 0,
+          completedSubagent: undefined,
+        };
       }
       if (reviewHistory.length >= event.maxRevisions) {
         return {
@@ -66,6 +72,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
           phase: "delivery_ready",
           caveated: true,
           controllerRetryCount: 0,
+          completedSubagent: undefined,
         };
       }
       return {
@@ -73,9 +80,9 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         reviewHistory,
         revisionCount: state.revisionCount + 1,
         phase: "revision",
-        productBatch: undefined,
         lastFeedback: event.report.requiredChanges.join("\n") || event.report.finalRecommendation,
         controllerRetryCount: 0,
+        completedSubagent: undefined,
       };
     }
     case "controller_feedback": {
@@ -110,12 +117,6 @@ const actions: Record<WorkflowPhase, WorkflowDecision> = {
     canFinalize: true,
   },
   execution: { phase: "execution", requiredAction: "execute", canFinalize: false },
-  product_generation: {
-    phase: "product_generation",
-    requiredAction: "generate_products",
-    requiredSubagent: "product-generator",
-    canFinalize: false,
-  },
   review: {
     phase: "review",
     requiredAction: "review",

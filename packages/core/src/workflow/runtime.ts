@@ -1,14 +1,18 @@
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { type BaseStore, Command } from "@langchain/langgraph";
+import type { BaseStore } from "@langchain/langgraph";
 import { createMiddleware, type ToolCallRequest, tool } from "langchain";
 import { z } from "zod";
 
 import {
   applyClarificationResult,
+  type ClarificationResult,
+  type ClarificationState,
   clarificationResultSchema,
+  classifyClarificationTriage,
   createClarificationState,
+  PROCEED_TRIAGE_DECISION,
+  TRIAGE_SKIP_REASON,
 } from "../clarification/index.ts";
-import { productCardBatchSchema } from "../generative-ui/index.ts";
 import { reviewReportSchema } from "../review/index.ts";
 import { createWorkflowState, reduceWorkflowState, resolveWorkflowDecision } from "./reducer.ts";
 import type {
@@ -30,14 +34,28 @@ export const workflowCompleteExecutionTool = tool(
   async (input: WorkflowOutcomePacket) => JSON.stringify(input),
   {
     name: "workflow_complete_execution",
-    description:
-      "Submit the complete execution outcome packet. Required before products and review.",
+    description: "Submit the complete execution outcome packet. Required before review.",
     schema: workflowOutcomeSchema,
   },
 );
 
-/** Consecutive malformed subagent outputs before the controller gives up and fails. */
-const MALFORMED_OUTPUT_LIMIT = 3;
+const clarificationSubmissionSchema = clarificationResultSchema.omit({
+  roundCount: true,
+  maxRounds: true,
+});
+
+export const workflowSubmitClarificationTool = tool(async (input) => JSON.stringify(input), {
+  name: "workflow_submit_clarification",
+  description:
+    "Submit the clarifier result after delegating to the clarifier. The host supplies round counters.",
+  schema: clarificationSubmissionSchema,
+});
+
+export const workflowSubmitReviewTool = tool(async (input) => JSON.stringify(input), {
+  name: "workflow_submit_review",
+  description: "Submit the review report after delegating to review-agent.",
+  schema: reviewReportSchema,
+});
 
 /** Thrown when the workflow controller reaches a terminal error state. */
 export class WorkflowRuntimeError extends Error {
@@ -65,26 +83,6 @@ function threadId(runtime: unknown): string {
     (runtime as { configurable?: { thread_id?: unknown } })?.configurable?.thread_id ??
       "__default__",
   );
-}
-
-function contentOf(value: unknown): unknown {
-  if (value instanceof ToolMessage) return value.content;
-  if (value instanceof Command) {
-    const messages = (value.update as { messages?: unknown[] } | undefined)?.messages;
-    const last = messages?.at(-1);
-    return last instanceof ToolMessage ? last.content : undefined;
-  }
-  return undefined;
-}
-
-function jsonOf(value: unknown): unknown {
-  const content = contentOf(value);
-  if (typeof content !== "string") return undefined;
-  try {
-    return JSON.parse(content);
-  } catch {
-    return undefined;
-  }
 }
 
 function latestHumanText(messages: unknown[]): string {
@@ -131,8 +129,8 @@ function toolMessage(request: ToolCallRequest, content: unknown): ToolMessage {
 
 export function createWorkflowControllerMiddleware(options: WorkflowControllerOptions) {
   const states = new Map<string, WorkflowState>();
-  const malformedCounts = new Map<string, number>();
   const retryLimit = options.controllerRetryLimit ?? 2;
+  const triageEnabled = options.triageEnabled !== false && Boolean(options.triageClassifier);
 
   const persist = async (runtime: unknown, state: WorkflowState) => {
     states.set(threadId(runtime), state);
@@ -171,41 +169,93 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
     }
   };
 
-  const malformed = async (
-    id: string,
+  /**
+   * Runs the triage classifier against the latest user message and, on a `skip`
+   * decision, synthesizes a `clarification_completed` event so the reducer
+   * transitions straight to `execution`. Safe-defaults to `proceed` on any
+   * classifier exception so a flaky fast-model never blocks the run.
+   *
+   * Memoized via `state.lastTriageMessage` so the same user message is not
+   * re-classified on subsequent `beforeAgent` invocations within a turn.
+   */
+  const runTriageIfNeeded = async (
     state: WorkflowState,
-    subagent: string,
-    payload: unknown,
-    request: ToolCallRequest,
-  ): Promise<ToolMessage> => {
-    const count = (malformedCounts.get(id) ?? 0) + 1;
-    if (count > MALFORMED_OUTPUT_LIMIT) {
-      malformedCounts.delete(id);
-      const terminalError: WorkflowError = {
-        code: "malformed_output_limit_exceeded",
-        message: `Subagent "${subagent}" returned malformed output ${MALFORMED_OUTPUT_LIMIT} consecutive times.`,
-        phase: state.phase,
-      };
-      await persist(request.runtime, { ...state, phase: "error", terminalError });
-      throw new WorkflowRuntimeError(terminalError, subagent);
+    latestUserMessage: string,
+  ): Promise<WorkflowState> => {
+    if (!triageEnabled || !options.triageClassifier) return state;
+    if (state.phase !== "clarification") return state;
+    if (!latestUserMessage || state.lastTriageMessage === latestUserMessage) return state;
+
+    let decision = PROCEED_TRIAGE_DECISION;
+    try {
+      decision = await classifyClarificationTriage(
+        latestUserMessage,
+        options.triageClassifier,
+        options.promptLoader,
+      );
+    } catch {
+      // Safe default: any classifier failure (parse error, network, etc.)
+      // falls through to the normal clarify phase. Logged via state only.
     }
-    malformedCounts.set(id, count);
-    return toolMessage(request, payload);
+
+    const memoed: WorkflowState = {
+      ...state,
+      lastTriageMessage: latestUserMessage,
+      lastTriageDecision: decision,
+    };
+
+    if (decision.decision !== "skip") return memoed;
+
+    const clarificationState: ClarificationState = {
+      originalRequest: state.originalRequest,
+      missingInformation: [],
+      answeredInformation: [],
+      openQuestions: [],
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      roundCount: 0,
+      maxRounds: options.maxClarificationRounds,
+      questionsPerRound: options.questionsPerRound,
+    };
+
+    const synthetic: ClarificationResult = {
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [],
+      reasoningSummary: `Triaged as execution-ready: ${decision.reason}`,
+      roundCount: 0,
+      maxRounds: options.maxClarificationRounds,
+      skipReason: TRIAGE_SKIP_REASON,
+    };
+
+    return reduceWorkflowState(memoed, {
+      type: "clarification_completed",
+      result: synthetic,
+      state: clarificationState,
+    });
   };
 
   const middleware = createMiddleware({
     name: "workflowController",
-    tools: [workflowCompleteExecutionTool],
+    tools: [
+      workflowSubmitClarificationTool,
+      workflowCompleteExecutionTool,
+      workflowSubmitReviewTool,
+    ],
     beforeAgent: async (agentState, runtime) => {
+      const latestUserMessage = latestHumanText(agentState.messages);
       let state = await load(runtime);
       if (!state) {
-        state = createWorkflowState(latestHumanText(agentState.messages));
+        state = createWorkflowState(latestUserMessage);
       } else if (state.phase === "waiting_for_user") {
         state = reduceWorkflowState(state, { type: "user_replied" });
       } else if (state.phase === "delivery_ready" || state.phase === "error") {
         await archive(runtime, state);
-        state = createWorkflowState(latestHumanText(agentState.messages));
+        state = createWorkflowState(latestUserMessage);
       }
+      state = await runTriageIfNeeded(state, latestUserMessage);
       await persist(runtime, state);
     },
     wrapModelCall: async (request, handler) => {
@@ -236,58 +286,34 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
       },
     },
     wrapToolCall: async (request, handler) => {
-      const id = threadId(request.runtime);
-      const state = states.get(id) ?? (await load(request.runtime));
+      const state = states.get(threadId(request.runtime)) ?? (await load(request.runtime));
       if (!state) return handler(request);
       const args = request.toolCall.args as Record<string, unknown>;
       const subagent = request.toolCall.name === "task" ? String(args.subagent_type ?? "") : "";
 
-      if (request.toolCall.name === "workflow_complete_execution") {
-        if (state.phase !== "execution" && state.phase !== "revision") {
-          return toolMessage(request, feedbackMessage(state));
-        }
-        const parsed = workflowOutcomeSchema.safeParse(args);
-        if (!parsed.success)
+      const rejectPhase = () =>
+        toolMessage(request, {
+          error: "invalid_workflow_phase",
+          phase: state.phase,
+          requiredAction: resolveWorkflowDecision(state).requiredAction,
+        });
+      const rejectMissingSubagent = (requiredSubagent: string) =>
+        toolMessage(request, {
+          error: "required_subagent_not_completed",
+          requiredSubagent,
+          phase: state.phase,
+        });
+
+      if (request.toolCall.name === "workflow_submit_clarification") {
+        if (state.phase !== "clarification") return rejectPhase();
+        if (state.completedSubagent !== "clarifier") return rejectMissingSubagent("clarifier");
+        const parsed = clarificationSubmissionSchema.safeParse(args);
+        if (!parsed.success) {
           return toolMessage(request, {
-            error: "invalid_outcome_packet",
+            error: "invalid_clarification_result",
             issues: parsed.error.issues,
           });
-        const next = reduceWorkflowState(state, {
-          type: "execution_completed",
-          outcome: parsed.data,
-          generativeUiEnabled: options.generativeUiEnabled,
-        });
-        await persist(request.runtime, next);
-        return toolMessage(request, { status: "accepted", nextPhase: next.phase });
-      }
-
-      const expected = resolveWorkflowDecision(state).requiredSubagent;
-      if (subagent && expected && subagent !== expected) {
-        return toolMessage(request, feedbackMessage(state));
-      }
-      if (!subagent || subagent !== expected) return handler(request);
-
-      const packet = state.outcome
-        ? `\n\nAuthoritative workflow outcome packet:\n${JSON.stringify({ outcome: state.outcome, productBatch: state.productBatch, reviewFeedback: state.lastFeedback })}`
-        : "";
-      const response = await handler({
-        ...request,
-        toolCall: {
-          ...request.toolCall,
-          args: { ...args, description: `${String(args.description ?? "")}${packet}` },
-        },
-      });
-      if (subagent === "clarifier") {
-        const parsed = clarificationResultSchema.safeParse(jsonOf(response));
-        if (!parsed.success)
-          return malformed(
-            id,
-            state,
-            "clarifier",
-            { error: "invalid_clarification_result", issues: parsed.error.issues },
-            request,
-          );
-        malformedCounts.delete(id);
+        }
         const prior =
           state.clarification ??
           createClarificationState(state.originalRequest, {
@@ -300,7 +326,15 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
           roundCount,
           maxRounds: options.maxClarificationRounds,
         };
-        const clarification = applyClarificationResult(prior, authoritative);
+        let clarification: ClarificationState;
+        try {
+          clarification = applyClarificationResult(prior, authoritative);
+        } catch (error) {
+          return toolMessage(request, {
+            error: "invalid_clarification_result",
+            issues: [{ message: error instanceof Error ? error.message : String(error) }],
+          });
+        }
         const normalized =
           roundCount >= options.maxClarificationRounds && !clarification.readyToProceed
             ? {
@@ -323,55 +357,79 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
           readyToProceed: normalized.readyToProceed,
           openQuestions: normalized.questions,
         };
-        await persist(
-          request.runtime,
-          reduceWorkflowState(state, {
-            type: "clarification_completed",
-            result: normalized,
-            state: normalizedState,
-          }),
-        );
-        return toolMessage(request, normalized);
+        const next = reduceWorkflowState(state, {
+          type: "clarification_completed",
+          result: normalized,
+          state: normalizedState,
+        });
+        await persist(request.runtime, next);
+        return toolMessage(request, {
+          status: "accepted",
+          nextPhase: next.phase,
+          result: normalized,
+        });
       }
-      if (subagent === "product-generator") {
-        const parsed = productCardBatchSchema.safeParse(jsonOf(response));
+
+      if (request.toolCall.name === "workflow_complete_execution") {
+        if (state.phase !== "execution" && state.phase !== "revision") {
+          return rejectPhase();
+        }
+        const parsed = workflowOutcomeSchema.safeParse(args);
         if (!parsed.success)
-          return malformed(
-            id,
-            state,
-            "product-generator",
-            {
-              error: "invalid_product_batch",
-              issues: parsed.error.issues,
-            },
-            request,
-          );
-        malformedCounts.delete(id);
-        await persist(
-          request.runtime,
-          reduceWorkflowState(state, { type: "product_generated", batch: parsed.data }),
-        );
-        return response;
+          return toolMessage(request, {
+            error: "invalid_outcome_packet",
+            issues: parsed.error.issues,
+          });
+        const next = reduceWorkflowState(state, {
+          type: "execution_completed",
+          outcome: parsed.data,
+        });
+        await persist(request.runtime, next);
+        return toolMessage(request, { status: "accepted", nextPhase: next.phase });
       }
-      const parsed = reviewReportSchema.safeParse(jsonOf(response));
-      if (!parsed.success)
-        return malformed(
-          id,
-          state,
-          "review-agent",
-          {
+
+      if (request.toolCall.name === "workflow_submit_review") {
+        if (state.phase !== "review") return rejectPhase();
+        if (state.completedSubagent !== "review-agent") {
+          return rejectMissingSubagent("review-agent");
+        }
+        const parsed = reviewReportSchema.safeParse(args);
+        if (!parsed.success) {
+          return toolMessage(request, {
             error: "invalid_review_report",
             issues: parsed.error.issues,
-          },
-          request,
-        );
-      malformedCounts.delete(id);
-      await persist(
-        request.runtime,
-        reduceWorkflowState(state, {
+          });
+        }
+        const next = reduceWorkflowState(state, {
           type: "review_completed",
           report: parsed.data,
           maxRevisions: options.maxRevisions,
+        });
+        await persist(request.runtime, next);
+        return toolMessage(request, { status: "accepted", nextPhase: next.phase });
+      }
+
+      const expected = resolveWorkflowDecision(state).requiredSubagent;
+      if (subagent && expected && subagent !== expected) {
+        return toolMessage(request, feedbackMessage(state));
+      }
+      if (!subagent || subagent !== expected) return handler(request);
+
+      const packet = state.outcome
+        ? `\n\nAuthoritative workflow outcome packet:\n${JSON.stringify({ outcome: state.outcome, reviewFeedback: state.lastFeedback })}`
+        : "";
+      const response = await handler({
+        ...request,
+        toolCall: {
+          ...request.toolCall,
+          args: { ...args, description: `${String(args.description ?? "")}${packet}` },
+        },
+      });
+      await persist(
+        request.runtime,
+        reduceWorkflowState(state, {
+          type: "subagent_completed",
+          subagent: expected,
         }),
       );
       return response;

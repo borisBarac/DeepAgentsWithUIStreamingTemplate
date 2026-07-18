@@ -1,5 +1,7 @@
-import { createClarificationConfig } from "../clarification/index.ts";
-import { composeProductGeneratorPrompt } from "../generative-ui/index.ts";
+import {
+  createClarificationConfig,
+  createClarificationTriageClassifier,
+} from "../clarification/index.ts";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createReviewConfig } from "../review/index.ts";
 import { createDefaultCompositeBackend } from "./backend.ts";
@@ -21,10 +23,16 @@ function createSupervisorSpecialistsRuntimeScaffold(
   const review = createReviewConfig(options.reviewOptions);
   const memoryFilePaths = options.memoryFilePaths ?? DEFAULT_MEMORY_FILE_PATHS;
 
-  const baseSystemPrompt = options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification);
-  const systemPrompt = options.generativeUi
-    ? `${baseSystemPrompt}\n\n${composeProductGeneratorPrompt(options.generativeUi.catalogPrompt)}`
-    : baseSystemPrompt;
+  const systemPrompt = options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification);
+
+  const triageEnabled = clarification.triage?.enabled !== false;
+  const triageClassifier = triageEnabled
+    ? createClarificationTriageClassifier({
+        classifier: options.triageClassifier,
+        model: options.modelRuntime?.getModelForRole("triage"),
+        promptLoader,
+      })
+    : undefined;
 
   return {
     virtualFilesystem: createVirtualFilesystemLayout(),
@@ -40,9 +48,9 @@ function createSupervisorSpecialistsRuntimeScaffold(
       config: clarification,
       requiredSubagent: "clarifier",
     },
-    productGeneration: {
-      enabled: Boolean(options.generativeUi),
-      ...(options.generativeUi ? { requiredSubagent: "product-generator" as const } : {}),
+    triage: {
+      enabled: triageEnabled && triageClassifier !== undefined,
+      classifier: triageClassifier,
     },
     review: {
       config: review,

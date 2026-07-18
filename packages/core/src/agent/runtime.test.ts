@@ -7,11 +7,10 @@ import {
 import type { BaseMessage } from "@langchain/core/messages";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { ChatResult } from "@langchain/core/outputs";
-import { ProviderStrategy, StructuredOutputParsingError } from "langchain";
 import { DEFAULT_SAFETY_GUARDRAIL_NAME } from "../guardrails/safety.ts";
 import { DEFAULT_TASK_SCOPE_GUARDRAIL_NAME } from "../guardrails/task-scope.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
-import { createAgentFromRuntimeScaffold } from "./runtime.ts";
+import { createAgentFromRuntimeScaffold, type TwoPhaseDeepAgent } from "./runtime.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";
 
 const langSmithEnvKeys = [
@@ -28,6 +27,8 @@ const originalLangSmithEnv = Object.fromEntries(
 
 class CapturingChatModel extends BaseChatModel {
   readonly boundOptions: Array<Record<string, unknown>> = [];
+  readonly presentationInputs: unknown[] = [];
+  workCalls = 0;
 
   _llmType(): string {
     return "capturing-supervisor-model";
@@ -39,10 +40,21 @@ class CapturingChatModel extends BaseChatModel {
   }
 
   async _generate(_messages: BaseMessage[]): Promise<ChatResult> {
-    const response = new AIMessage(
-      '{"version":1,"updates":[{"type":"message","text":"Bound JSON output"}]}',
-    );
+    this.workCalls += 1;
+    const response = new AIMessage("Completed work candidate");
     return { generations: [{ text: response.text, message: response }] };
+  }
+
+  override withStructuredOutput(_schema: unknown): never {
+    return {
+      invoke: async (input: unknown) => {
+        this.presentationInputs.push(input);
+        return {
+          version: 1,
+          updates: [{ type: "message", text: "Presented output" }],
+        };
+      },
+    } as never;
   }
 }
 
@@ -117,7 +129,7 @@ describe("createAgentFromRuntimeScaffold", () => {
     expect(names).toContain("CallerMiddleware");
   });
 
-  it("enforces the generative UI response format through JSON object mode", async () => {
+  it("keeps structured output and JSON middleware off the work agent", () => {
     const agent = createAgentFromRuntimeScaffold({
       factoryName: "createScaffoldedAgent",
       scaffold: createRuntimeScaffold({ generativeUi: {} }),
@@ -125,52 +137,13 @@ describe("createAgentFromRuntimeScaffold", () => {
       guardrails: false,
     });
     const responseFormat = agent.options.responseFormat;
-    const middleware = agent.options.middleware?.find(
-      (entry) => entry.name === "ScaffoldStructuredJsonObject",
-    );
-    const calls: Array<Record<string, unknown>> = [];
-
-    expect(responseFormat).toBeInstanceOf(ProviderStrategy);
-    expect((responseFormat as ProviderStrategy).schema).toMatchObject({
-      type: "object",
-      properties: {
-        version: { const: 1 },
-        updates: { type: "array" },
-      },
-    });
-    expect(middleware?.wrapModelCall).toBeFunction();
-
-    await middleware?.wrapModelCall?.(
-      {
-        messages: [new HumanMessage("Return JSON.")],
-        modelSettings: {
-          temperature: 0.2,
-          outputConfig: { schema: "forbidden" },
-          responseSchema: { type: "object" },
-          ls_structured_output_format: { schema: "forbidden" },
-          strict: true,
-        },
-      } as never,
-      async (request) => {
-        calls.push(request as unknown as Record<string, unknown>);
-        return new AIMessage('{"version":1,"updates":[{"type":"message","text":"ok"}]}');
-      },
-    );
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.modelSettings).toEqual({
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      outputConfig: undefined,
-      responseSchema: undefined,
-      ls_structured_output_format: undefined,
-      strict: undefined,
-    });
-    expect(calls[0]?.toolChoice).toBeUndefined();
-    expect(JSON.stringify(calls[0])).not.toContain("json_schema");
+    expect(responseFormat).toBeUndefined();
+    expect(
+      agent.options.middleware?.some((entry) => entry.name === "ScaffoldStructuredJsonObject"),
+    ).toBeFalse();
   });
 
-  it("binds the supervisor with json_object and no schema or forced tool choice", async () => {
+  it("uses the same supervisor for work and a tool-free structured presentation", async () => {
     const model = new CapturingChatModel({});
     const modelRuntime = createTestModelRuntime();
     const getModelForRole = modelRuntime.getModelForRole.bind(modelRuntime);
@@ -192,32 +165,61 @@ describe("createAgentFromRuntimeScaffold", () => {
 
     expect(result.structuredResponse).toEqual({
       version: 1,
-      updates: [{ type: "message", text: "Bound JSON output" }],
+      updates: [{ type: "message", text: "Presented output" }],
     });
+    expect(model.workCalls).toBe(1);
+    expect(model.presentationInputs).toHaveLength(1);
+    expect(JSON.stringify(model.presentationInputs[0])).toContain("Return one JSON object");
+    expect(JSON.stringify(model.presentationInputs[0])).not.toContain("product-generator");
     expect(model.boundOptions).toHaveLength(1);
-    expect(model.boundOptions[0]?.response_format).toEqual({ type: "json_object" });
+    expect(model.boundOptions[0]?.response_format).toBeUndefined();
     expect(model.boundOptions[0]?.tool_choice).toBeUndefined();
-    expect(JSON.stringify(model.boundOptions)).not.toContain("json_schema");
   });
 
-  it("leaves supervisor parse retries to the interaction processor", async () => {
+  it("preserves LangGraph stream private field access", async () => {
+    const model = new CapturingChatModel({});
+    const modelRuntime = createTestModelRuntime();
+    const getModelForRole = modelRuntime.getModelForRole.bind(modelRuntime);
+    modelRuntime.getModelForRole = (role) =>
+      role === "supervisor" ? (model as never) : getModelForRole(role);
     const agent = createAgentFromRuntimeScaffold({
       factoryName: "createScaffoldedAgent",
-      scaffold: createRuntimeScaffold({ generativeUi: {} }),
-      modelRuntime: createTestModelRuntime(),
+      scaffold: createRuntimeScaffold({
+        generativeUi: {},
+        memory: [],
+        modelRuntime,
+        subagents: [],
+      }),
+      modelRuntime,
       guardrails: false,
     });
-    const middleware = agent.options.middleware?.find(
-      (entry) => entry.name === "ScaffoldStructuredJsonObject",
-    );
-    let calls = 0;
 
-    await expect(
-      middleware?.wrapModelCall?.({ messages: [] } as never, async () => {
-        calls += 1;
-        throw new StructuredOutputParsingError("providerStrategy", ["invalid"]);
-      }),
-    ).rejects.toBeInstanceOf(StructuredOutputParsingError);
-    expect(calls).toBe(1);
+    const run = await agent.streamEvents(
+      { messages: [new HumanMessage("Return JSON.")] },
+      { version: "v3" },
+    );
+
+    expect(() => run.messages).not.toThrow();
+    expect(() => run[Symbol.asyncIterator]()).not.toThrow();
+  });
+
+  it("exposes presentation repair without repeating work", async () => {
+    const model = new CapturingChatModel({});
+    const modelRuntime = createTestModelRuntime();
+    const getModelForRole = modelRuntime.getModelForRole.bind(modelRuntime);
+    modelRuntime.getModelForRole = (role) =>
+      role === "supervisor" ? (model as never) : getModelForRole(role);
+    const agent = createAgentFromRuntimeScaffold({
+      factoryName: "createScaffoldedAgent",
+      scaffold: createRuntimeScaffold({ generativeUi: {}, memory: [], subagents: [] }),
+      modelRuntime,
+      guardrails: false,
+    });
+    const twoPhaseAgent = agent as TwoPhaseDeepAgent;
+    const workResult = await twoPhaseAgent.invokeWork({ messages: [new HumanMessage("Do work")] });
+    await twoPhaseAgent.present({ messages: [], workResult, repairFeedback: "Fix the root." });
+
+    expect(model.workCalls).toBe(1);
+    expect(model.presentationInputs).toHaveLength(1);
   });
 });

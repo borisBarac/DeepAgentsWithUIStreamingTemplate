@@ -7,7 +7,6 @@ import {
 import type { StructuredTool } from "@langchain/core/tools";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import type { SpecializedToolDefinition } from "../tools/types.ts";
 
 /**
  * Input schema for the {@link createPythonSandboxTool} tool. Mirrors the
@@ -96,33 +95,4 @@ export function createPythonSandboxTool(options: CreatePythonSandboxToolOptions)
       schema: pythonSandboxInputSchema,
     },
   );
-}
-
-/**
- * Build a ready-to-register {@link SpecializedToolDefinition} for the
- * `researcher` and `analyst` specialist roles. The definition carries the metadata the existing
- * `SpecializedToolStore` was designed for:
- *   - `riskLevel: "restricted"` — `roleHasRestrictedTools("analyst")` returns true.
- *   - `evidenceMode: "execution"` — flags this as a code-execution tool.
- *
- * @example
- *   const definition = createPythonSandboxToolDefinition({
- *     backend: createDockerSandboxBackend(),
- *   });
- *   const store = createSpecializedToolStore({
- *     tools: [definition],
- *     roles: createDefaultSpecialistRoleToolsets(),
- *   });
- */
-export function createPythonSandboxToolDefinition(
-  options: CreatePythonSandboxToolOptions,
-): SpecializedToolDefinition<"researcher" | "analyst"> {
-  const definition: SpecializedToolDefinition<"researcher" | "analyst"> = {
-    id: "python-sandbox",
-    tool: createPythonSandboxTool(options),
-    specialists: ["researcher", "analyst"],
-    riskLevel: "restricted",
-    evidenceMode: "execution",
-  };
-  return Object.freeze(definition);
 }

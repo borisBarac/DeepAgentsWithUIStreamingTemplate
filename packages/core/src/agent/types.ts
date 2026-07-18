@@ -41,17 +41,11 @@ export type CreateScaffoldedAgentOptions = Omit<
     generativeUi?: GenerativeUiOptions;
   } & Omit<
     CreateRuntimeScaffoldOptions,
-    | "promptLoader"
-    | "researcher"
-    | "analyst"
-    | "reviewer"
-    | "clarifier"
-    | "imageDesigner"
-    | "productGenerator"
+    "promptLoader" | "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"
   > & {
     memoryUserId?: string;
     subagentOverrides?: Pick<
       CreateRuntimeScaffoldOptions,
-      "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner" | "productGenerator"
+      "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"
     >;
   };

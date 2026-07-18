@@ -1,4 +1,7 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
+import clarificationTriagePromptText from "../../prompts/clarification-triage.md" with {
+  type: "text",
+};
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
 import generativeUiJsonObjectPromptText from "../../prompts/generative-ui-json-object.md" with {
   type: "text",
@@ -7,10 +10,7 @@ import imageDesignerPromptText from "../../prompts/image-designer.md" with { typ
 import jsonRenderCatalogPromptText from "../../prompts/json-render-catalog.md" with {
   type: "text",
 };
-import productCardCatalogPromptText from "../../prompts/product-card-catalog.md" with {
-  type: "text",
-};
-import productGeneratorPromptText from "../../prompts/product-generator.md" with { type: "text" };
+import presentationPromptText from "../../prompts/presentation.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
 import safetyClassificationPromptText from "../../prompts/safety-classification.md" with {
@@ -35,10 +35,10 @@ import {
 export interface PromptLoader {
   getSupervisorPrompt(config: Partial<ClarificationConfig>): string;
   getClarifierPrompt(config: Partial<ClarificationConfig>): string;
+  getClarificationTriagePrompt(): string;
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
   getImageDesignerPrompt(): string;
-  getProductGeneratorPrompt(): string;
   getReviewAgentPrompt(): string;
 }
 
@@ -52,16 +52,23 @@ export function renderPromptTemplate(
   );
 }
 
-export const CORE_PROMPT_TEMPLATES = {
+function definePromptTemplates<const T extends Readonly<Record<string, string>>>(
+  templates: T,
+): T & Readonly<Record<string, string>> {
+  return templates;
+}
+
+export const CORE_PROMPT_TEMPLATES = definePromptTemplates({
   generativeUiJsonObject: generativeUiJsonObjectPromptText,
   jsonRenderCatalog: jsonRenderCatalogPromptText,
-  productCardCatalog: productCardCatalogPromptText,
+  presentation: presentationPromptText,
   safetyClassification: safetyClassificationPromptText,
   structuredJson: structuredJsonPromptText,
   structuredJsonCorrection: structuredJsonCorrectionPromptText,
   taskScopeClassification: taskScopeClassificationPromptText,
   uiRepairFeedback: uiRepairFeedbackPromptText,
-} as const;
+  clarificationTriage: clarificationTriagePromptText,
+});
 
 function getCurrentDateTimeContext(): { currentDateTime: string; timezone: string } {
   const now = new Date();
@@ -102,6 +109,10 @@ export class MarkdownPromptLoader implements PromptLoader {
     });
   }
 
+  getClarificationTriagePrompt(): string {
+    return clarificationTriagePromptText;
+  }
+
   getResearcherPrompt(): string {
     return researcherPromptText;
   }
@@ -112,10 +123,6 @@ export class MarkdownPromptLoader implements PromptLoader {
 
   getImageDesignerPrompt(): string {
     return imageDesignerPromptText;
-  }
-
-  getProductGeneratorPrompt(): string {
-    return productGeneratorPromptText;
   }
 
   getReviewAgentPrompt(): string {
@@ -146,9 +153,6 @@ export const DEFAULT_RESEARCHER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getResearc
 export const DEFAULT_ANALYST_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getAnalystPrompt();
 
 export const DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getImageDesignerPrompt();
-
-export const DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT =
-  DEFAULT_PROMPT_LOADER.getProductGeneratorPrompt();
 
 export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
 

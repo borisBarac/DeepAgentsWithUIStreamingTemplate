@@ -12,6 +12,25 @@ export type StructuredPayload = Record<string, unknown>;
 export type AgentInvokeResult = { messages?: unknown[] };
 export type TaskToolMessage = { name: string; content: unknown; tool_call_id: string };
 
+export function findToolMessage(
+  messages: unknown[] | undefined,
+  name: string,
+): TaskToolMessage | undefined {
+  if (!messages) return undefined;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index] as Record<string, unknown> | undefined;
+    if (!message || typeof message !== "object") continue;
+    if (typeof message.tool_call_id === "string" && message.name === name) {
+      return {
+        name,
+        content: message.content,
+        tool_call_id: message.tool_call_id,
+      };
+    }
+  }
+  return undefined;
+}
+
 export function createDefaultModelRuntime(thinking: boolean) {
   return createModelRuntime({
     connections: {
@@ -142,6 +161,25 @@ export function parseTaskToolPayload(message: TaskToolMessage | undefined): Stru
     return JSON.parse(extractJsonObject(message.content)) as StructuredPayload;
   } catch {
     throw new Error(`The task tool content was not valid JSON: ${message.content.slice(0, 200)}`);
+  }
+}
+
+export function parseToolMessagePayload(
+  message: TaskToolMessage | undefined,
+  name: string,
+): StructuredPayload {
+  if (!message) {
+    throw new Error(`No ${name} tool message was found in the agent result.`);
+  }
+  if (typeof message.content !== "string" || message.content.length === 0) {
+    throw new Error(`The ${name} tool message did not carry string content.`);
+  }
+  try {
+    return JSON.parse(extractJsonObject(message.content)) as StructuredPayload;
+  } catch {
+    throw new Error(
+      `The ${name} tool content was not valid JSON: ${message.content.slice(0, 200)}`,
+    );
   }
 }
 

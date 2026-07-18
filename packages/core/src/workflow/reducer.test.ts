@@ -35,7 +35,7 @@ describe("reduceWorkflowState", () => {
     expect(next.phase).toBe("execution");
   });
 
-  it("requires regeneration and re-review after requested changes", () => {
+  it("requires revision and re-review after requested changes", () => {
     const initial = {
       ...createWorkflowState("Build it"),
       phase: "review" as const,
@@ -45,7 +45,6 @@ describe("reduceWorkflowState", () => {
         validationEvidence: [],
         assumptions: [],
       },
-      productBatch: { products: [{ id: "p", title: "P", description: "D" }] },
     };
     const report = {
       status: "changes_required" as const,
@@ -64,11 +63,9 @@ describe("reduceWorkflowState", () => {
     expect(revision).toMatchObject({
       phase: "revision",
       revisionCount: 1,
-      productBatch: undefined,
     });
     const executed = reduceWorkflowState(revision, {
       type: "execution_completed",
-      generativeUiEnabled: true,
       outcome: {
         candidateFinalResponse: "v2",
         deliverables: [],
@@ -76,7 +73,7 @@ describe("reduceWorkflowState", () => {
         assumptions: [],
       },
     });
-    expect(executed.phase).toBe("product_generation");
+    expect(executed.phase).toBe("review");
   });
 
   it("delivers with caveats when the review budget is exhausted", () => {

@@ -10,10 +10,10 @@ import { createTestModelRuntime } from "./test-helpers.ts";
 const testPromptLoader: PromptLoader = {
   getSupervisorPrompt: () => "custom supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
+  getClarificationTriagePrompt: () => "custom triage prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
-  getProductGeneratorPrompt: () => "custom product generator prompt",
   getReviewAgentPrompt: () => "custom review prompt",
 };
 
@@ -130,7 +130,7 @@ describe("createScaffoldedAgent", () => {
     expect(typeof agent.invoke).toBe("function");
   });
 
-  it("threads generativeUi into the supervisor prompt", () => {
+  it("keeps generative UI catalog instructions out of the work prompt", () => {
     const agent = createScaffoldedAgent({
       modelRuntime: createTestModelRuntime(),
       promptLoader: testPromptLoader,
@@ -139,8 +139,8 @@ describe("createScaffoldedAgent", () => {
     });
 
     expectSystemPromptToContain(agent.options.systemPrompt, "custom supervisor prompt");
-    expectSystemPromptToContain(agent.options.systemPrompt, "product-card");
-    expectSystemPromptToContain(agent.options.systemPrompt, "APP CATALOG");
+    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("product-card");
+    expect(JSON.stringify(agent.options.systemPrompt)).not.toContain("APP CATALOG");
   });
 
   it("rejects a custom response format when generative UI owns the contract", () => {

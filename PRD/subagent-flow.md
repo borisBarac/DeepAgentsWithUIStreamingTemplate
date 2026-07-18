@@ -2,9 +2,10 @@
 
   ## Summary
 
-  Implement explicit orchestration: clarifier gates every new request; product-generator runs after
-  clarification when generative UI is enabled; reviewer validates delivery; reviewer failure loops back to
-  product-generator.
+  Implement explicit orchestration: a triage classifier gates the clarifier (skip for self-contained
+  prompts, proceed for ambiguous ones); when proceeding, clarifier runs before normal work;
+  product-generator runs after clarification when generative UI is enabled; reviewer validates
+  delivery; reviewer failure loops back to product-generator.
 
   ## Key Changes
 
@@ -19,7 +20,9 @@
       - blocked
 
   - Gate rules:
-      - New/unresolved request -> clarifier
+      - New/unresolved request -> triage classifier
+      - triage "skip" -> straight to execution (clarifier round elided)
+      - triage "proceed" -> clarifier
       - blocked or unresolved after max rounds -> stop
       - ready_to_proceed + no generativeUi -> normal execution
       - ready_to_proceed + generativeUi + no product batch -> product-generator
@@ -43,7 +46,7 @@
   ## Prompt Updates
 
   - Supervisor prompt must require:
-      - clarifier first
+      - triage-first; delegate to clarifier only when the workflow controller routes there
       - product-generator immediately after ready_to_proceed when generative UI is enabled
       - reviewer after product generation
       - if reviewer reports required changes, route back to product-generator with the feedback

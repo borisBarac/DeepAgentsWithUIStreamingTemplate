@@ -3,6 +3,8 @@ export {
   createWorkflowControllerMiddleware,
   WorkflowRuntimeError,
   workflowCompleteExecutionTool,
+  workflowSubmitClarificationTool,
+  workflowSubmitReviewTool,
 } from "./runtime.ts";
 export type {
   WorkflowControllerOptions,

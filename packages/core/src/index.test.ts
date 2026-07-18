@@ -12,7 +12,6 @@ import * as review from "./review/index.ts";
 import * as sandbox from "./sandbox/index.ts";
 import * as scaffold from "./scaffold/index.ts";
 import * as skills from "./skills/index.ts";
-import * as tools from "./tools/index.ts";
 
 describe("index barrel exports", () => {
   it("re-exports agent helpers from the agent module", () => {
@@ -39,7 +38,6 @@ describe("index barrel exports", () => {
     expect(index.createClarificationConfig).toBe(clarification.createClarificationConfig);
     expect(index.createClarificationState).toBe(clarification.createClarificationState);
     expect(index.applyClarificationResult).toBe(clarification.applyClarificationResult);
-    expect(index.resolveClarificationGate).toBe(clarification.resolveClarificationGate);
     expect(index.DEFAULT_CLARIFICATION_MAX_ROUNDS).toBe(
       clarification.DEFAULT_CLARIFICATION_MAX_ROUNDS,
     );
@@ -101,16 +99,6 @@ describe("index barrel exports", () => {
     expect(index.CLARIFY_DEEPLY_SKILL_NAME).toBe(skills.CLARIFY_DEEPLY_SKILL_NAME);
     expect(index.CLARIFY_DEEPLY_SKILL_PATH).toBe(skills.CLARIFY_DEEPLY_SKILL_PATH);
     expect(index.createDefaultSkillFiles).toBe(skills.createDefaultSkillFiles);
-  });
-
-  it("re-exports specialized tool helpers from the tools module", () => {
-    expect(index.createDefaultSpecialistRoleToolsets).toBe(
-      tools.createDefaultSpecialistRoleToolsets,
-    );
-    expect(index.IMAGE_DESIGNER_TOOL_NAME).toBe(tools.IMAGE_DESIGNER_TOOL_NAME);
-    expect(index.createSpecializedToolStore).toBe(tools.createSpecializedToolStore);
-    expect(index.resolveSpecializedTools).toBe(tools.resolveSpecializedTools);
-    expect(index.resolveSpecializedToolsForRoles).toBe(tools.resolveSpecializedToolsForRoles);
   });
 
   it("re-exports the image designer module helpers", () => {

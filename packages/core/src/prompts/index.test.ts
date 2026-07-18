@@ -6,7 +6,6 @@ import {
   createSupervisorSystemPrompt,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
   DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
-  DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
   DEFAULT_SUPERVISOR_SYSTEM_PROMPT,
@@ -17,9 +16,7 @@ import {
 describe("prompt defaults", () => {
   it("exports the default clarifier system prompt", () => {
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You are the clarifier subagent.");
-    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
-      "Return only the structured readiness payload.",
-    );
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You may use prose or JSON.");
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
       "between 1 and 3 high-value clarification questions per round",
     );
@@ -28,10 +25,13 @@ describe("prompt defaults", () => {
 
   it("makes clarification a required supervisor intake phase", () => {
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
-      "Send every new top-level request to `clarifier` before normal work.",
+      "Send unresolved or new top-level requests to `clarifier` whenever the workflow controller routes you there",
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
-      "Follow this order: bounded clarification; execution and artifact creation; product generation when enabled; unified review; autonomous revision and resubmission; final delivery.",
+      "Follow this order: bounded clarification; execution and artifact creation; unified review; autonomous revision and resubmission; final delivery.",
+    );
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
+      "pre-clarifier triage classifier runs on most new requests",
     );
   });
 
@@ -45,12 +45,8 @@ describe("prompt defaults", () => {
     );
   });
 
-  it("requires product generation and review before final delivery when generative UI is enabled", () => {
-    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
-      "product generation is mandatory after the non-product deliverables exist",
-    );
+  it("requires review before final delivery", () => {
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("send `review-agent` one context packet");
-    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("regenerate affected products");
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("latest unresolved reviewer findings");
   });
 
@@ -125,9 +121,13 @@ describe("prompt defaults", () => {
   });
 
   it("defines valid ui root identity and replacement rules", () => {
-    expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).toContain('"type": "product-card"');
+    expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).toContain('"component": "Card"');
+    expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).toContain('"component": "Text"');
+    expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).not.toContain(
+      '"component": "product-card"',
+    );
     expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).toContain(
-      "Each independent ui update must use a unique `spec.root` value",
+      "Each independent ui update must use a unique `rootId` value",
     );
     expect(CORE_PROMPT_TEMPLATES.generativeUiJsonObject).toContain(
       "keeps only the last ui update for a repeated root",
@@ -182,16 +182,11 @@ describe("prompt defaults", () => {
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
       "tests, checks, citations, or manual validation",
     );
-  });
-
-  it("tells the product generator to revise from reviewer feedback", () => {
-    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain(
-      "If reviewer feedback is provided, treat it as required revision input",
-    );
-    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain("complete batch");
-    expect(DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT).toContain(
-      "one JSON object with a `products` array",
-    );
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("all deliverables");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).not.toContain("non-product");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).not.toContain("product batch");
+    expect(CORE_PROMPT_TEMPLATES.presentation).toContain("accepted final answer and any UI");
+    expect(CORE_PROMPT_TEMPLATES.presentation).not.toContain("product cards");
   });
 
   it("uses the default markdown loader for compatibility exports", () => {

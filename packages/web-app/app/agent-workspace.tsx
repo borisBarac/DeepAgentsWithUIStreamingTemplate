@@ -1,6 +1,5 @@
 "use client";
 
-import { normalizeQuestionOption } from "@deep-agent-template/core/generative-ui";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-chat.ts";
@@ -40,7 +39,7 @@ function QuestionControls({
     return (
       <div className="question-options">
         {question.options.map((option) => {
-          const normalized = normalizeQuestionOption(option);
+          const normalized = typeof option === "string" ? { label: option } : option;
           return (
             <button
               disabled={disabled || message.answered}
@@ -84,6 +83,12 @@ function QuestionControls({
 
 function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) {
   const recentActivity = useMemo(() => activity.slice(-30), [activity]);
+  const {
+    containerRef: activityListRef,
+    bottomAnchorRef: activityAnchorRef,
+    showJumpToLatest: showDebugJump,
+    jumpToLatest: jumpDebugToLatest,
+  } = useStickyBottomScroll([recentActivity], { sticky: true, showJumpToLatest: true });
 
   return (
     <section className="debug-pane" aria-label="Agent debug log">
@@ -94,7 +99,7 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
         </div>
         <span>{activity.length}</span>
       </header>
-      <div className="agent-activity-list">
+      <div className="agent-activity-list" ref={activityListRef}>
         {recentActivity.length === 0 ? (
           <div className="agent-empty">No agent activity yet.</div>
         ) : (
@@ -117,7 +122,13 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
             </article>
           ))
         )}
+        <div aria-hidden="true" ref={activityAnchorRef} />
       </div>
+      {showDebugJump ? (
+        <button className="jump-to-latest" onClick={jumpDebugToLatest} type="button">
+          ↓ Latest
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -135,12 +146,15 @@ export function AgentWorkspace() {
     submitAnswer,
     submitMessage,
   } = useAgentChat();
-  const { bottomAnchorRef, containerRef: messageListRef } = useStickyBottomScroll([
-    visibleMessages,
-    agentActivity,
-    uiSpecs,
-    error,
-  ]);
+  const {
+    bottomAnchorRef,
+    containerRef: messageListRef,
+    showJumpToLatest: showChatJump,
+    jumpToLatest: jumpChatToLatest,
+  } = useStickyBottomScroll([visibleMessages, agentActivity, uiSpecs, error], {
+    sticky: true,
+    showJumpToLatest: true,
+  });
 
   return (
     <main className="app-shell">
@@ -163,31 +177,40 @@ export function AgentWorkspace() {
           </fieldset>
         </header>
 
-        <div className="message-list" ref={messageListRef}>
-          {visibleMessages.length === 0 ? (
-            <div className="empty-state">
-              <h2>Design with the agent</h2>
-              <p>
-                Use a starter or describe the product, workflow, and constraints you want explored.
-              </p>
-            </div>
-          ) : (
-            visibleMessages.map((message) => (
-              <article className={`message message-${message.role}`} key={message.id}>
-                <span>{message.role}</span>
-                <p>{message.content}</p>
-                <QuestionControls disabled={loading} message={message} onAnswer={submitAnswer} />
-                {message.question && message.answer ? <p>Your answer: {message.answer}</p> : null}
+        <div className="message-list-wrap">
+          <div className="message-list" ref={messageListRef}>
+            {visibleMessages.length === 0 ? (
+              <div className="empty-state">
+                <h2>Design with the agent</h2>
+                <p>
+                  Use a starter or describe the product, workflow, and constraints you want
+                  explored.
+                </p>
+              </div>
+            ) : (
+              visibleMessages.map((message) => (
+                <article className={`message message-${message.role}`} key={message.id}>
+                  <span>{message.role}</span>
+                  <p>{message.content}</p>
+                  <QuestionControls disabled={loading} message={message} onAnswer={submitAnswer} />
+                  {message.question && message.answer ? <p>Your answer: {message.answer}</p> : null}
+                </article>
+              ))
+            )}
+            {error ? (
+              <article className="message message-error">
+                <span>error</span>
+                <p>{error}</p>
               </article>
-            ))
-          )}
-          {error ? (
-            <article className="message message-error">
-              <span>error</span>
-              <p>{error}</p>
-            </article>
+            ) : null}
+            <div aria-hidden="true" className="message-list-anchor" ref={bottomAnchorRef} />
+          </div>
+
+          {showChatJump ? (
+            <button className="jump-to-latest" onClick={jumpChatToLatest} type="button">
+              ↓ Latest
+            </button>
           ) : null}
-          <div aria-hidden="true" className="message-list-anchor" ref={bottomAnchorRef} />
         </div>
 
         <form className="composer" onSubmit={submitMessage}>

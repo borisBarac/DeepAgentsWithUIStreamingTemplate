@@ -122,12 +122,13 @@ mapping.
 
 | Category | Roles |
 |----------|-------|
-| `fast`   | `clarifier`, *(task-scope guardrail classifier)* |
-| `normal` | `researcher`, `image-designer`, `product-generator`, `coder` |
+| `fast`   | `clarifier`, `triage`, *(task-scope guardrail classifier)* |
+| `normal` | `researcher`, `image-designer`, `coder` |
 | `pro`    | `supervisor`, `analyst`, `reviewer`, `finalizer` |
 
 `assignments.default` resolves to `normal`. The guardrail task-scope classifier
-always uses the `fast` category (cheap structured-output classification).
+and the clarification triage classifier both use the `fast` category (cheap
+structured-output classification).
 
 Explicit `subagentOverrides.<role>.model` values still win over the runtime's
 category resolution for a single specialist instance.
@@ -161,6 +162,7 @@ const modelRuntime = createModelRuntime({
   assignments: {
     default: "normal",
     clarifier: "fast",
+    triage: "fast",
     reviewer: "pro",
   },
 });
@@ -391,9 +393,14 @@ const agent = createScaffoldedAgent({
 
 ## Clarification-first supervisor flow
 
-The scaffolded supervisor treats clarification as a required preflight phase. Every new top-level request is expected to route through the `clarifier` subagent before normal planning, tool use, or downstream delegation begins.
+The scaffolded supervisor treats clarification as a required preflight phase — but with a triage gate in front. Every new top-level request (and every user reply after `waiting_for_user`) first passes through a cheap `triage` classifier running on the `fast` model tier. The classifier decides whether the full clarifier subagent round is needed:
 
-The `clarifier` uses provider-parsed structured output backed by `clarificationResultSchema`. Default structured subagents request `json_object` and retry one terminal parse failure with transient correction context, so readiness payloads reach the supervisor as machine-readable data rather than free text. The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
+- **Skip** — the request is self-contained, a continuation token (`continue`, `yes`, `ok`, `go ahead`), an answer to a prior clarifier question, or a trivial prompt answerable in one shot. The workflow synthesizes a `ready_to_proceed` clarification result with `skipReason: "triage_classifier"` and transitions straight to `execution`. No clarifier subagent call is made.
+- **Proceed** — the request has material ambiguity or is the start of a new multi-step task. The normal clarifier preflight runs as before.
+
+The triage gate is on by default. Disable it with `clarificationOptions: { triage: { enabled: false } }` to restore the legacy always-clarify behavior. The gate is also a safe default: any classifier exception (network, parse error) falls through to `proceed`, so a flaky fast-model never blocks the run.
+
+When triage routes through, the `clarifier` subagent returns a structured readiness payload (parsed by the supervisor from the `workflow_submit_clarification` tool boundary). The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
 
 The clarifier returns a structured readiness payload with:
 
@@ -405,6 +412,7 @@ The clarifier returns a structured readiness payload with:
 - `reasoningSummary`
 - `roundCount`
 - `maxRounds`
+- `skipReason?` — present only when the clarifier was short-circuited (`"triage_classifier"`, `"user_command"`, or `"config_disabled"`)
 
 Each question may optionally include 2-4 structured `options`. An option has a user-facing `label`,
 a one-sentence `description`, and an optional `recommended` marker. At most one option may be
@@ -417,18 +425,20 @@ The default clarification policy is:
 - `mode: "mandatory-preflight"`
 - `maxRounds: 2`
 - `questionsPerRound: 3`
+- `triage: { enabled: true }`
 
-Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below).
+Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below). `triage.enabled` toggles the pre-clarifier gate.
 
 If the request is still unresolved at the round cap, the clarification state is forced to `ready_to_proceed` — the supervisor proceeds using the known context and clearly stated assumptions rather than blocking. An explicit `blocked` result before the cap still blocks.
 
 The intended end-to-end intake loop is:
 
 1. User sends a new request.
-2. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
-3. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
-4. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`.
-5. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning), or until the round cap forces `ready_to_proceed`. An explicit `blocked` result before the cap still blocks.
+2. Triage classifier inspects the message. On `skip`, jump to step 6 with a synthetic `ready_to_proceed` result. On `proceed`, continue.
+3. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
+4. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
+5. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`. Triage runs again on the user's reply (a `continue` here will skip).
+6. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning), or until the round cap forces `ready_to_proceed`. An explicit `blocked` result before the cap still blocks.
 
 Use the exported clarification helpers to manage intake state outside the prompt layer:
 
@@ -436,16 +446,23 @@ Use the exported clarification helpers to manage intake state outside the prompt
 import {
   applyClarificationResult,
   createClarificationState,
-  resolveClarificationGate,
 } from "@deep-agent-template/core";
 
 const intake = createClarificationState("Plan the launch.");
+const updated = applyClarificationResult(intake, result);
+```
 
-const gate = resolveClarificationGate({
-  isNewRequest: true,
-  request: intake.originalRequest,
-  state: intake,
-});
+The decision flow that picks the next phase (clarify, execute, review, …) lives in the workflow module — use `resolveWorkflowDecision(state)` to read the canonical decision for the current phase:
+
+```ts
+import {
+  createWorkflowState,
+  resolveWorkflowDecision,
+} from "@deep-agent-template/core";
+
+const state = createWorkflowState("Plan the launch.");
+const decision = resolveWorkflowDecision(state);
+// decision.requiredAction === "clarify", decision.requiredSubagent === "clarifier"
 ```
 
 You can override or disable the default clarification behavior through the scaffolded factory and runtime scaffold:
@@ -455,6 +472,7 @@ const runtime = createRuntimeScaffold({
   clarificationOptions: {
     maxRounds: 6,
     questionsPerRound: 2,
+    triage: { enabled: false }, // restore legacy always-clarify behavior
   },
 });
 
@@ -465,17 +483,16 @@ const agent = createScaffoldedAgent({
 });
 ```
 
-## Specialized tool store
+## Specialist tool wiring
 
-Use `createSpecializedToolStore` to register concrete LangChain tools or MCP/deepagents-compatible agent tools under stable ids, then resolve explicit role bundles for your specialist agents.
+Specialist tools are wired as hard-coded per-subagent arrays. Build a LangChain
+tool — with `tool()` from `@langchain/core/tools`, or any factory such as
+`createPythonSandboxTool` — and pass it through `subagentOverrides.<role>.tools`:
 
 ```ts
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import {
-  createDefaultSpecialistRoleToolsets,
-  createSpecializedToolStore,
-} from "@deep-agent-template/core";
+import { createScaffoldedAgent } from "@deep-agent-template/core";
 
 const searchTool = tool(async ({ query }) => `searched:${query}`, {
   name: "search_sources",
@@ -485,33 +502,21 @@ const searchTool = tool(async ({ query }) => `searched:${query}`, {
   }),
 });
 
-const store = createSpecializedToolStore({
-  tools: [
-    {
-      id: "search",
-      tool: searchTool,
-      specialists: ["researcher"],
-      evidenceMode: "retrieval",
-      riskLevel: "safe",
-    },
-  ],
-  roles: createDefaultSpecialistRoleToolsets().map((roleToolset) =>
-    roleToolset.role === "researcher"
-      ? { ...roleToolset, toolIds: ["search"] }
-      : roleToolset,
-  ),
+const agent = createScaffoldedAgent({
+  subagentOverrides: {
+    researcher: { tools: [searchTool] },
+  },
 });
-
-const researcherTools = store.resolveRoleTools("researcher");
-const reviewerNeedsInterrupts = store.roleHasRestrictedTools("reviewer");
 ```
 
-The store is static and explicit by design. It does not inherit tools across roles or auto-compose bundles from tags. Its role metadata is descriptive, so later scaffold work can align specialist prompts, safety controls, and evaluation fixtures without changing the registry API.
+`subagentOverrides.<role>.tools` **replaces** the default tool array for that
+role — it does not merge. To keep the default `execute_python` tool on the
+researcher while adding `search_sources`, include both in the array. The
+default per-role arrays live in `packages/core/src/scaffold/subagents.ts`.
 
 ## Sandbox (Python execution)
 
-The default researcher and analyst subagents receive an `execute_python` tool backed by Docker.
-Pass `pythonSandboxBackend` to use another sandbox implementation:
+The default `researcher` and `analyst` subagents receive an `execute_python` tool backed by Docker. Pass `pythonSandboxBackend` to swap the implementation:
 
 ```ts
 const agent = createScaffoldedAgent({
@@ -520,29 +525,28 @@ const agent = createScaffoldedAgent({
 });
 ```
 
-The `sandbox` module also exposes the tool definition for custom specialist stores:
+For custom wiring, build the tool directly with `createPythonSandboxTool` and pass it through `subagentOverrides`:
 
 ```ts
 import {
-  createDefaultSpecialistRoleToolsets,
-  createPythonSandboxToolDefinition,
-  createSpecializedToolStore,
+  createPythonSandboxTool,
+  createScaffoldedAgent,
 } from "@deep-agent-template/core";
 import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
-const definition = createPythonSandboxToolDefinition({
+const pythonTool = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
 });
 
-const store = createSpecializedToolStore({
-  tools: [definition],
-  roles: createDefaultSpecialistRoleToolsets(),
+const agent = createScaffoldedAgent({
+  subagentOverrides: {
+    researcher: { tools: [pythonTool] },
+    analyst: { tools: [pythonTool] },
+  },
 });
-// researcher and analyst both resolve execute_python
-// store.roleHasRestrictedTools("analyst") === true
 ```
 
-The tool name is `execute_python` so callers can opt into an `interruptOn.execute_python` rule when they want approval prompts for Python execution. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`. The definition carries `riskLevel: "restricted"` and `evidenceMode: "execution"`.
+The tool name is `execute_python` so callers can opt into an `interruptOn.execute_python` rule when they want approval prompts for Python execution. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`.
 
 The backend is hidden behind the `SandboxBackend` interface from
 `@deep-agent-template/sandbox` — swap Docker for a hosted sandbox (E2B,

@@ -8,20 +8,14 @@ import type {
 } from "deepagents";
 import type { ImageGenerationServiceContract } from "../../../image-gen/src/index.ts";
 
-import type { ClarificationConfig } from "../clarification/index.ts";
+import type { ClarificationConfig, ClarificationTriageClassifier } from "../clarification/index.ts";
 import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig } from "../review/index.ts";
 import type { SandboxBackend } from "../sandbox/index.ts";
 
-export type SpecialistRole =
-  | "researcher"
-  | "analyst"
-  | "reviewer"
-  | "clarifier"
-  | "image-designer"
-  | "product-generator";
+export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier" | "image-designer";
 
 export type VirtualFilesystemLayout = {
   scratch: string;
@@ -58,7 +52,6 @@ export type CreateDefaultSubagentCatalogOptions = {
   reviewer?: Partial<SubAgent>;
   clarifier?: Partial<SubAgent>;
   imageDesigner?: Partial<SubAgent>;
-  productGenerator?: Partial<SubAgent>;
 };
 
 export type DefaultSubagentCatalog = {
@@ -85,9 +78,16 @@ export type SupervisorSpecialistsRuntimeScaffold = RuntimeScaffoldBase & {
     config: ClarificationConfig;
     requiredSubagent: "clarifier";
   };
-  productGeneration: {
+  /**
+   * Pre-clarifier triage gate. Constructed by the scaffold from
+   * `modelRuntime.getModelForRole("triage")` (or an explicit override) when
+   * `clarification.config.triage.enabled` is not `false`. `undefined` when
+   * triage is disabled — callers should preserve the legacy always-clarify
+   * behavior in that case.
+   */
+  triage: {
     enabled: boolean;
-    requiredSubagent?: "product-generator";
+    classifier?: ClarificationTriageClassifier;
   };
   review: {
     config: ReviewConfig;
@@ -110,4 +110,11 @@ export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions &
   promptLoader?: PromptLoader;
   subagents?: CreateDeepAgentParams["subagents"];
   systemPrompt?: string;
+  /**
+   * Explicit override for the pre-clarifier triage classifier. When omitted,
+   * the scaffold constructs one from `modelRuntime.getModelForRole("triage")`
+   * (if a model runtime is supplied and triage is not disabled via
+   * `clarificationOptions.triage.enabled`).
+   */
+  triageClassifier?: ClarificationTriageClassifier;
 };

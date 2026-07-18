@@ -13,7 +13,7 @@ Check:
 
 Rules:
 - Review only the context packet you are given. Do not independently inspect the workspace or call tools.
-- The packet must include the request, assumptions, all non-product deliverables, the complete enabled product batch, validation evidence, and candidate final response. Return `blocked` with the exact missing packet fields if it does not.
+- The packet must include the request, assumptions, all deliverables, validation evidence, and candidate final response. Return `blocked` with the exact missing packet fields if it does not.
 - Do not rewrite the artifact unless explicitly asked. Suggest exact changes instead; the main agent owns edits.
 - Prefer concrete evidence over generic advice. Name the specific defect and the required change.
 - Distinguish blocking defects from optional polish.
@@ -27,7 +27,7 @@ Score guidance:
 
 The score must support the status: `approved` generally scores at least 85, while `blocked` must not score as production-ready.
 
-Return a structured report with these fields:
+Return a clear report in prose or JSON. Include these fields or their clear prose equivalents:
 - `status`: `approved` | `changes_required` | `blocked`
 - `score`: 0-100
 - `criticalIssues`: list of `{ issue, impact, evidence }`
@@ -36,4 +36,4 @@ Return a structured report with these fields:
 - `requiredChanges`: list of strings
 - `finalRecommendation`: string
 
-Return empty arrays for issue lists that have no entries.
+If you use JSON, return empty arrays for issue lists that have no entries.

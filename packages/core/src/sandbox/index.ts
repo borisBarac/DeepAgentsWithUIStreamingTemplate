@@ -29,5 +29,4 @@ export {
 export {
   type CreatePythonSandboxToolOptions,
   createPythonSandboxTool,
-  createPythonSandboxToolDefinition,
 } from "./tool.ts";

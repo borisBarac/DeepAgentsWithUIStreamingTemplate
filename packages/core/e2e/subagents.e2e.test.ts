@@ -8,10 +8,9 @@ import {
 import {
   type AgentInvokeResult,
   createDefaultModelRuntime,
-  findTaskToolMessageWithValidPayload,
+  findToolMessage,
   hasLiveLLMCredentials,
-  parseTaskToolPayload,
-  type StructuredPayload,
+  parseToolMessagePayload,
 } from "./helpers.ts";
 
 const CLARIFIER_PROMPT = [
@@ -45,6 +44,11 @@ function buildClarifierAgent() {
     modelRuntime,
     guardrails: false,
     subagents: scaffold.subagents,
+    triageClassifier: {
+      async invoke() {
+        return { decision: "proceed", reason: "The request has unresolved implementation scope." };
+      },
+    },
   });
 }
 
@@ -59,20 +63,20 @@ function summarizeForDiagnosis(result: AgentInvokeResult): string {
     })
     .join("\n");
   const markers = ERROR_MARKERS.filter((marker) => transcript.includes(marker));
-  const taskCount = messages.filter(
+  const submissionCount = messages.filter(
     (message) =>
       typeof message === "object" &&
       message !== null &&
-      (message as Record<string, unknown>).name === "task" &&
+      (message as Record<string, unknown>).name === "workflow_submit_clarification" &&
       typeof (message as Record<string, unknown>).tool_call_id === "string",
   ).length;
-  return `taskMessages=${taskCount} markers=[${markers.join(", ") || "none"}]`;
+  return `clarificationSubmissions=${submissionCount} markers=[${markers.join(", ") || "none"}]`;
 }
 
 describe.skipIf(!hasLiveLLMCredentials)(
   "createRuntimeScaffold clarifier live structured output",
   () => {
-    it("surfaces the clarifier structured response when the supervisor delegates through the scaffolded agent", async () => {
+    it("accepts the supervisor's schema-enforced clarification submission", async () => {
       let lastError: unknown;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -84,23 +88,21 @@ describe.skipIf(!hasLiveLLMCredentials)(
 
           console.log(`[attempt ${attempt}] result:`, result);
 
-          const message = findTaskToolMessageWithValidPayload(
-            result.messages,
-            (payload) => clarificationResultSchema.safeParse(payload).success,
+          const submission = parseToolMessagePayload(
+            findToolMessage(result.messages, "workflow_submit_clarification"),
+            "workflow_submit_clarification",
           );
-          if (!message) {
+          if (submission.status !== "accepted") {
             throw new Error(
-              `No task tool message carried a schema-valid clarification payload (${summarizeForDiagnosis(result)}).`,
+              `Clarification submission was not accepted (${summarizeForDiagnosis(result)}).`,
             );
           }
 
-          const payload = parseTaskToolPayload(message) as StructuredPayload;
-          console.log(`[attempt ${attempt}] clarifier payload:`, payload);
+          const parsed = clarificationResultSchema.parse(submission.result);
+          console.log(`[attempt ${attempt}] accepted clarification result:`, parsed);
 
-          expect(() => clarificationResultSchema.parse(payload)).not.toThrow();
-          expect(["needs_clarification", "ready_to_proceed", "blocked"]).toContain(
-            payload.status as string,
-          );
+          expect(["waiting_for_user", "execution"]).toContain(submission.nextPhase as string);
+          expect(["needs_clarification", "ready_to_proceed", "blocked"]).toContain(parsed.status);
           return;
         } catch (error) {
           lastError = error;

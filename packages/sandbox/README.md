@@ -6,40 +6,43 @@ tool definitions remain in `@deep-agent-template/core`.
 
 ## Quick start
 
+The scaffolded agent wires `execute_python` to the `researcher` and `analyst`
+subagents by default. Pass a custom backend to swap the implementation:
+
 ```ts
-import {
-  createPythonSandboxToolDefinition,
-} from "@deep-agent-template/core";
+import { createScaffoldedAgent } from "@deep-agent-template/core";
 import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
-const definition = createPythonSandboxToolDefinition({
-  backend: createDockerSandboxBackend(),
-});
-
-// Register with the existing SpecializedToolStore on the analyst role:
-import {
-  createDefaultSpecialistRoleToolsets,
-  createSpecializedToolStore,
-  createScaffoldedAgent,
-} from "@deep-agent-template/core";
-
-const store = createSpecializedToolStore({
-  tools: [definition],
-  roles: createDefaultSpecialistRoleToolsets().map((r) =>
-    r.role === "analyst" ? { ...r, toolIds: ["python-sandbox"] } : r,
-  ),
-});
-
 const agent = createScaffoldedAgent({
-  // ...
-  subagentOverrides: { analyst: { tools: store.resolveRoleTools("analyst") } },
+  pythonSandboxBackend: createDockerSandboxBackend(),
 });
 ```
 
-The tool name is `execute`, so it fires the existing `interruptOn.execute` slot
-in `scaffold/runtime.ts`. The definition carries `riskLevel: "restricted"` and
-`evidenceMode: "execution"` — `roleHasRestrictedTools("analyst")` returns true
-once it's registered.
+To wire the tool yourself — for a custom role, or to replace the default
+array — build it directly and pass it through `subagentOverrides`:
+
+```ts
+import {
+  createPythonSandboxTool,
+  createScaffoldedAgent,
+} from "@deep-agent-template/core";
+import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
+
+const pythonTool = createPythonSandboxTool({
+  backend: createDockerSandboxBackend(),
+});
+
+const agent = createScaffoldedAgent({
+  subagentOverrides: {
+    analyst: { tools: [pythonTool] },
+  },
+});
+```
+
+The tool name is `execute_python`, so callers can opt into an
+`interruptOn.execute_python` rule when they want approval prompts for Python
+execution. The name avoids colliding with the built-in `execute` (shell) tool
+reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`.
 
 ## Backends
 

@@ -3,9 +3,16 @@ import type { DeepAgent } from "deepagents";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
 import { createWorkflowControllerMiddleware } from "../workflow/index.ts";
+import type { TwoPhaseDeepAgent } from "./runtime.ts";
 import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import type { CreateScaffoldedAgentOptions } from "./types.ts";
 
+export function createScaffoldedAgent(
+  options: CreateScaffoldedAgentOptions & {
+    generativeUi: NonNullable<CreateScaffoldedAgentOptions["generativeUi"]>;
+  },
+): TwoPhaseDeepAgent;
+export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent;
 export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
   const {
     backend,
@@ -57,7 +64,9 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     maxClarificationRounds: scaffold.clarification.config.maxRounds,
     questionsPerRound: scaffold.clarification.config.questionsPerRound,
     maxRevisions: scaffold.review.config.maxRevisions,
-    generativeUiEnabled: scaffold.productGeneration.enabled,
+    triageClassifier: scaffold.triage.classifier,
+    triageEnabled: scaffold.triage.enabled,
+    promptLoader,
   });
 
   return createAgentFromRuntimeScaffold({
