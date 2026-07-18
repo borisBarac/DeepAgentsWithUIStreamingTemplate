@@ -307,6 +307,7 @@ async function readWithTimeout<T>(read: Promise<T>, timeoutMs = 20): Promise<T |
 
 afterEach(async () => {
   const route = await import("./route.ts");
+  route.setAgentFactoryForTest(null);
   route.setAgentForTest(null);
 });
 
@@ -390,6 +391,86 @@ describe("finalTextToMessageFallback", () => {
 });
 
 describe("POST", () => {
+  it("shares one pending provider initialization across concurrent requests", async () => {
+    const route = await import("./route.ts");
+    const initialized = createDeferred<Parameters<typeof route.setAgentForTest>[0]>();
+    let initializationCount = 0;
+    route.setAgentFactoryForTest(async () => {
+      initializationCount += 1;
+      return (await initialized.promise) as NonNullable<
+        Parameters<typeof route.setAgentForTest>[0]
+      >;
+    });
+
+    const responses = await Promise.all([
+      POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "first", sessionId: "concurrent-init-1" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+      POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "second", sessionId: "concurrent-init-2" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    ]);
+
+    expect(initializationCount).toBe(1);
+    initialized.resolve(
+      createStructuredAgent({
+        version: 1,
+        updates: [{ type: "message", text: "ready" }],
+      }) as unknown as NonNullable<Parameters<typeof route.setAgentForTest>[0]>,
+    );
+
+    await expect(Promise.all(responses.map(readNdjson))).resolves.toEqual([
+      [{ type: "message", text: "ready" }],
+      [{ type: "message", text: "ready" }],
+    ]);
+  });
+
+  it("retries provider initialization after a failure", async () => {
+    const route = await import("./route.ts");
+    let initializationCount = 0;
+    route.setAgentFactoryForTest(async () => {
+      initializationCount += 1;
+      if (initializationCount === 1) {
+        throw new Error("provider initialization failed");
+      }
+      return createStructuredAgent({
+        version: 1,
+        updates: [{ type: "message", text: "recovered" }],
+      }) as unknown as NonNullable<Parameters<typeof route.setAgentForTest>[0]>;
+    });
+
+    const failedResponse = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "first", sessionId: "retry-init-1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    await expect(readNdjson(failedResponse)).resolves.toEqual([
+      { type: "error", message: "provider initialization failed" },
+    ]);
+
+    const recoveredResponse = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "second", sessionId: "retry-init-2" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    await expect(readNdjson(recoveredResponse)).resolves.toEqual([
+      { type: "message", text: "recovered" },
+    ]);
+    expect(initializationCount).toBe(2);
+  });
+
   it("persists validated structured output separately from message history", async () => {
     const route = await import("./route.ts");
     const structuredOutput = {

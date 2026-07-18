@@ -48,21 +48,31 @@ export function getSessionStateForTest(sessionId: string): SessionState | null {
   return sessions.get(sessionId) ?? null;
 }
 
-function createAgent(): Agent {
-  return createAgentProvider();
-}
+type AgentFactory = () => Promise<Agent>;
 
-let agentCache: Agent | null = null;
+let agentFactory: AgentFactory = createAgentProvider;
+let agentInitialization: Promise<Agent> | null = null;
 
 export function setAgentForTest(agent: Agent | null): void {
-  agentCache = agent;
+  agentInitialization = agent === null ? null : Promise.resolve(agent);
 }
 
-function getAgent(): Agent {
-  if (agentCache === null) {
-    agentCache = createAgent();
+export function setAgentFactoryForTest(factory: AgentFactory | null): void {
+  agentFactory = factory ?? createAgentProvider;
+  agentInitialization = null;
+}
+
+function getAgent(): Promise<Agent> {
+  if (agentInitialization === null) {
+    const initialization = agentFactory();
+    agentInitialization = initialization;
+    void initialization.catch(() => {
+      if (agentInitialization === initialization) {
+        agentInitialization = null;
+      }
+    });
   }
-  return agentCache;
+  return agentInitialization;
 }
 
 function toInputMessages(history: unknown[], message: string): AgentInputMessage[] {
@@ -114,9 +124,8 @@ export async function POST(request: Request): Promise<Response> {
     async start(controller) {
       const history = getHistory(parsedRequest.sessionId);
       const messages = toInputMessages(history, parsedRequest.message);
-      const agent = getAgent();
-
       try {
+        const agent = await getAgent();
         const interaction = createInteractionStream({
           agent,
           includeActivity: parsedRequest.includeSubagentActivity,

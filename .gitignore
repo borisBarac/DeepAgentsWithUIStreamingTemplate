@@ -4,6 +4,7 @@ dist
 coverage
 .turbo
 .cache
+packages/web-app/.data/
 
 .DS_Store
 *.log

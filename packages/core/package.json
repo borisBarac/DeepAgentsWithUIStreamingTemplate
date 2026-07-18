@@ -13,6 +13,7 @@
     "./agent": "./src/agent/index.ts",
     "./generative-ui": "./src/generative-ui/index.ts",
     "./interaction-stream": "./src/interaction-stream/index.ts",
+    "./memory": "./src/memory/index.ts",
     "./models": "./src/models/index.ts",
     "./prompts": "./src/prompts/index.ts"
   },
