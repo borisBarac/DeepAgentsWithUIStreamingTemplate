@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-
+import { AIMessage } from "@langchain/core/messages";
+import { convertMessagesToCompletionsMessageParams } from "@langchain/openai";
 import { MODEL_CATEGORIES } from "./constants.ts";
 import { createModelRuntimeFromEnvValues } from "./env.ts";
 import { createModelRuntime } from "./runtime.ts";
@@ -9,6 +10,31 @@ const COMPAT_CONNECTION = {
 } as const;
 
 describe("createModelRuntime", () => {
+  it("passes reasoning content back with assistant tool calls", () => {
+    const [message] = convertMessagesToCompletionsMessageParams({
+      model: "deepseek-reasoner",
+      messages: [
+        new AIMessage({
+          content: "",
+          additional_kwargs: { reasoning_content: "reason before tool call" },
+          tool_calls: [
+            {
+              id: "call-1",
+              name: "task",
+              args: { subagent_type: "clarifier" },
+              type: "tool_call",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(message).toMatchObject({
+      role: "assistant",
+      reasoning_content: "reason before tool call",
+    });
+  });
+
   it("constructs category models lazily and caches them by category", () => {
     let optionReads = 0;
     const providerOptions = Object.defineProperty({}, "topP", {
@@ -316,6 +342,7 @@ describe("createModelRuntimeFromEnvValues", () => {
     );
 
     expect(runtime.getCategoryForRole("clarifier")).toBe("fast");
+    expect(runtime.getCategoryForRole("triage")).toBe("fast");
     expect(runtime.getCategoryForRole("researcher")).toBe("normal");
     expect(runtime.getCategoryForRole("supervisor")).toBe("pro");
     expect(runtime.getCategoryForRole("reviewer")).toBe("pro");

@@ -43,3 +43,6 @@ Make the clarification cap a forced completion point: its final result becomes
 - Cap completion wins for an unresolved clarification result at that cap; an
   explicit `blocked` result before the cap remains blocked.
 - The existing default remains two rounds.
+- `ClarificationResult.skipReason` (added later by the triage-gated-clarification
+  PRD) is an OPTIONAL METADATA FIELD on an existing status literal — it is not a
+  new status. The "no new public status" rule above is preserved.
