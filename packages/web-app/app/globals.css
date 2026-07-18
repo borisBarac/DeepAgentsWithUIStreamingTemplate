@@ -4,7 +4,7 @@
   --panel: #ffffff;
   --panel-soft: #f0f4f8;
   --ink: #17202a;
-  --muted: #62717f;
+  --muted: #4f5f6c;
   --line: #d9e0e6;
   --accent: #116466;
   --accent-dark: #0b484a;
@@ -26,7 +26,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -34,7 +35,7 @@ input {
   display: grid;
   gap: 0;
   grid-template-columns: minmax(320px, 0.8fr) minmax(420px, 1.1fr) minmax(260px, 0.55fr);
-  height: 100vh;
+  height: 100dvh;
   min-height: 0;
 }
 
@@ -60,7 +61,7 @@ input {
 }
 
 .app-header p,
-.preview-header p {
+.preview-header h2 {
   color: var(--accent);
   font-size: 0.78rem;
   font-weight: 700;
@@ -69,10 +70,39 @@ input {
   text-transform: uppercase;
 }
 
+.preview-header h2 {
+  line-height: 1.2;
+}
+
 .app-header h1 {
-  font-size: 2.2rem;
+  font-size: clamp(1.8rem, 4vw, 2.2rem);
   line-height: 1.05;
-  margin: 0 0 24px;
+  margin: 0 0 18px;
+}
+
+.prompt-starters {
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+  min-inline-size: 0;
+  padding: 0;
+}
+.prompt-starters button {
+  background: var(--accent-soft);
+  border: 1px solid #b9d8cd;
+  border-radius: 999px;
+  color: var(--accent-dark);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 8px 11px;
+  text-align: left;
+}
+.prompt-starters button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .message-list {
@@ -110,6 +140,8 @@ input {
 
 .message {
   background: var(--panel);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 13px 14px;
@@ -194,6 +226,8 @@ input {
 
 .agent-activity-item {
   background: var(--panel-soft);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 86px;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
@@ -287,6 +321,7 @@ input {
 }
 
 .composer {
+  align-items: end;
   display: grid;
   gap: 10px;
   grid-template-columns: 1fr auto;
@@ -308,7 +343,7 @@ input {
   width: 18px;
 }
 
-.composer input,
+.composer textarea,
 .question-form input,
 .jr-field input {
   background: #ffffff;
@@ -320,7 +355,11 @@ input {
   width: 100%;
 }
 
-.composer input:focus,
+.composer textarea {
+  resize: vertical;
+}
+
+.composer textarea:focus,
 .question-form input:focus,
 .jr-field input:focus {
   border-color: var(--accent);
@@ -414,6 +453,8 @@ input {
 
 .product-card {
   background: #ffffff;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: grid;
@@ -553,17 +594,30 @@ input {
   font-weight: 700;
 }
 
+@media (max-width: 1180px) {
+  .app-shell {
+    grid-template-columns: minmax(320px, 0.9fr) minmax(420px, 1.1fr);
+  }
+
+  .debug-pane {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    grid-column: 1 / -1;
+    min-height: 260px;
+  }
+}
+
 @media (max-width: 860px) {
   .app-shell {
     grid-template-columns: 1fr;
     height: auto;
-    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .chat-pane {
     border-bottom: 1px solid var(--line);
     border-right: 0;
-    height: 58vh;
+    min-height: 58dvh;
   }
 
   .chat-pane,
@@ -575,7 +629,7 @@ input {
   .debug-pane {
     border-left: 0;
     border-top: 1px solid var(--line);
-    max-height: 42vh;
+    max-height: 42dvh;
   }
 
   .composer {
@@ -588,5 +642,11 @@ input {
 
   .question-form {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-spinner {
+    animation: none;
   }
 }
