@@ -1,18 +1,16 @@
 import { describe, expect, it } from "bun:test";
 
 import { type ModelUiOutput, modelUiOutputSchema, normalizeModelUiOutput } from "./model-output.ts";
+import { validateUpdate } from "./validator.ts";
 
-const validSpec = {
-  root: "card",
-  elements: {
-    card: {
-      type: "Card",
-      props: { title: "Result" },
-      children: [],
-      visible: { path: "/showCard" },
-    },
+const validComponents = [
+  {
+    id: "card",
+    component: "Card",
+    title: "Result",
+    children: [],
   },
-};
+];
 
 describe("modelUiOutputSchema", () => {
   it("accepts the versioned message, question, and ui update object", () => {
@@ -29,7 +27,7 @@ describe("modelUiOutputSchema", () => {
             options: ["Short", "Detailed"],
           },
         },
-        { type: "ui", spec: validSpec },
+        { type: "ui", rootId: "card", components: validComponents },
       ],
     } satisfies ModelUiOutput;
 
@@ -70,5 +68,26 @@ describe("modelUiOutputSchema", () => {
         updates: [{ type: "message", text: "x".repeat(4_001) }],
       }).success,
     ).toBeFalse();
+  });
+
+  it("rejects an oversized batch of individually valid updates", () => {
+    const components = [
+      {
+        id: "root",
+        component: "Stack",
+        children: Array.from({ length: 20 }, (_, index) => `text-${index}`),
+      },
+      ...Array.from({ length: 20 }, (_, index) => ({
+        id: `text-${index}`,
+        component: "Text",
+        text: "x".repeat(4_000),
+      })),
+    ];
+    const update = { type: "ui" as const, rootId: "root", components };
+    const output = { version: 1 as const, updates: [update, update] };
+
+    expect(validateUpdate(update).ok).toBeTrue();
+    expect(modelUiOutputSchema.safeParse(output).success).toBeTrue();
+    expect(normalizeModelUiOutput(output)).toBeNull();
   });
 });

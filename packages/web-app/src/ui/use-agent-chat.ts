@@ -1,16 +1,16 @@
 "use client";
 
-import {
-  applyUiUpdate,
-  normalizeModelUiOutput,
-  parseUpdateLine,
-  type UiUpdate,
-  type UpdateHandlers,
-} from "@deep-agent-template/core/generative-ui";
+import type {
+  A2UIValidationResult,
+  ModelUiOutput,
+  UiUpdate,
+} from "@deep-agent-template/core/generative-ui/types";
 import type { Spec } from "@json-render/core";
 import { type FormEvent, useCallback, useMemo, useRef, useState } from "react";
 
+import { componentInstancesToSpec } from "./spec-adapter.ts";
 import type { ChatMessage } from "./types.ts";
+import { parseClientUpdateLine, validateClientModelUiOutput } from "./validate-spec.ts";
 
 export type QualificationQuestion = Extract<UiUpdate, { type: "question" }>["question"];
 export type MainAgentActivityUpdate = Extract<UiUpdate, { type: "main_agent_activity" }>;
@@ -33,6 +33,51 @@ export type DisplayUiSpec = {
   id: string;
   spec: Spec;
 };
+
+type AgentChatUpdateHandlers = {
+  onMessage: (text: string) => void;
+  onQuestion?: (question: QualificationQuestion) => void;
+  onSpec: (spec: Spec) => void;
+  onError: (message: string) => void;
+  onMainAgentActivity?: (update: MainAgentActivityUpdate) => void;
+  onSubagentActivity?: (update: SubagentActivityUpdate) => void;
+};
+
+export function applyAgentChatUpdate(update: UiUpdate, handlers: AgentChatUpdateHandlers): void {
+  switch (update.type) {
+    case "message":
+      handlers.onMessage(update.text);
+      break;
+    case "question":
+      handlers.onQuestion?.(update.question);
+      break;
+    case "ui":
+      handlers.onSpec(componentInstancesToSpec(update.components, update.rootId));
+      break;
+    case "error":
+      handlers.onError(update.message);
+      break;
+    case "main_agent_activity":
+      handlers.onMainAgentActivity?.(update);
+      break;
+    case "subagent_activity":
+      handlers.onSubagentActivity?.(update);
+      break;
+  }
+}
+
+export function applyAgentChatLine(
+  line: string,
+  handlers: AgentChatUpdateHandlers,
+): A2UIValidationResult {
+  const result = parseClientUpdateLine(line);
+  if (result.ok) {
+    applyAgentChatUpdate(result.update, handlers);
+  } else {
+    handlers.onError(result.issues[0]?.message ?? "UI update was rejected by the validator.");
+  }
+  return result;
+}
 
 function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -146,9 +191,11 @@ function appendChunk(current: string, delta: string): string {
 }
 
 export function previewAssistantTextFromActivity(raw: string): string {
-  let modelOutput = null;
+  let modelOutput: ModelUiOutput | null = null;
   try {
-    modelOutput = normalizeModelUiOutput(JSON.parse(raw));
+    const parsedOutput: unknown = JSON.parse(raw);
+    const result = validateClientModelUiOutput(parsedOutput);
+    modelOutput = result.ok ? result.output : null;
   } catch {
     // The streamed value may be incomplete or use the legacy line format.
   }
@@ -156,10 +203,19 @@ export function previewAssistantTextFromActivity(raw: string): string {
     modelOutput?.updates ??
     raw
       .split("\n")
-      .map((line) => parseUpdateLine(line.trim()))
-      .filter((update): update is UiUpdate => update !== null);
+      .map((line) => parseClientUpdateLine(line.trim()))
+      .flatMap((result) => (result.ok ? [result.update] : []));
   const parsedMessages = updates
-    .flatMap((update) => (update.type === "message" ? [update.text] : []))
+    .flatMap((update) =>
+      update &&
+      typeof update === "object" &&
+      "type" in update &&
+      update.type === "message" &&
+      "text" in update &&
+      typeof update.text === "string"
+        ? [update.text]
+        : [],
+    )
     .map((text) => text.trim())
     .filter(Boolean);
 
@@ -318,7 +374,7 @@ export function useAgentChat(): AgentChat {
       streamingAssistantRawText = "";
       setMessages((current) => finishAssistantMessage(current, assistantId));
     };
-    const handlers: UpdateHandlers = {
+    const handlers: AgentChatUpdateHandlers = {
       onMessage: (text) => {
         streamingAssistantId ??= createId();
         const assistantId = streamingAssistantId;
@@ -423,19 +479,13 @@ export function useAgentChat(): AgentChat {
           if (!trimmed) {
             continue;
           }
-          const update = parseUpdateLine(trimmed);
-          if (update) {
-            applyUiUpdate(update, handlers);
-          }
+          applyAgentChatLine(trimmed, handlers);
         }
       }
 
       const tail = buffered.trim();
       if (tail) {
-        const update = parseUpdateLine(tail);
-        if (update) {
-          applyUiUpdate(update, handlers);
-        }
+        applyAgentChatLine(tail, handlers);
       }
 
       finishStreamingAssistant();

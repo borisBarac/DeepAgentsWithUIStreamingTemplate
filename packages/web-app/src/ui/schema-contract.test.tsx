@@ -1,15 +1,15 @@
 import { describe, expect, it } from "bun:test";
 import {
+  catalog,
+  catalogComponentNames,
   catalogPrompt,
-  componentPropsSchemas,
-  componentTypes,
-  normalizeStreamingSpec,
-  productCardSchema,
+  validateComponentInstance,
+  validateUpdate,
 } from "@deep-agent-template/core/generative-ui";
 
 import { registry } from "./catalog.tsx";
 
-const validSamples = {
+const validSamples: Record<string, Record<string, unknown>> = {
   Button: { label: "Continue", action: "demo_action" },
   Card: { title: "Overview" },
   ImagePlaceholder: { alt: "Preview", prompt: "Landscape mockup" },
@@ -23,114 +23,98 @@ const validSamples = {
   Text: { text: "Hello", variant: "body" },
   TextInput: { label: "Email", name: "email", inputType: "email" },
   "product-card": {
-    id: "concept-1",
     title: "Launch Map",
     description: "A planning workspace for design teams.",
     imageUrl: "https://example.com/launch-map.png",
     status: "complete",
   },
-} as const;
+};
 
 describe("schema contract", () => {
-  it("exposes a schema for every component type", () => {
-    for (const type of componentTypes) {
-      expect(componentPropsSchemas[type]).toBeDefined();
-      expect(componentPropsSchemas[type].safeParse(validSamples[type]).success).toBe(true);
+  it("accepts valid props for every catalog.json component", () => {
+    for (const component of catalogComponentNames) {
+      expect(catalog.components[component]).toBeDefined();
+      expect(
+        validateComponentInstance({
+          id: `${component}-sample`,
+          component,
+          ...validSamples[component],
+        }).ok,
+      ).toBe(true);
     }
-  });
-
-  it("reuses the core product-card schema for scaffold cards", () => {
-    expect(componentPropsSchemas["product-card"]).toBe(productCardSchema);
   });
 
   it("rejects missing required props for key components", () => {
-    expect(componentPropsSchemas.Button.safeParse({}).success).toBe(false);
-    expect(componentPropsSchemas.ProductCard.safeParse({ title: "Launch Map" }).success).toBe(
-      false,
-    );
+    expect(validateComponentInstance({ id: "button", component: "Button" }).ok).toBe(false);
     expect(
-      componentPropsSchemas["product-card"].safeParse({
-        title: "Launch Map",
-        description: "A planning workspace.",
-      }).success,
+      validateComponentInstance({ id: "card", component: "ProductCard", title: "Launch Map" }).ok,
     ).toBe(false);
-    expect(componentPropsSchemas.Text.safeParse({}).success).toBe(false);
-    expect(componentPropsSchemas.TextInput.safeParse({ name: "email" }).success).toBe(false);
+    expect(validateComponentInstance({ id: "text", component: "Text" }).ok).toBe(false);
+    expect(
+      validateComponentInstance({ id: "input", component: "TextInput", name: "email" }).ok,
+    ).toBe(false);
   });
 
-  it("normalizes a renderer-ready spec whose element types exist in the registry", () => {
-    const spec = normalizeStreamingSpec({
-      root: "grid",
-      elements: {
-        grid: {
-          type: "ProductGrid",
-          props: { heading: "Concepts" },
+  it("validates a renderer-ready update whose components exist in the registry", () => {
+    const result = validateUpdate({
+      type: "ui",
+      rootId: "grid",
+      components: [
+        {
+          id: "grid",
+          component: "ProductGrid",
+          heading: "Concepts",
           children: ["card", "cta"],
         },
-        card: {
-          type: "ProductCard",
-          props: {
-            title: "Launch Map",
-            description: "A planning workspace for design teams.",
-            imagePrompt: "Kanban board with milestones",
-          },
+        {
+          id: "card",
+          component: "ProductCard",
+          title: "Launch Map",
+          description: "A planning workspace for design teams.",
+          imagePrompt: "Kanban board with milestones",
           children: ["summary"],
         },
-        summary: {
-          type: "Text",
-          props: { text: "Early concept", variant: "muted" },
+        {
+          id: "summary",
+          component: "Text",
+          text: "Early concept",
+          variant: "muted",
           children: [],
         },
-        cta: {
-          type: "Button",
-          props: { label: "Open details" },
-          children: [],
-        },
-      },
+        { id: "cta", component: "Button", label: "Open details", children: [] },
+      ],
     });
 
-    expect(spec).toEqual({
-      root: "grid",
-      elements: {
-        grid: {
-          type: "ProductGrid",
-          props: { heading: "Concepts" },
-          children: ["card", "cta"],
-        },
-        card: {
-          type: "ProductCard",
-          props: {
-            title: "Launch Map",
-            description: "A planning workspace for design teams.",
-            imagePrompt: "Kanban board with milestones",
-          },
-          children: ["summary"],
-        },
-        summary: {
-          type: "Text",
-          props: { text: "Early concept", variant: "muted" },
-          children: [],
-        },
-        cta: {
-          type: "Button",
-          props: { label: "Open details" },
-          children: [],
-        },
-      },
-    });
-
-    if (!spec) {
-      throw new Error("expected a normalized spec");
+    expect(result.ok).toBe(true);
+    if (!result.ok || result.update.type !== "ui") {
+      throw new Error("expected a valid ui update");
     }
 
-    for (const element of Object.values(spec.elements)) {
-      expect(registry[element.type]).toBeDefined();
+    for (const component of result.update.components) {
+      expect(registry[component.component]).toBeDefined();
     }
   });
 
   it("keeps the catalog prompt aligned with the component list", () => {
-    for (const type of componentTypes) {
-      expect(catalogPrompt).toContain(type);
+    for (const component of catalogComponentNames) {
+      expect(catalogPrompt).toContain(component);
+    }
+  });
+
+  it("has a React renderer for every catalog.json entry", () => {
+    // catalog.json is the single source of truth; this guard fails the moment
+    // someone adds a component to catalog.json without shipping a renderer.
+    for (const name of catalogComponentNames) {
+      expect(registry[name as keyof typeof registry]).toBeDefined();
+    }
+  });
+
+  it("has a catalog.json entry for every React renderer", () => {
+    // And conversely: every renderer must have a catalog entry. A renderer
+    // without a catalog entry can never receive a validated instance.
+    const catalogSet = new Set(catalogComponentNames);
+    for (const name of Object.keys(registry)) {
+      expect(catalogSet.has(name)).toBe(true);
     }
   });
 });

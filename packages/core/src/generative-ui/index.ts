@@ -1,46 +1,49 @@
 export {
-  buttonPropsSchema,
-  type ComponentTypeName,
-  cardPropsSchema,
-  catalogPrompt,
-  componentPropsSchemas,
-  componentTypes,
-  imagePlaceholderPropsSchema,
-  normalizeStreamingSpec,
-  productCardPropsSchema,
-  productCardSchema,
-  productGridPropsSchema,
-  stackPropsSchema,
-  textInputPropsSchema,
-  textPropsSchema,
-  validateStreamingSpec,
-} from "./contract.ts";
+  asAcceptedUpdate,
+  component,
+  error as componentError,
+  mainAgentActivity,
+  message as messageUpdate,
+  modelOutput,
+  question,
+  subagentActivity,
+  uiSpec,
+} from "./builder.ts";
+export type { CatalogDoc } from "./catalog.ts";
+export {
+  catalog,
+  catalogComponentNames,
+  catalogLimits,
+  catalogVersion,
+  envelopeSchemaDoc,
+  getComponentSchema,
+  isKnownComponent,
+} from "./catalog.ts";
+export type { EmitOptions, SafeEmitResult } from "./emit.ts";
+export { safeEmit, safeEmitModelOutput } from "./emit.ts";
 export {
   applyUiUpdate,
   type ClassifiedUpdates,
   clarificationResultToQuestionUpdates,
   classifyUpdateText,
-  extractUpdateObjects,
-  type NormalizeSpec,
-  normalizeProductCardSpec,
   normalizeQuestionOption,
-  normalizeSpecToValidateSpec,
   normalizeUiUpdate,
-  PRODUCT_CARD_COMPONENT_NAME,
   parseUpdateLine,
   parseUpdateText,
-  productCardBatchSchema,
-  productCardsToUiUpdates,
   type QuestionUpdate,
   type RejectedUiCandidate,
-  type SpecValidationIssue,
-  type SpecValidationResult,
   StreamingLineBuffer,
   type UiSpecUpdate,
   type UpdateHandlers,
   uiUpdateZone,
-  type ValidateSpec,
 } from "./envelope.ts";
+export type {
+  A2UIComponentValidationResult,
+  A2UIValidationError,
+  A2UIValidationErrorCode,
+  A2UIValidationResult,
+} from "./errors.ts";
+export { toErrorEnvelope } from "./errors.ts";
 export {
   type ModelUiOutput,
   type ModelUiUpdate,
@@ -50,19 +53,36 @@ export {
 } from "./model-output.ts";
 export {
   composeGenerativeUiPrompt,
-  composeProductGeneratorPrompt,
   GENERATIVE_UI_JSON_OBJECT_PROMPT,
-  PRODUCT_CARD_CATALOG_PROMPT,
 } from "./prompt.ts";
+export { catalogPrompt } from "./prompt-from-catalog.ts";
 export type {
+  ComponentInstance,
+  ErrorUpdate,
   GenerativeUiOptions,
+  MainAgentActivityUpdate,
+  MessageUpdate,
   MultipleChoiceQuestion,
   OpenTextQuestion,
-  ProductCard,
-  ProductCardBatch,
-  ProductCardStatus,
+  QuestionUpdate as QuestionUpdateType,
+  SubagentActivityUpdate,
   UiQuestion,
   UiQuestionOption,
+  UiSpec,
   UiUpdate,
   UiZone,
 } from "./types.ts";
+export { isCatalogUri } from "./uri.ts";
+export type {
+  AcceptedUiUpdateFixture,
+  RejectedUiUpdateFixture,
+} from "./validation-fixtures.ts";
+export {
+  acceptedUiUpdateFixtures,
+  rejectedUiUpdateFixtures,
+} from "./validation-fixtures.ts";
+export {
+  validateComponentInstance,
+  validateModelUiOutput,
+  validateUpdate,
+} from "./validator.ts";

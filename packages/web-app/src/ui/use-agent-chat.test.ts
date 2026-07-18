@@ -4,6 +4,8 @@ import {
   appendAgentActivity,
   appendAssistantChunk,
   appendUiSpec,
+  applyAgentChatLine,
+  applyAgentChatUpdate,
   type DisplayMessage,
   finishAssistantMessage,
   formatQuestionAnswers,
@@ -12,6 +14,84 @@ import {
 } from "./use-agent-chat.ts";
 
 describe("generative UI state", () => {
+  it("does not apply an invalid UI line and reports its first issue", () => {
+    const specs: unknown[] = [];
+    const errors: string[] = [];
+    const result = applyAgentChatLine(
+      JSON.stringify({
+        type: "ui",
+        components: [{ id: "demo", component: "Text", text: "Demo", extra: true }],
+      }),
+      {
+        onMessage: () => {},
+        onSpec: (spec) => specs.push(spec),
+        onError: (message) => errors.push(message),
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(specs).toEqual([]);
+    expect(errors).toEqual(['Component "Text" props did not match the catalog schema.']);
+  });
+
+  it("translates component instances before handling a spec", () => {
+    const received: unknown[] = [];
+
+    applyAgentChatUpdate(
+      {
+        type: "ui",
+        rootId: "content",
+        components: [
+          { id: "shell", component: "Stack", children: ["content"], gap: "lg" },
+          { id: "content", component: "Text", text: "Ready" },
+        ],
+      },
+      {
+        onMessage: () => {},
+        onSpec: (spec) => {
+          received.push(spec);
+        },
+        onError: () => {},
+      },
+    );
+
+    expect(received).toEqual([
+      {
+        root: "content",
+        elements: {
+          shell: { type: "Stack", props: { gap: "lg" }, children: ["content"] },
+          content: { type: "Text", props: { text: "Ready" } },
+        },
+      },
+    ]);
+  });
+
+  it("routes non-UI update variants to their client handlers", () => {
+    const received: string[] = [];
+    const handlers = {
+      onMessage: (text: string) => received.push(`message:${text}`),
+      onQuestion: () => received.push("question"),
+      onSpec: () => received.push("spec"),
+      onError: (message: string) => received.push(`error:${message}`),
+      onMainAgentActivity: () => received.push("main"),
+      onSubagentActivity: () => received.push("subagent"),
+    };
+
+    applyAgentChatUpdate({ type: "message", text: "Hello" }, handlers);
+    applyAgentChatUpdate(
+      { type: "question", question: { id: "q", prompt: "Why?", kind: "open_text" } },
+      handlers,
+    );
+    applyAgentChatUpdate({ type: "error", message: "Failed" }, handlers);
+    applyAgentChatUpdate({ type: "main_agent_activity", event: "started" }, handlers);
+    applyAgentChatUpdate(
+      { type: "subagent_activity", subagentName: "researcher", event: "started" },
+      handlers,
+    );
+
+    expect(received).toEqual(["message:Hello", "question", "error:Failed", "main", "subagent"]);
+  });
+
   it("preserves specs with distinct roots in arrival order", () => {
     const first = {
       root: "first",
@@ -343,7 +423,7 @@ describe("streaming assistant message state", () => {
         [
           "Here is the plan so far.",
           '{"type":"message","text":"Short final answer."}',
-          '{"type":"ui","spec":{"root":"demo","elements":{}}}',
+          '{"type":"ui","components":[{"id":"demo","component":"Text","text":"Demo"}]}',
         ].join("\n"),
       ),
     ).toBe("Short final answer.");
@@ -360,11 +440,25 @@ describe("streaming assistant message state", () => {
           version: 1,
           updates: [
             { type: "message", text: "Short final answer." },
-            { type: "ui", spec: { root: "demo", elements: {} } },
+            {
+              type: "ui",
+              components: [{ id: "demo", component: "Text", text: "Demo" }],
+            },
           ],
         }),
       ),
     ).toBe("Short final answer.");
+  });
+
+  it("does not preview an invalid versioned model output", () => {
+    expect(
+      previewAssistantTextFromActivity(
+        JSON.stringify({
+          version: 1,
+          updates: [{ type: "message", text: "Untrusted", extra: true }],
+        }),
+      ),
+    ).toBe("");
   });
 
   it("keeps one assistant message with the same id while streaming and after completion", () => {

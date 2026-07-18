@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { createAgentFromRuntimeScaffold } from "../src/agent/runtime.ts";
-import { catalogPrompt, createRuntimeScaffold, validateStreamingSpec } from "../src/index.ts";
+import { catalogPrompt, createRuntimeScaffold, validateUpdate } from "../src/index.ts";
 import {
   type AgentInputMessage,
   createInteractionStream,
@@ -16,16 +16,19 @@ const OFF_CATALOG_PROMPT = [
   "Emit your response as NDJSON ui update lines.",
   'For your FIRST ui line you must use a component type called "Carousel", which is intentionally NOT in the supported catalog.',
   "Emit this exact line as your first ui update:",
-  '{"type":"ui","spec":{"root":"carousel","elements":{"carousel":{"type":"Carousel","props":{"title":"Aurora NC Pro"},"children":[]}}}}',
+  '{"type":"ui","rootId":"carousel","components":[{"id":"carousel","component":"Carousel","title":"Aurora NC Pro","children":[]}]}',
   "",
   "If you receive repair feedback that the component is unknown, switch to a valid catalog component such as Card or product-card.",
 ].join("\n");
 
 function createRecordingProxy(agent: StreamableAgent): {
   invocations: AgentInputMessage[][];
+  presentationInvocations: Parameters<NonNullable<StreamableAgent["present"]>>[0][];
   proxy: StreamableAgent;
 } {
   const invocations: AgentInputMessage[][] = [];
+  const presentationInvocations: Parameters<NonNullable<StreamableAgent["present"]>>[0][] = [];
+  const present = agent.present;
   const proxy: StreamableAgent = {
     invoke: async (input) => {
       invocations.push(input.messages);
@@ -36,8 +39,14 @@ function createRecordingProxy(agent: StreamableAgent): {
       if (!agent.streamEvents) throw new Error("agent does not support streamEvents");
       return agent.streamEvents(input, config);
     },
+    present: present
+      ? async (request) => {
+          presentationInvocations.push(request);
+          return present(request);
+        }
+      : undefined,
   };
-  return { invocations, proxy };
+  return { invocations, presentationInvocations, proxy };
 }
 
 describe.skipIf(!hasLiveLLMCredentials)(
@@ -57,22 +66,21 @@ describe.skipIf(!hasLiveLLMCredentials)(
         guardrails: false,
       }) as unknown as StreamableAgent;
 
-      const { invocations, proxy } = createRecordingProxy(agent);
+      const { invocations, presentationInvocations, proxy } = createRecordingProxy(agent);
 
       const interaction = createInteractionStream({
         agent: proxy,
         messages: [{ content: OFF_CATALOG_PROMPT, role: "user" }],
         sessionId: `unsupported-schema-${crypto.randomUUID()}`,
-        validateSpec: validateStreamingSpec,
       });
 
       const updates: UiUpdate[] = [];
       for await (const update of interaction.updates) {
         updates.push(update);
       }
-      await interaction.result;
+      const result = await interaction.result;
 
-      console.log({ updates, invocations });
+      console.log({ updates, invocations, presentationInvocations, failure: result.failure });
 
       const uiUpdates = updates.filter(
         (update): update is Extract<UiUpdate, { type: "ui" }> => update.type === "ui",
@@ -82,23 +90,34 @@ describe.skipIf(!hasLiveLLMCredentials)(
       );
 
       for (const update of uiUpdates) {
-        expect(validateStreamingSpec(update.spec).ok).toBe(true);
+        expect(validateUpdate(update).ok).toBe(true);
+        expect(update.components.every((component) => component.component !== "Carousel")).toBe(
+          true,
+        );
       }
 
       expect(uiUpdates.length + messageUpdates.length).toBeGreaterThan(0);
 
-      if (invocations.length > 1) {
-        const repairMessages = invocations[1];
-        const lastUser = [...(repairMessages ?? [])]
-          .reverse()
-          .find((message) => message.role === "user");
-        const feedback = lastUser?.content ?? "";
+      const presentationFeedback = presentationInvocations[0]?.repairFeedback;
+      const retryFeedback = invocations[1]
+        ? [...invocations[1]].reverse().find((message) => message.role === "user")?.content
+        : undefined;
+      const feedback = presentationFeedback ?? retryFeedback;
+      const invalidCandidateAttempted =
+        feedback?.includes("unknown_component") === true ||
+        result.failure?.issues.some((issue) => issue.code === "unknown_component") === true;
+
+      if (invalidCandidateAttempted) {
         expect(feedback).toContain("unknown_component");
-        expect(feedback).toContain("elements.");
+        expect(feedback).toContain("components[0].component");
+        if (result.failure) {
+          expect(result.failure.attempts).toBe(2);
+          expect(messageUpdates.map((update) => update.text)).toContain(UNRENDERABLE_UI_MESSAGE);
+        }
       }
 
-      if (uiUpdates.length === 0) {
-        expect(messageUpdates.map((update) => update.text)).toContain(UNRENDERABLE_UI_MESSAGE);
+      if (!invalidCandidateAttempted && uiUpdates.length === 0) {
+        expect(messageUpdates.some((update) => update.text.trim().length > 0)).toBe(true);
       }
     }, 180_000);
   },

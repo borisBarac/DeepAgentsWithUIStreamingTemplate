@@ -1,23 +1,7 @@
-import type { Spec } from "@json-render/core";
-
-/**
- * Opt-in generative-UI streaming options.
- *
- * `catalogPrompt` is optional for the product-generator scaffold (which always
- * appends its own product-card catalog); callers that want additional app
- * components pass them here.
- */
 export type GenerativeUiOptions = {
   catalogPrompt?: string;
 };
 
-/**
- * A selectable option for a multiple-choice question update.
- *
- * Accepts a plain string (for simple catalogs / back-compat) or a structured
- * object carrying a `label`, optional `description`, and optional `recommended`
- * marker — aligned with the clarifier's `ClarificationOption`.
- */
 export type UiQuestionOption =
   | string
   | {
@@ -41,75 +25,51 @@ export type OpenTextQuestion = {
 };
 
 export type UiQuestion = MultipleChoiceQuestion | OpenTextQuestion;
-
-/**
- * Lifecycle marker for a streamed product card. "streaming" indicates the card
- * is still being refined (e.g. image pending); "complete" marks it final.
- */
-export type ProductCardStatus = "streaming" | "complete";
-
-/**
- * A single generated product. `imageUrl` is optional so cards can render a
- * placeholder until an image is available.
- */
-export type ProductCard = {
-  id: string;
-  title: string;
-  description: string;
-  imageUrl?: string;
-  status?: ProductCardStatus;
-};
-
-/**
- * A batch of product cards returned by a product-generator specialist.
- */
-export type ProductCardBatch = {
-  products: ProductCard[];
-};
-
-/**
- * The UI zone an update is routed to. Qualification questions, messages, and
- * errors belong in the chat history; product-card ui specs belong in the
- * dedicated interaction zone.
- */
 export type UiZone = "chat" | "interaction";
 
-/**
- * A UI update emitted by a generative-UI agent stream.
- *
- * The server sends these objects to the browser as NDJSON. The model returns a
- * separate versioned JSON object containing only model-owned update variants.
- * The application validates that object before it emits any updates.
- */
+export type ComponentInstance = {
+  id: string;
+  component: string;
+  children?: string[];
+  [prop: string]: unknown;
+};
+
+export type UiSpec = {
+  components: ComponentInstance[];
+  rootId?: string;
+};
+
+export type MessageUpdate = { type: "message"; text: string };
+export type QuestionUpdate = { type: "question"; question: UiQuestion };
+export type UiSpecUpdate = { type: "ui"; components: ComponentInstance[]; rootId?: string };
+export type ErrorUpdate = { type: "error"; message: string };
+export type MainAgentActivityUpdate = {
+  type: "main_agent_activity";
+  event: "started" | "delta" | "completed" | "error";
+  text?: string;
+  message?: string;
+};
+export type SubagentActivityUpdate = {
+  type: "subagent_activity";
+  subagentRunId?: string;
+  subagentName: string;
+  event: "started" | "delta" | "completed" | "error";
+  task?: string;
+  text?: string;
+  message?: string;
+};
+
 export type UiUpdate =
-  | {
-      type: "message";
-      text: string;
-    }
-  | {
-      type: "question";
-      question: UiQuestion;
-    }
-  | {
-      type: "ui";
-      spec: Spec;
-    }
-  | {
-      type: "error";
-      message: string;
-    }
-  | {
-      type: "main_agent_activity";
-      event: "started" | "delta" | "completed" | "error";
-      text?: string;
-      message?: string;
-    }
-  | {
-      type: "subagent_activity";
-      subagentRunId?: string;
-      subagentName: string;
-      event: "started" | "delta" | "completed" | "error";
-      task?: string;
-      text?: string;
-      message?: string;
-    };
+  | MessageUpdate
+  | QuestionUpdate
+  | UiSpecUpdate
+  | ErrorUpdate
+  | MainAgentActivityUpdate
+  | SubagentActivityUpdate;
+
+export type ModelUiUpdate = MessageUpdate | QuestionUpdate | UiSpecUpdate;
+
+export type ModelUiOutput = {
+  version: 1;
+  updates: ModelUiUpdate[];
+};

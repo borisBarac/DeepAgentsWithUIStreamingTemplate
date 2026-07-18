@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "bun:test";
 import {
   finalTextToMessageFallback,
   type ModelUiOutput,
-  productBatchTextToUiUpdates,
 } from "@deep-agent-template/core/interaction-stream";
 
 import { POST } from "./route.ts";
@@ -311,69 +310,6 @@ afterEach(async () => {
   route.setAgentForTest(null);
 });
 
-describe("productBatchTextToUiUpdates", () => {
-  it("converts structured product-generator output into product-card UI updates", () => {
-    const updates = productBatchTextToUiUpdates(
-      JSON.stringify({
-        products: [
-          {
-            id: "launch-map",
-            title: "Launch Map",
-            description: "A planning workspace for design teams.",
-            imageUrl: "https://example.com/launch-map.png",
-            status: "complete",
-          },
-          {
-            id: "brief-lens",
-            title: "Brief Lens",
-            description: "A concept review assistant for product teams.",
-          },
-        ],
-      }),
-    );
-
-    expect(updates).toHaveLength(2);
-    expect(updates[0]).toEqual({
-      type: "ui",
-      spec: {
-        root: "launch-map",
-        elements: {
-          "launch-map": {
-            type: "product-card",
-            props: {
-              id: "launch-map",
-              title: "Launch Map",
-              description: "A planning workspace for design teams.",
-              imageUrl: "https://example.com/launch-map.png",
-              status: "complete",
-            },
-          },
-        },
-      },
-    });
-    expect(updates[1]?.type).toBe("ui");
-    if (updates[1]?.type !== "ui") {
-      throw new Error("expected second update to be a ui update");
-    }
-    expect(updates[1].spec.root).toBe("brief-lens");
-  });
-
-  it("returns updates for valid product batches so the zero-valid error is skipped", () => {
-    expect(
-      productBatchTextToUiUpdates(
-        JSON.stringify({
-          products: [{ id: "concept-1", title: "Concept", description: "Description" }],
-        }),
-      ).length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("ignores malformed text and invalid product batches", () => {
-    expect(productBatchTextToUiUpdates("not json")).toEqual([]);
-    expect(productBatchTextToUiUpdates(JSON.stringify({ products: [] }))).toEqual([]);
-  });
-});
-
 describe("finalTextToMessageFallback", () => {
   it("uses usable final model text as a chat message", () => {
     expect(finalTextToMessageFallback("  Plain assistant text.  ")).toEqual({
@@ -385,7 +321,7 @@ describe("finalTextToMessageFallback", () => {
   it("uses a retry prompt when final model text is empty", () => {
     expect(finalTextToMessageFallback("   ")).toEqual({
       type: "message",
-      text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+      text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
     });
   });
 });
@@ -511,10 +447,8 @@ describe("POST", () => {
       updates: [
         {
           type: "ui",
-          spec: {
-            root: "one",
-            elements: { one: { type: "Text", props: { text: "One" } } },
-          },
+          rootId: "one",
+          components: [{ id: "one", component: "Text", text: "One" }],
         },
       ],
     };
@@ -548,12 +482,8 @@ describe("POST", () => {
       updates: [
         {
           type: "ui",
-          spec: {
-            root: "one",
-            elements: {
-              one: { type: "Text", props: { text: "One" }, children: [] },
-            },
-          },
+          rootId: "one",
+          components: [{ id: "one", component: "Text", text: "One" }],
         },
       ],
     };
@@ -584,7 +514,7 @@ describe("POST", () => {
     await expect(readNdjson(response)).resolves.toEqual([
       {
         type: "message",
-        text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+        text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
       },
     ]);
     expect(route.getSessionStateForTest("structured-failure-state")).toMatchObject({
@@ -743,12 +673,12 @@ describe("POST", () => {
     await expect(readNdjson(response)).resolves.toEqual([
       {
         type: "message",
-        text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+        text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
       },
     ]);
   });
 
-  it("persists the visible fallback message in history", async () => {
+  it("keeps rejected structured fallback text out of history", async () => {
     const route = await import("./route.ts");
     const agent = createInspectableAgent([""], []);
     route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
@@ -764,7 +694,7 @@ describe("POST", () => {
     await expect(readNdjson(firstResponse)).resolves.toEqual([
       {
         type: "message",
-        text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+        text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
       },
     ]);
 
@@ -778,11 +708,6 @@ describe("POST", () => {
 
     expect(agent.inputs[2]?.messages).toEqual([
       { content: "generate concepts", role: "user" },
-      {
-        content:
-          "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
-        role: "assistant",
-      },
       { content: "try again", role: "user" },
     ]);
   });

@@ -1,16 +1,5 @@
 "use client";
 
-import {
-  buttonPropsSchema,
-  cardPropsSchema,
-  imagePlaceholderPropsSchema,
-  productCardPropsSchema,
-  productCardSchema,
-  productGridPropsSchema,
-  stackPropsSchema,
-  textInputPropsSchema,
-  textPropsSchema,
-} from "@deep-agent-template/core/generative-ui";
 import type { Spec, UIElement } from "@json-render/core";
 import { defineCatalog } from "@json-render/core";
 import type { ComponentRegistry } from "@json-render/react";
@@ -18,42 +7,49 @@ import { JSONUIProvider, Renderer, schema, useDataBinding } from "@json-render/r
 import { createContext, useContext, useState } from "react";
 import { z } from "zod";
 
+// Permissive Zod for every component's props. The authoritative validator is
+// the catalog.json-backed A2UI validator (server + client mini-validator in
+// Phase D). The Zod type only serves to satisfy defineCatalog's API; it does
+// not enforce prop shape. This removes the dual-definition hazard where the
+// Zod schemas and the catalog could drift.
+const permissiveProps = z.record(z.string(), z.unknown());
+
 export const uiCatalog = defineCatalog(schema, {
   components: {
     Button: {
-      props: buttonPropsSchema,
+      props: permissiveProps,
       description: "A button for local UI actions. Use a concise label.",
     },
     Card: {
-      props: cardPropsSchema,
+      props: permissiveProps,
       description: "A bordered content container. Optional title appears above children.",
     },
     ImagePlaceholder: {
-      props: imagePlaceholderPropsSchema,
+      props: permissiveProps,
       description: "A visual placeholder for a product image that can later be rendered.",
     },
     ProductCard: {
-      props: productCardPropsSchema,
+      props: permissiveProps,
       description: "A product concept card with title, description, and image prompt.",
     },
     "product-card": {
-      props: productCardSchema,
+      props: permissiveProps,
       description: "A scaffold-generated product card with optional generated image URL.",
     },
     ProductGrid: {
-      props: productGridPropsSchema,
+      props: permissiveProps,
       description: "A responsive container for one or more product concept cards.",
     },
     Stack: {
-      props: stackPropsSchema,
+      props: permissiveProps,
       description: "A layout container. Use column for forms and row for compact action groups.",
     },
     Text: {
-      props: textPropsSchema,
+      props: permissiveProps,
       description: "Text content. Use title for headings, muted for secondary text.",
     },
     TextInput: {
-      props: textInputPropsSchema,
+      props: permissiveProps,
       description: "A controlled text field. Use name as a stable form field identifier.",
     },
   },
@@ -73,6 +69,35 @@ function getProps<P>(element: UIElement<string, P>): P {
   return element.props;
 }
 
+// Locally-typed prop shapes for the renderers. These match catalog.json but
+// live here so the React components stay statically typed. The authoritative
+// runtime check is the A2UI validator (server + client mini-validator in
+// Phase D); these TS types are zero-cost at runtime.
+type ButtonProps = { label: string; action?: string };
+type CardProps = { title?: string };
+type ImagePlaceholderProps = { alt?: string; prompt?: string };
+type ProductCardProps = {
+  title: string;
+  description: string;
+  imageAlt?: string;
+  imagePrompt?: string;
+};
+type ProductCardStreamedProps = {
+  title: string;
+  description: string;
+  imageUrl?: string;
+  status?: "streaming" | "complete";
+};
+type ProductGridProps = { heading?: string };
+type StackProps = { direction?: "row" | "column"; gap?: "xs" | "sm" | "md" | "lg" };
+type TextProps = { text: string; variant?: "title" | "body" | "muted" | "caption" };
+type TextInputProps = {
+  label: string;
+  name: string;
+  placeholder?: string;
+  inputType?: "text" | "email" | "password";
+};
+
 const DEFAULT_ACTION_LABELS: Record<string, string> = {
   demo_action: "Demo action ran.",
   submit_demo: "Demo submitted.",
@@ -82,9 +107,7 @@ export function getActionFeedbackMessage(actionName: string): string {
   return DEFAULT_ACTION_LABELS[actionName] ?? `Action "${actionName}" is not wired yet.`;
 }
 
-export function getTextInputAutoComplete(
-  props: z.infer<typeof textInputPropsSchema>,
-): string | undefined {
+export function getTextInputAutoComplete(props: TextInputProps): string | undefined {
   if (props.inputType === "password") {
     return props.name.toLowerCase().includes("new") ? "new-password" : "current-password";
   }
@@ -106,7 +129,7 @@ const PreviewActionContext = createContext<PreviewActionFeedback>({
 
 export const registry: ComponentRegistry = {
   Button: ({ element }) => {
-    const props = getProps(element) as z.infer<typeof buttonPropsSchema>;
+    const props = getProps(element) as ButtonProps;
     const { runAction } = useContext(PreviewActionContext);
     return (
       <button
@@ -119,7 +142,7 @@ export const registry: ComponentRegistry = {
     );
   },
   Card: ({ element, children }) => {
-    const props = getProps(element) as z.infer<typeof cardPropsSchema>;
+    const props = getProps(element) as CardProps;
     return (
       <section className="jr-card">
         {props.title ? <h3>{props.title}</h3> : null}
@@ -128,7 +151,7 @@ export const registry: ComponentRegistry = {
     );
   },
   ImagePlaceholder: ({ element }) => {
-    const props = getProps(element) as z.infer<typeof imagePlaceholderPropsSchema>;
+    const props = getProps(element) as ImagePlaceholderProps;
     return (
       <div
         aria-label={props.alt ?? "Product image placeholder"}
@@ -140,7 +163,7 @@ export const registry: ComponentRegistry = {
     );
   },
   ProductCard: ({ element, children }) => {
-    const props = getProps(element) as z.infer<typeof productCardPropsSchema>;
+    const props = getProps(element) as ProductCardProps;
     return (
       <article className="product-card">
         <div aria-label={props.imageAlt ?? props.title} className="product-image" role="img">
@@ -155,7 +178,7 @@ export const registry: ComponentRegistry = {
     );
   },
   "product-card": ({ element }) => {
-    const props = getProps(element) as z.infer<typeof productCardSchema>;
+    const props = getProps(element) as ProductCardStreamedProps;
     return (
       <article className="product-card">
         {props.imageUrl ? (
@@ -179,7 +202,7 @@ export const registry: ComponentRegistry = {
     );
   },
   ProductGrid: ({ element, children }) => {
-    const props = getProps(element) as z.infer<typeof productGridPropsSchema>;
+    const props = getProps(element) as ProductGridProps;
     return (
       <section className="product-grid-shell">
         {props.heading ? <h2>{props.heading}</h2> : null}
@@ -188,7 +211,7 @@ export const registry: ComponentRegistry = {
     );
   },
   Stack: ({ element, children }) => {
-    const props = getProps(element) as z.infer<typeof stackPropsSchema>;
+    const props = getProps(element) as StackProps;
     const className = [
       "jr-stack",
       props.direction === "row" ? "jr-stack-row" : "jr-stack-column",
@@ -197,7 +220,7 @@ export const registry: ComponentRegistry = {
     return <div className={className}>{children}</div>;
   },
   Text: ({ element }) => {
-    const props = getProps(element) as z.infer<typeof textPropsSchema>;
+    const props = getProps(element) as TextProps;
     const variant = props.variant ?? "body";
     if (variant === "title") {
       return <h2 className="jr-text jr-text-title">{props.text}</h2>;
@@ -205,7 +228,7 @@ export const registry: ComponentRegistry = {
     return <p className={`jr-text jr-text-${variant}`}>{props.text}</p>;
   },
   TextInput: ({ element }) => {
-    const props = getProps(element) as z.infer<typeof textInputPropsSchema>;
+    const props = getProps(element) as TextInputProps;
     const [value, setValue] = useDataBinding<string>(`/form/${props.name}`);
     return (
       <label className="jr-field">

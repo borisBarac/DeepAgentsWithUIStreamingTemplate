@@ -1,15 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { StructuredOutputParsingError } from "langchain";
 
-import { validateStreamingSpec } from "../generative-ui/contract.ts";
 import {
   createInteractionStream,
   finalTextToMessageFallback,
   type ModelUiOutput,
-  productBatchTextToUiUpdates,
   type StreamableAgent,
   type UiUpdate,
-  type ValidateSpec,
 } from "./index.ts";
 
 type FakeStreamRun = {
@@ -204,7 +201,7 @@ function createSubagentStreamingAgent(): FakeAgent {
             taskInput: "Find supporting facts",
             messages: asyncIterableFrom([
               {
-                text: asyncIterableFrom(["Searching", " sources"]),
+                text: asyncIterableFrom(["Searching", " sources", '{"status":"ok"}']),
               },
             ]),
             output: Promise.resolve({}),
@@ -280,67 +277,6 @@ async function readWithTimeout<T>(read: Promise<T>, timeoutMs = 20): Promise<T |
   ]);
 }
 
-describe("productBatchTextToUiUpdates", () => {
-  it("converts structured product-generator output into product-card UI updates", () => {
-    const updates = productBatchTextToUiUpdates(
-      JSON.stringify({
-        products: [
-          {
-            id: "launch-map",
-            title: "Launch Map",
-            description: "A planning workspace for design teams.",
-            imageUrl: "https://example.com/launch-map.png",
-            status: "complete",
-          },
-          {
-            id: "brief-lens",
-            title: "Brief Lens",
-            description: "A concept review assistant for product teams.",
-          },
-        ],
-      }),
-    );
-
-    expect(updates).toHaveLength(2);
-    expect(updates[0]).toEqual({
-      type: "ui",
-      spec: {
-        root: "launch-map",
-        elements: {
-          "launch-map": {
-            type: "product-card",
-            props: {
-              id: "launch-map",
-              title: "Launch Map",
-              description: "A planning workspace for design teams.",
-              imageUrl: "https://example.com/launch-map.png",
-              status: "complete",
-            },
-          },
-        },
-      },
-    });
-    expect(updates[1]?.type).toBe("ui");
-    if (updates[1]?.type !== "ui") throw new Error("expected ui update");
-    expect(updates[1].spec.root).toBe("brief-lens");
-  });
-
-  it("returns updates for valid product batches so the zero-valid error is skipped", () => {
-    expect(
-      productBatchTextToUiUpdates(
-        JSON.stringify({
-          products: [{ id: "concept-1", title: "Concept", description: "Description" }],
-        }),
-      ).length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("ignores malformed text and invalid product batches", () => {
-    expect(productBatchTextToUiUpdates("not json")).toEqual([]);
-    expect(productBatchTextToUiUpdates(JSON.stringify({ products: [] }))).toEqual([]);
-  });
-});
-
 describe("finalTextToMessageFallback", () => {
   it("uses usable final model text as a chat message", () => {
     expect(finalTextToMessageFallback("  Plain assistant text.  ")).toEqual({
@@ -352,7 +288,7 @@ describe("finalTextToMessageFallback", () => {
   it("uses a retry prompt when final model text is empty", () => {
     expect(finalTextToMessageFallback("   ")).toEqual({
       type: "message",
-      text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+      text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
     });
   });
 });
@@ -374,200 +310,67 @@ describe("workflow delivery streaming", () => {
     expect((await interaction.result).finalText).toBe("Reviewed final response");
   });
 
-  it("emits product-generator batches even when debug activity is disabled", async () => {
-    const batch = JSON.stringify({
-      products: [{ id: "board", title: "Kanban board", description: "Four-column office board" }],
-    });
-    const agent: FakeAgent = {
-      async streamEvents() {
-        return {
-          messages: asyncIterableFrom([{ text: asyncIterableFrom(["Reviewed final response"]) }]),
-          subagents: asyncIterableFrom([
-            {
-              name: "product-generator",
-              output: Promise.resolve({ messages: [{ content: batch, role: "assistant" }] }),
-            },
-          ]),
-          output: Promise.resolve({
-            messages: [{ content: "Reviewed final response", role: "assistant" }],
-          }),
-        };
-      },
-    };
-    const updates = await collectUpdates(agent);
-    expect(updates.some((update) => update.type === "ui")).toBeTrue();
-    expect(
-      updates.some(
-        (update) => update.type === "message" && update.text === "Reviewed final response",
-      ),
-    ).toBeTrue();
-  });
-
-  it("prefers a product-generator structured response over its assistant text", async () => {
+  it("emits only the last UI update for a duplicate rootId", async () => {
+    const earlier = textUpdate("same", "Earlier value");
+    const final = textUpdate("same", "Final value");
     const agent: FakeAgent = {
       async streamEvents() {
         return {
           messages: asyncIterableFrom([]),
-          subagents: asyncIterableFrom([
-            {
-              name: "product-generator",
-              output: Promise.resolve({
-                messages: [{ content: "not json", role: "assistant" }],
-                structuredResponse: {
-                  products: [
-                    { id: "structured", title: "Structured card", description: "Accepted" },
-                  ],
-                },
-              }),
-            },
-          ]),
           output: Promise.resolve({
             messages: [],
             structuredResponse: {
               version: 1,
-              updates: [{ type: "message", text: "Done" }],
+              updates: [earlier, final],
             },
           }),
         };
       },
     };
 
-    const updates = await collectUpdates(agent);
-    expect(updates).toContainEqual(expect.objectContaining({ type: "ui" }));
-    expect(updates).toContainEqual({ type: "message", text: "Done" });
-  });
-
-  it("emits only the last UI update for a duplicate spec root", async () => {
-    const batch = JSON.stringify({
-      products: [{ id: "same", title: "Product agent", description: "Earlier value" }],
-    });
-    const supervisorSpec = {
-      root: "same",
-      elements: {
-        same: {
-          type: "product-card",
-          props: { id: "same", title: "Supervisor", description: "Final value" },
-        },
-      },
-    };
-    const agent: FakeAgent = {
-      async streamEvents() {
-        return {
-          messages: asyncIterableFrom([]),
-          subagents: asyncIterableFrom([
-            {
-              name: "product-generator",
-              output: Promise.resolve({ messages: [{ content: batch, role: "assistant" }] }),
-            },
-          ]),
-          output: Promise.resolve({
-            messages: [],
-            structuredResponse: {
-              version: 1,
-              updates: [{ type: "ui", spec: supervisorSpec }],
-            },
-          }),
-        };
-      },
-    };
-
-    await expect(collectUpdates(agent)).resolves.toEqual([{ type: "ui", spec: supervisorSpec }]);
-  });
-
-  it("accepts a maximum product batch plus a supervisor message", async () => {
-    let calls = 0;
-    const products = Array.from({ length: 32 }, (_, index) => ({
-      id: `card-${index}`,
-      title: `Card ${index}`,
-      description: "Description",
-    }));
-    const agent: FakeAgent = {
-      async streamEvents() {
-        calls += 1;
-        return {
-          messages: asyncIterableFrom([]),
-          subagents: asyncIterableFrom([
-            {
-              name: "product-generator",
-              output: Promise.resolve({ structuredResponse: { products } }),
-            },
-          ]),
-          output: Promise.resolve({
-            messages: [],
-            structuredResponse: {
-              version: 1,
-              updates: [{ type: "message", text: "All products generated" }],
-            },
-          }),
-        };
-      },
-    };
-    const interaction = createInteractionStream({
-      agent: asStreamable(agent),
-      messages: [{ content: "generate concepts", role: "user" }],
-      requireStructuredOutput: true,
-      sessionId: "combined-update-cap",
-    });
-    const updates: UiUpdate[] = [];
-    for await (const update of interaction.updates) updates.push(update);
-    const result = await interaction.result;
-
-    expect(updates).toHaveLength(33);
-    expect(updates.at(-1)).toEqual({ type: "message", text: "All products generated" });
-    expect(calls).toBe(1);
-    expect(result.failure).toBeNull();
-  });
-
-  it("deduplicates a repeated supervisor product after merging bounded outputs", async () => {
-    const products = Array.from({ length: 32 }, (_, index) => ({
-      id: `card-${index}`,
-      title: `Card ${index}`,
-      description: "Earlier value",
-    }));
-    const finalSpec = {
-      root: "card-0",
-      elements: {
-        "card-0": {
-          type: "product-card",
-          props: {
-            id: "card-0",
-            title: "Updated card",
-            description: "Final value",
-          },
-        },
-      },
-    };
-    const agent: FakeAgent = {
-      async streamEvents() {
-        return {
-          messages: asyncIterableFrom([]),
-          subagents: asyncIterableFrom([
-            {
-              name: "product-generator",
-              output: Promise.resolve({ structuredResponse: { products } }),
-            },
-          ]),
-          output: Promise.resolve({
-            messages: [],
-            structuredResponse: {
-              version: 1,
-              updates: [{ type: "ui", spec: finalSpec }],
-            },
-          }),
-        };
-      },
-    };
-
-    const updates = await collectUpdates(agent);
-
-    expect(updates).toHaveLength(32);
-    expect(
-      updates.filter((update) => update.type === "ui" && update.spec.root === "card-0"),
-    ).toEqual([{ type: "ui", spec: finalSpec }]);
+    await expect(collectUpdates(agent)).resolves.toEqual([final]);
   });
 });
 
 describe("createInteractionStream", () => {
+  it("repairs only presentation when the two-phase output is invalid", async () => {
+    let workCalls = 0;
+    let presentationCalls = 0;
+    const agent: StreamableAgent = {
+      async invoke() {
+        throw new Error("not used");
+      },
+      async streamEvents() {
+        workCalls += 1;
+        return {
+          messages: asyncIterableFrom([{ text: asyncIterableFrom(["work candidate"]) }]),
+          output: Promise.resolve({
+            messages: [{ content: "work candidate", role: "assistant" }],
+            structuredResponse: { invalid: true },
+            workResult: { messages: [{ content: "work candidate", role: "assistant" }] },
+          }),
+        };
+      },
+      async present({ repairFeedback }) {
+        presentationCalls += 1;
+        expect(repairFeedback).toContain("invalid_model_output");
+        return { version: 1, updates: [{ type: "message", text: "Repaired answer" }] };
+      },
+    };
+    const interaction = createInteractionStream({
+      agent,
+      messages: [{ content: "Do it", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "presentation-only-repair",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+
+    expect(updates).toEqual([{ type: "message", text: "Repaired answer" }]);
+    expect(workCalls).toBe(1);
+    expect(presentationCalls).toBe(1);
+  });
+
   it("prefers validated structured output over conflicting assistant prose", async () => {
     const structuredOutput = {
       version: 1,
@@ -590,6 +393,46 @@ describe("createInteractionStream", () => {
 
     expect(updates).toEqual([{ type: "message", text: "Structured answer" }]);
     expect((await interaction.result).structuredOutput).toEqual(structuredOutput);
+  });
+
+  it("repairs a serialized structured envelope instead of exposing it as message text", async () => {
+    const serializedEnvelope = JSON.stringify({
+      version: 1,
+      updates: [
+        {
+          type: "ui",
+          rootId: "card",
+          components: [
+            {
+              id: "card",
+              component: "Card",
+              children: [{ id: "title", component: "Text", text: "Headphones" }],
+            },
+          ],
+        },
+      ],
+    });
+    const repaired = textUpdate("card", "Headphones");
+    const agent = createStructuredAgent([
+      {
+        structuredResponse: {
+          version: 1,
+          updates: [{ type: "message", text: serializedEnvelope }],
+        },
+      },
+      {
+        structuredResponse: { version: 1, updates: [repaired] },
+      },
+    ]);
+
+    const updates = await collectUpdates(agent);
+
+    expect(updates).toEqual([repaired]);
+    expect(updates).not.toContainEqual({ type: "message", text: serializedEnvelope });
+    expect(agent.inputs).toHaveLength(2);
+    expect(agent.inputs[1]?.messages.at(-1)?.content).toContain(
+      "updates.0.components.0.children.0",
+    );
   });
 
   it("retries an invalid structured object once with validation feedback", async () => {
@@ -807,36 +650,11 @@ describe("createInteractionStream", () => {
     ]);
   });
 
-  it("converts product batches before retrying malformed output", async () => {
-    await expect(
-      collectUpdates(
-        createStreamingAgent([
-          JSON.stringify({
-            products: [{ id: "concept-1", title: "Concept", description: "Description" }],
-          }),
-        ]),
-      ),
-    ).resolves.toEqual([
-      {
-        type: "ui",
-        spec: {
-          root: "concept-1",
-          elements: {
-            "concept-1": {
-              type: "product-card",
-              props: { id: "concept-1", title: "Concept", description: "Description" },
-            },
-          },
-        },
-      },
-    ]);
-  });
-
   it("streams the default message when zero parsed lines and final text is empty", async () => {
     await expect(collectUpdates(createStreamingAgent([""]))).resolves.toEqual([
       {
         type: "message",
-        text: "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+        text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
       },
     ]);
   });
@@ -857,7 +675,7 @@ describe("createInteractionStream", () => {
         { content: "generate concepts", role: "user" },
         {
           content:
-            "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.",
+            "I could not render that as an interactive UI, but I can try again with a simpler layout.",
           role: "assistant",
         },
       ],
@@ -887,6 +705,13 @@ describe("createInteractionStream", () => {
       subagentName: "researcher",
       event: "delta",
       text: " sources",
+    });
+    expect(updates).toContainEqual({
+      type: "subagent_activity",
+      subagentRunId: expect.any(String),
+      subagentName: "researcher",
+      event: "delta",
+      text: '{"status":"ok"}',
     });
     expect(updates).toContainEqual({
       type: "subagent_activity",
@@ -966,46 +791,36 @@ describe("createInteractionStream", () => {
 });
 
 const SAFE_FALLBACK_MESSAGE =
-  "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.";
+  "I could not render that as an interactive UI, but I can try again with a simpler layout.";
 
-function textSpec(
-  key: string,
-  text: string,
-): {
-  root: string;
-  elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }>;
-} {
+function textUpdate(key: string, text: string): Extract<UiUpdate, { type: "ui" }> {
   return {
-    root: key,
-    elements: { [key]: { type: "Text", props: { text }, children: [] } },
+    type: "ui",
+    rootId: key,
+    components: [{ id: key, component: "Text", text }],
   };
 }
 
-function buttonSpec(
-  key: string,
-  label: string,
-): {
-  root: string;
-  elements: Record<string, { type: string; props: Record<string, unknown>; children: string[] }>;
-} {
+function buttonUpdate(key: string, label: string): Extract<UiUpdate, { type: "ui" }> {
   return {
-    root: key,
-    elements: { [key]: { type: "Button", props: { label }, children: [] } },
+    type: "ui",
+    rootId: key,
+    components: [{ id: key, component: "Button", label }],
   };
 }
 
-const unknownComponentSpec = {
-  root: "x",
-  elements: { x: { type: "Mystery", props: {}, children: [] } },
+const unknownComponentUpdate = {
+  type: "ui",
+  rootId: "x",
+  components: [{ id: "x", component: "Mystery" }],
 };
 
-function uiLine(spec: unknown): string {
-  return JSON.stringify({ type: "ui", spec });
+function uiLine(update: unknown): string {
+  return JSON.stringify(update);
 }
 
-async function collectWithValidator(
+async function collectRepairUpdates(
   agent: FakeAgent,
-  validateSpec: ValidateSpec,
   includeActivity = false,
 ): Promise<{ updates: UiUpdate[]; history: unknown[] }> {
   const interaction = createInteractionStream({
@@ -1013,7 +828,6 @@ async function collectWithValidator(
     includeActivity,
     messages: [{ content: "build ui", role: "user" }],
     sessionId: "repair-test",
-    validateSpec,
   });
   const updates: UiUpdate[] = [];
   for await (const update of interaction.updates) {
@@ -1029,59 +843,50 @@ describe("createInteractionStream — NDJSON UI repair", () => {
       {
         structuredResponse: {
           version: 1,
-          updates: [
-            { type: "message", text: "Do not leak" },
-            { type: "ui", spec: unknownComponentSpec },
-          ],
+          updates: [{ type: "message", text: "Do not leak" }, unknownComponentUpdate],
         },
       },
       {
         structuredResponse: {
           version: 1,
-          updates: [
-            { type: "message", text: "Accepted" },
-            { type: "ui", spec: textSpec("fixed", "Ready") },
-          ],
+          updates: [{ type: "message", text: "Accepted" }, textUpdate("fixed", "Ready")],
         },
       },
     ]);
-    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+    const { updates } = await collectRepairUpdates(agent);
 
-    expect(updates).toEqual([
-      { type: "message", text: "Accepted" },
-      { type: "ui", spec: textSpec("fixed", "Ready") },
-    ]);
+    expect(updates).toEqual([{ type: "message", text: "Accepted" }, textUpdate("fixed", "Ready")]);
     expect(updates).not.toContainEqual({ type: "message", text: "Do not leak" });
   });
 
   it("repairs rejected UI candidates using path-specific feedback and succeeds on retry", async () => {
     const agent = createInspectableAgent([
-      uiLine(unknownComponentSpec),
-      uiLine(textSpec("text", "fixed")),
+      uiLine(unknownComponentUpdate),
+      uiLine(textUpdate("text", "fixed")),
     ]);
-    const { updates, history } = await collectWithValidator(agent, validateStreamingSpec);
+    const { updates, history } = await collectRepairUpdates(agent);
 
-    expect(updates).toEqual([{ type: "ui", spec: textSpec("text", "fixed") }]);
+    expect(updates).toEqual([textUpdate("text", "fixed")]);
 
     const repairInput = agent.inputs[1];
     expect(repairInput?.messages).toHaveLength(3);
     const feedback = repairInput?.messages[2];
     expect(feedback?.role).toBe("user");
-    expect(feedback?.content).toContain("elements.x.type");
+    expect(feedback?.content).toContain("components[0].component");
 
     const historyMessages = history as Array<{ content: string; role: string }>;
     expect(historyMessages.some((message) => message.content === feedback?.content)).toBe(false);
   });
 
   it("repairs malformed UI-intended JSON but ignores non-UI malformed lines", async () => {
-    const truncatedUi = '{"type":"ui","spec":{"root":"x","elements":{"x":{"type":"Text"';
-    const repairAgent = createInspectableAgent([truncatedUi, uiLine(textSpec("text", "fixed"))]);
-    const { updates } = await collectWithValidator(repairAgent, validateStreamingSpec);
-    expect(updates).toEqual([{ type: "ui", spec: textSpec("text", "fixed") }]);
+    const truncatedUi = '{"type":"ui","rootId":"x","components":[{"id":"x","component":"Text"';
+    const repairAgent = createInspectableAgent([truncatedUi, uiLine(textUpdate("text", "fixed"))]);
+    const { updates } = await collectRepairUpdates(repairAgent);
+    expect(updates).toEqual([textUpdate("text", "fixed")]);
     expect(repairAgent.inputs).toHaveLength(2);
 
     const proseAgent = createInspectableAgent(["This is plain prose, not a UI update."]);
-    const { updates: proseUpdates } = await collectWithValidator(proseAgent, validateStreamingSpec);
+    const { updates: proseUpdates } = await collectRepairUpdates(proseAgent);
     expect(proseUpdates).toEqual([
       { type: "message", text: "This is plain prose, not a UI update." },
     ]);
@@ -1089,20 +894,20 @@ describe("createInteractionStream — NDJSON UI repair", () => {
   });
 
   it("commits only the accepted repair attempt without duplication", async () => {
-    const attempt1 = [uiLine(textSpec("ok", "kept")), uiLine(unknownComponentSpec)].join("\n");
-    const repair = uiLine(buttonSpec("btn", "Fixed"));
+    const attempt1 = [uiLine(textUpdate("ok", "kept")), uiLine(unknownComponentUpdate)].join("\n");
+    const repair = uiLine(buttonUpdate("btn", "Fixed"));
     const agent = createInspectableAgent([attempt1, repair]);
-    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+    const { updates } = await collectRepairUpdates(agent);
 
-    expect(updates).toEqual([{ type: "ui", spec: buttonSpec("btn", "Fixed") }]);
+    expect(updates).toEqual([buttonUpdate("btn", "Fixed")]);
     expect(agent.inputs).toHaveLength(2);
   });
 
   it("requests only rejected replacements in the repair feedback", async () => {
-    const attempt1 = [uiLine(textSpec("ok", "kept")), uiLine(unknownComponentSpec)].join("\n");
-    const repair = uiLine(buttonSpec("btn", "Fixed"));
+    const attempt1 = [uiLine(textUpdate("ok", "kept")), uiLine(unknownComponentUpdate)].join("\n");
+    const repair = uiLine(buttonUpdate("btn", "Fixed"));
     const agent = createInspectableAgent([attempt1, repair]);
-    await collectWithValidator(agent, validateStreamingSpec);
+    await collectRepairUpdates(agent);
 
     const feedback = agent.inputs[1]?.messages[2]?.content ?? "";
     expect(feedback).toContain("Mystery");
@@ -1111,10 +916,10 @@ describe("createInteractionStream — NDJSON UI repair", () => {
 
   it("accepts a prose message when the repairing agent cannot produce UI", async () => {
     const agent = createInspectableAgent([
-      uiLine(unknownComponentSpec),
+      uiLine(unknownComponentUpdate),
       JSON.stringify({ type: "message", text: "I cannot build that UI, so here is a summary." }),
     ]);
-    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+    const { updates } = await collectRepairUpdates(agent);
     expect(updates).toEqual([
       { type: "message", text: "I cannot build that UI, so here is a summary." },
     ]);
@@ -1122,26 +927,29 @@ describe("createInteractionStream — NDJSON UI repair", () => {
 
   it("keeps repair feedback in agent context but out of saved history", async () => {
     const agent = createInspectableAgent([
-      uiLine(unknownComponentSpec),
-      uiLine(textSpec("text", "fixed")),
+      uiLine(unknownComponentUpdate),
+      uiLine(textUpdate("text", "fixed")),
     ]);
-    const { history } = await collectWithValidator(agent, validateStreamingSpec);
+    const { history } = await collectRepairUpdates(agent);
 
     const feedback = agent.inputs[1]?.messages[2]?.content ?? "";
     const historyMessages = history as Array<{ content: string; role: string }>;
     expect(historyMessages).toEqual([
       { content: "build ui", role: "user" },
-      { content: uiLine(textSpec("text", "fixed")), role: "assistant" },
+      {
+        content: uiLine(textUpdate("text", "fixed")),
+        role: "assistant",
+      },
     ]);
     expect(historyMessages.some((message) => message.content === feedback)).toBe(false);
   });
 
   it("emits main-agent activity for both attempts when requested", async () => {
     const agent = createInspectableAgent([
-      uiLine(unknownComponentSpec),
-      uiLine(textSpec("text", "fixed")),
+      uiLine(unknownComponentUpdate),
+      uiLine(textUpdate("text", "fixed")),
     ]);
-    const { updates } = await collectWithValidator(agent, validateStreamingSpec, true);
+    const { updates } = await collectRepairUpdates(agent, true);
 
     const started = updates.filter(
       (update): update is Extract<UiUpdate, { type: "main_agent_activity" }> =>
@@ -1158,10 +966,10 @@ describe("createInteractionStream — NDJSON UI repair", () => {
 
   it("emits the safe prose fallback and stops when repair also fails", async () => {
     const agent = createInspectableAgent([
-      uiLine(unknownComponentSpec),
-      uiLine(unknownComponentSpec),
+      uiLine(unknownComponentUpdate),
+      uiLine(unknownComponentUpdate),
     ]);
-    const { updates } = await collectWithValidator(agent, validateStreamingSpec);
+    const { updates } = await collectRepairUpdates(agent);
 
     expect(updates).toEqual([{ type: "message", text: SAFE_FALLBACK_MESSAGE }]);
     expect(agent.inputs).toHaveLength(2);

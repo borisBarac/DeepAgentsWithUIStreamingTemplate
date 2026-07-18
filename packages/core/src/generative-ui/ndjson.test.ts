@@ -56,12 +56,16 @@ describe("parseUpdateText", () => {
   it("parses each valid NDJSON line into a UiUpdate", () => {
     const text = [
       '{"type":"message","text":"hi"}',
-      '{"type":"ui","spec":{"root":"root","elements":{}}}',
+      '{"type":"ui","rootId":"root","components":[{"id":"root","component":"Text","text":"Hello"}]}',
     ].join("\n");
 
     expect(parseUpdateText(text)).toEqual([
       { type: "message", text: "hi" },
-      { type: "ui", spec: { root: "root", elements: {} } },
+      {
+        type: "ui",
+        rootId: "root",
+        components: [{ id: "root", component: "Text", text: "Hello" }],
+      },
     ]);
   });
 
@@ -80,27 +84,8 @@ describe("parseUpdateText", () => {
     expect(parseUpdateText(text)).toEqual([{ type: "message", text: "ok" }]);
   });
 
-  it("applies the normalizeSpec hook to ui specs", () => {
-    const normalizeSpec = () => ({ root: "ok", elements: {} }) as const;
-    const text = '{"type":"ui","spec":{"root":"raw"}}';
-    expect(parseUpdateText(text, normalizeSpec)).toEqual([
-      { type: "ui", spec: { root: "ok", elements: {} } },
-    ]);
-  });
-
-  it("parses pretty-printed JSON envelopes before falling back to NDJSON", () => {
-    const text = `{
-  "updates": [
-    {"type":"message","text":"hi"}
-  ]
-}`;
-
-    expect(parseUpdateText(text)).toEqual([{ type: "message", text: "hi" }]);
-  });
-
-  it("drops ui updates when the normalizeSpec hook rejects them", () => {
-    const rejectAll = () => null;
-    const text = '{"type":"ui","spec":{"root":"raw"}}';
-    expect(parseUpdateText(text, rejectAll)).toEqual([]);
+  it("drops invalid UI updates", () => {
+    const text = '{"type":"ui","components":[{"id":"raw","component":"Unknown"}]}';
+    expect(parseUpdateText(text)).toEqual([]);
   });
 });

@@ -1,28 +1,23 @@
 import {
+  type A2UIValidationError,
   type ClassifiedUpdates,
   classifyUpdateText,
   type ModelUiOutput,
-  modelUiOutputSchema,
-  type NormalizeSpec,
   normalizeModelUiOutput,
-  normalizeSpecToValidateSpec,
-  normalizeUiUpdate,
-  productCardBatchSchema,
-  productCardsToUiUpdates,
   type RejectedUiCandidate,
+  safeEmit,
   type UiUpdate,
-  type ValidateSpec,
+  validateModelUiOutput,
+  validateUpdate,
 } from "../generative-ui/index.ts";
 import { CORE_PROMPT_TEMPLATES } from "../prompts/index.ts";
 import { hasStructuredOutputParsingCause } from "../scaffold/structured-json.ts";
 
 export type {
+  A2UIValidationError,
   ClassifiedUpdates,
   ModelUiOutput,
-  SpecValidationIssue,
-  SpecValidationResult,
   UiUpdate,
-  ValidateSpec,
 } from "../generative-ui/index.ts";
 
 export type AgentInputMessage = {
@@ -33,6 +28,8 @@ export type AgentInputMessage = {
 export type AgentResult = {
   messages?: unknown[];
   structuredResponse?: unknown;
+  workResult?: unknown;
+  presentationError?: string;
 };
 
 type StreamTextMessage = {
@@ -57,16 +54,20 @@ export type StreamableAgent = {
     subagents?: AsyncIterable<StreamSubagent>;
     output: Promise<AgentResult>;
   }>;
+  present?: (request: {
+    messages: unknown[];
+    workResult: unknown;
+    sessionId?: string;
+    repairFeedback?: string;
+  }) => Promise<ModelUiOutput>;
 };
 
 export type InteractionStreamOptions = {
   agent: StreamableAgent;
   includeActivity?: boolean;
   messages: AgentInputMessage[];
-  normalizeSpec?: NormalizeSpec;
   requireStructuredOutput?: boolean;
   sessionId: string;
-  validateSpec?: ValidateSpec;
 };
 
 export type InteractionStreamResult = {
@@ -80,7 +81,7 @@ export type InteractionStreamResult = {
 export type InteractionStreamFailure = {
   attempts: number;
   code: "invalid_model_output" | "invalid_ui_spec";
-  issues: Array<{ code: string; message: string; path: string }>;
+  issues: A2UIValidationError[];
 };
 
 export type InteractionStream = {
@@ -89,7 +90,7 @@ export type InteractionStream = {
 };
 
 export const UNRENDERABLE_UI_MESSAGE =
-  "I could not render that as an interactive UI, but I can try again with a simpler product-card layout.";
+  "I could not render that as an interactive UI, but I can try again with a simpler layout.";
 
 export function createInteractionStream(options: InteractionStreamOptions): InteractionStream {
   const queue = new AsyncUpdateQueue();
@@ -102,8 +103,9 @@ export function createInteractionStream(options: InteractionStreamOptions): Inte
 
   void (async () => {
     try {
-      const streamResult = await runInteraction(options, (update) => {
-        queue.push(update);
+      const streamResult = await runInteraction(options, (candidate) => {
+        const emitted = safeEmit(candidate, { strict: true });
+        if (emitted.ok) queue.push(emitted.update);
       });
       resolveResult(streamResult);
       queue.close();
@@ -162,32 +164,6 @@ class AsyncUpdateQueue implements AsyncIterable<UiUpdate> {
   }
 }
 
-export function productBatchTextToUiUpdates(
-  text: string,
-  normalizeSpec?: NormalizeSpec,
-): UiUpdate[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return [];
-  }
-
-  return productBatchValueToUiUpdates(parsed, normalizeSpec);
-}
-
-function productBatchValueToUiUpdates(value: unknown, normalizeSpec?: NormalizeSpec): UiUpdate[] {
-  const batch = productCardBatchSchema.safeParse(value);
-  if (!batch.success) {
-    return [];
-  }
-
-  return productCardsToUiUpdates(batch.data.products).flatMap((candidate) => {
-    const update = normalizeUiUpdate(candidate, normalizeSpec);
-    return update ? [update] : [];
-  });
-}
-
 export function finalTextToMessageFallback(finalText: string): UiUpdate {
   return {
     type: "message",
@@ -211,23 +187,25 @@ async function runInteraction(
   options: InteractionStreamOptions,
   onUpdate: (update: UiUpdate) => void,
 ): Promise<InteractionStreamResult> {
-  const validateSpec = resolveValidator(options);
-
-  const attempt1 = await runAttempt(options.messages, options, validateSpec, onUpdate);
+  const attempt1 = await runAttempt(options.messages, options, onUpdate);
   let lastAttempt: Attempt = attempt1;
   let hadRepair = false;
 
   if (attempt1.classification.rejectedUiCandidates.length > 0) {
     const feedback = buildRepairFeedback(attempt1.classification.rejectedUiCandidates);
     const attemptedOutput = attemptedOutputContent(attempt1);
-    const repairMessages: AgentInputMessage[] = [
-      ...options.messages,
-      ...(attemptedOutput
-        ? ([{ content: attemptedOutput, role: "assistant" }] satisfies AgentInputMessage[])
-        : []),
-      { content: feedback, role: "user" },
-    ];
-    lastAttempt = await runAttempt(repairMessages, options, validateSpec, onUpdate);
+    if (options.agent.present && attempt1.result?.workResult !== undefined) {
+      lastAttempt = await runPresentationRepair(attempt1, feedback, options);
+    } else {
+      const repairMessages: AgentInputMessage[] = [
+        ...options.messages,
+        ...(attemptedOutput
+          ? ([{ content: attemptedOutput, role: "assistant" }] satisfies AgentInputMessage[])
+          : []),
+        { content: feedback, role: "user" },
+      ];
+      lastAttempt = await runAttempt(repairMessages, options, onUpdate);
+    }
     hadRepair = true;
   }
 
@@ -256,29 +234,18 @@ async function runInteraction(
       hadRepair,
       committedUpdates,
       structuredOutput,
+      options.requireStructuredOutput === true,
     ),
     result: lastAttempt.result,
     structuredOutput,
   };
 }
 
-function resolveValidator(options: InteractionStreamOptions): ValidateSpec | undefined {
-  if (options.validateSpec) {
-    return options.validateSpec;
-  }
-  if (options.normalizeSpec) {
-    return normalizeSpecToValidateSpec(options.normalizeSpec);
-  }
-  return undefined;
-}
-
 async function runAttempt(
   messages: AgentInputMessage[],
   options: InteractionStreamOptions,
-  validateSpec: ValidateSpec | undefined,
   onUpdate: (update: UiUpdate) => void,
 ): Promise<Attempt> {
-  const productUpdates: UiUpdate[] = [];
   let streamResult: { finalText: string; result: AgentResult | null };
   try {
     streamResult = await streamWithEvents(
@@ -287,7 +254,6 @@ async function runAttempt(
       options.sessionId,
       options.includeActivity ? onUpdate : undefined,
       options.includeActivity ? onUpdate : undefined,
-      (value) => productUpdates.push(...productBatchValueToUiUpdates(value, options.normalizeSpec)),
     );
   } catch (error) {
     if (!hasStructuredOutputParsingCause(error)) throw error;
@@ -306,58 +272,116 @@ async function runAttempt(
     ? normalizeModelUiOutput(result?.structuredResponse)
     : null;
   const mainClassification = structuredOutput
-    ? classifyModelUiOutput(structuredOutput, validateSpec)
+    ? classifyModelUiOutput(structuredOutput)
     : expectsStructuredOutput
       ? classifyInvalidModelUiOutput(result?.structuredResponse)
-      : classifyUpdateText(finalText, validateSpec);
-  const legacyProductUpdates = expectsStructuredOutput
-    ? []
-    : productBatchTextToUiUpdates(finalText, options.normalizeSpec);
+      : classifyUpdateText(finalText);
   if (
     !expectsStructuredOutput &&
     mainClassification.accepted.length === 0 &&
     mainClassification.rejectedUiCandidates.length === 0 &&
-    legacyProductUpdates.length === 0 &&
     finalText.trim()
   ) {
     mainClassification.accepted.push(finalTextToMessageFallback(finalText));
   }
-  const accepted = [...productUpdates, ...legacyProductUpdates, ...mainClassification.accepted];
-  const rejectedUiCandidates = [...mainClassification.rejectedUiCandidates];
-  const classification = { accepted, rejectedUiCandidates };
+  const classification = mainClassification;
   return { finalText, result, classification, hasStructuredResponse, structuredOutput };
 }
 
-function classifyModelUiOutput(
-  output: ModelUiOutput,
-  validateSpec?: ValidateSpec,
-): ClassifiedUpdates {
+async function runPresentationRepair(
+  prior: Attempt,
+  feedback: string,
+  options: InteractionStreamOptions,
+): Promise<Attempt> {
+  let structuredResponse: unknown;
+  let presentationError: string | undefined;
+  try {
+    structuredResponse = await options.agent.present?.({
+      messages: options.messages,
+      workResult: prior.result?.workResult,
+      sessionId: options.sessionId,
+      repairFeedback: feedback,
+    });
+  } catch (error) {
+    presentationError = error instanceof Error ? error.message : String(error);
+  }
+  const structuredOutput = normalizeModelUiOutput(structuredResponse);
+  const classification = structuredOutput
+    ? classifyModelUiOutput(structuredOutput)
+    : classifyInvalidModelUiOutput(structuredResponse);
+  return {
+    finalText: prior.finalText,
+    result: {
+      ...(prior.result ?? {}),
+      structuredResponse,
+      presentationError,
+    },
+    classification,
+    hasStructuredResponse: structuredResponse !== undefined,
+    structuredOutput,
+  };
+}
+
+function classifyModelUiOutput(output: ModelUiOutput): ClassifiedUpdates {
   const accepted: UiUpdate[] = [];
   const rejectedUiCandidates: RejectedUiCandidate[] = [];
   for (const update of output.updates) {
-    if (update.type !== "ui" || !validateSpec) {
-      accepted.push(update as UiUpdate);
-      continue;
+    if (update.type === "message") {
+      const serializedOutput = parseSerializedModelUiOutput(update.text);
+      if (serializedOutput.matched) {
+        const nestedOutput = normalizeModelUiOutput(serializedOutput.value);
+        const nestedClassification = nestedOutput
+          ? classifyModelUiOutput(nestedOutput)
+          : classifyInvalidModelUiOutput(serializedOutput.value);
+        accepted.push(...nestedClassification.accepted);
+        rejectedUiCandidates.push(...nestedClassification.rejectedUiCandidates);
+        continue;
+      }
     }
-    const result = validateSpec(update.spec);
+    const result = validateUpdate(update);
     if (result.ok) {
-      accepted.push({ type: "ui", spec: result.spec });
-    } else {
+      accepted.push(result.update);
+    } else if (update.type === "ui") {
       rejectedUiCandidates.push({ line: JSON.stringify(update), issues: result.issues });
     }
   }
   return { accepted, rejectedUiCandidates };
 }
 
+function parseSerializedModelUiOutput(
+  text: string,
+): { matched: false } | { matched: true; value: unknown } {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { matched: false };
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    !("version" in value) ||
+    !("updates" in value)
+  ) {
+    return { matched: false };
+  }
+  return { matched: true, value };
+}
+
 function classifyInvalidModelUiOutput(value: unknown): ClassifiedUpdates {
-  const result = modelUiOutputSchema.safeParse(value);
-  const issues = result.success
-    ? []
-    : result.error.issues.map((issue) => ({
-        path: issue.path.length > 0 ? issue.path.join(".") : "$",
-        code: "invalid_model_output",
-        message: issue.message,
-      }));
+  const result = validateModelUiOutput(value);
+  const mostSpecificIssue = result.ok
+    ? undefined
+    : result.issues.reduce<A2UIValidationError | undefined>((best, issue) => {
+        const normalized = {
+          ...issue,
+          path: issue.path.startsWith("$.") ? issue.path.slice(2) : issue.path,
+          code: "invalid_model_output",
+        } satisfies A2UIValidationError;
+        return !best || normalized.path.length > best.path.length ? normalized : best;
+      }, undefined);
+  const issues = mostSpecificIssue ? [mostSpecificIssue] : [];
   return {
     accepted: [],
     rejectedUiCandidates: [
@@ -404,10 +428,12 @@ function buildHistory(
   hadRepair: boolean,
   committedUpdates: UiUpdate[],
   structuredOutput: ModelUiOutput | null,
+  requireStructuredOutput: boolean,
 ): unknown[] {
   if (structuredOutput) {
     return [...messages, { content: JSON.stringify(structuredOutput), role: "assistant" }];
   }
+  if (requireStructuredOutput) return messages;
   if (!hadRepair) {
     const outputMessages = attempt.result?.messages;
     if (Array.isArray(outputMessages) && outputMessages.length > 0) {
@@ -432,10 +458,14 @@ function dedupeUiUpdatesByRoot(updates: UiUpdate[]): UiUpdate[] {
   const lastIndexByRoot = new Map<string, number>();
   for (let index = 0; index < updates.length; index += 1) {
     const update = updates[index];
-    if (update?.type === "ui") lastIndexByRoot.set(update.spec.root, index);
+    if (update?.type === "ui") {
+      lastIndexByRoot.set(update.rootId ?? update.components[0]?.id ?? "", index);
+    }
   }
   return updates.filter(
-    (update, index) => update.type !== "ui" || lastIndexByRoot.get(update.spec.root) === index,
+    (update, index) =>
+      update.type !== "ui" ||
+      lastIndexByRoot.get(update.rootId ?? update.components[0]?.id ?? "") === index,
   );
 }
 
@@ -500,7 +530,6 @@ async function streamWithEvents(
   sessionId: string,
   onMainAgentActivity?: (update: Extract<UiUpdate, { type: "main_agent_activity" }>) => void,
   onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
-  onProductBatch?: (value: unknown) => void,
 ): Promise<{ finalText: string; result: AgentResult | null }> {
   if (!agent.streamEvents) {
     const result = (await agent.invoke(input)) as AgentResult;
@@ -533,7 +562,7 @@ async function streamWithEvents(
 
     const activityStreams: Promise<void>[] = [];
     for await (const subagent of run.subagents) {
-      activityStreams.push(drainSubagentActivity(subagent, onSubagentActivity, onProductBatch));
+      activityStreams.push(drainSubagentActivity(subagent, onSubagentActivity));
     }
     await Promise.all(activityStreams);
   };
@@ -563,7 +592,6 @@ async function streamWithEvents(
 async function drainSubagentActivity(
   subagent: StreamSubagent,
   onSubagentActivity?: (update: Extract<UiUpdate, { type: "subagent_activity" }>) => void,
-  onProductBatch?: (value: unknown) => void,
 ): Promise<void> {
   const subagentName = subagentNameFrom(subagent);
   const subagentRunId = crypto.randomUUID();
@@ -592,22 +620,7 @@ async function drainSubagentActivity(
       }
     }
 
-    const output = await subagent.output;
-    if (subagentName === "product-generator") {
-      const structuredResponse = extractStructuredResponse(output);
-      if (structuredResponse !== undefined) {
-        onProductBatch?.(structuredResponse);
-      } else {
-        const text = extractSubagentOutputText(output);
-        if (text) {
-          try {
-            onProductBatch?.(JSON.parse(text));
-          } catch {
-            // Invalid legacy product output is ignored.
-          }
-        }
-      }
-    }
+    await subagent.output;
     onSubagentActivity?.({
       type: "subagent_activity",
       subagentRunId,
@@ -623,21 +636,6 @@ async function drainSubagentActivity(
       message: error instanceof Error ? error.message : String(error),
     });
   }
-}
-
-function extractStructuredResponse(output: unknown): unknown {
-  if (typeof output !== "object" || output === null || !("structuredResponse" in output)) {
-    return undefined;
-  }
-  return output.structuredResponse;
-}
-
-function extractSubagentOutputText(output: unknown): string | undefined {
-  if (typeof output === "string") return output;
-  if (typeof output !== "object" || output === null) return undefined;
-  if ("content" in output) return extractTextContent(output.content);
-  if ("messages" in output) return extractFinalResponse(output as AgentResult);
-  return undefined;
 }
 
 function extractTextContent(content: unknown): string | undefined {

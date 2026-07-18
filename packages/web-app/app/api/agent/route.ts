@@ -1,3 +1,4 @@
+import { safeEmit } from "@deep-agent-template/core/generative-ui";
 import {
   type AgentInputMessage,
   createInteractionStream,
@@ -7,9 +8,7 @@ import {
   type UiUpdate,
 } from "@deep-agent-template/core/interaction-stream";
 import { NextResponse } from "next/server";
-
 import { createAgentProvider } from "../../../src/server/agent-provider.ts";
-import { normalizeStreamingSpec, validateStreamingSpec } from "../../../src/ui/normalize.ts";
 
 export const runtime = "nodejs";
 
@@ -49,6 +48,13 @@ export function getSessionStateForTest(sessionId: string): SessionState | null {
 }
 
 type AgentFactory = () => Promise<Agent>;
+
+const MAX_ERROR_MESSAGE_LENGTH = 4_000;
+
+function errorMessage(error: unknown): string {
+  const message = (error instanceof Error ? error.message : String(error)).trim();
+  return [...(message || "Agent request failed.")].slice(0, MAX_ERROR_MESSAGE_LENGTH).join("");
+}
 
 let agentFactory: AgentFactory = createAgentProvider;
 let agentInitialization: Promise<Agent> | null = null;
@@ -130,9 +136,7 @@ export async function POST(request: Request): Promise<Response> {
           agent,
           includeActivity: parsedRequest.includeSubagentActivity,
           messages,
-          normalizeSpec: normalizeStreamingSpec,
           requireStructuredOutput: true,
-          validateSpec: validateStreamingSpec,
           sessionId: parsedRequest.sessionId,
         });
         void interaction.result.catch(() => undefined);
@@ -148,12 +152,14 @@ export async function POST(request: Request): Promise<Response> {
           structuredOutput: result.structuredOutput,
         });
       } catch (error) {
-        controller.enqueue(
-          encodeUpdate({
+        const emitted = safeEmit(
+          {
             type: "error",
-            message: error instanceof Error ? error.message : String(error),
-          }),
+            message: errorMessage(error),
+          },
+          { strict: true },
         );
+        if (emitted.ok) controller.enqueue(encodeUpdate(emitted.update));
       } finally {
         controller.close();
       }

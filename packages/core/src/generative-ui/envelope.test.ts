@@ -1,302 +1,94 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyUiUpdate, normalizeUiUpdate, parseUpdateLine, uiUpdateZone } from "./envelope.ts";
+import {
+  applyUiUpdate,
+  classifyUpdateText,
+  normalizeQuestionOption,
+  normalizeUiUpdate,
+  parseUpdateLine,
+  uiUpdateZone,
+} from "./envelope.ts";
+import type { UiSpec } from "./types.ts";
+
+const textUpdate = {
+  type: "ui" as const,
+  rootId: "root",
+  components: [{ id: "root", component: "Text", text: "Hello" }],
+};
 
 describe("parseUpdateLine", () => {
-  it("parses message updates", () => {
+  it("parses valid updates through the catalog validator", () => {
+    expect(parseUpdateLine(JSON.stringify(textUpdate))).toEqual(textUpdate);
     expect(parseUpdateLine('{"type":"message","text":"hi"}')).toEqual({
       type: "message",
       text: "hi",
     });
   });
 
-  it("parses ui updates", () => {
-    const line =
-      '{"type":"ui","spec":{"root":"root","elements":{"root":{"type":"Card","props":{},"children":[]}}}}';
-    expect(parseUpdateLine(line)).toEqual({
-      type: "ui",
-      spec: {
-        root: "root",
-        elements: { root: { type: "Card", props: {}, children: [] } },
-      },
-    });
-  });
-
-  it("parses error updates", () => {
-    expect(parseUpdateLine('{"type":"error","message":"boom"}')).toEqual({
-      type: "error",
-      message: "boom",
-    });
-  });
-
-  it("parses main agent activity updates", () => {
-    expect(
-      parseUpdateLine('{"type":"main_agent_activity","event":"delta","text":"Thinking"}'),
-    ).toEqual({
-      type: "main_agent_activity",
-      event: "delta",
-      text: "Thinking",
-    });
-  });
-
-  it("parses question updates", () => {
-    expect(
-      parseUpdateLine(
-        '{"type":"question","question":{"id":"audience","prompt":"Who is this for?","kind":"multiple_choice","options":["Founders","Designers"]}}',
-      ),
-    ).toEqual({
-      type: "question",
-      question: {
-        id: "audience",
-        prompt: "Who is this for?",
-        kind: "multiple_choice",
-        options: ["Founders", "Designers"],
-      },
-    });
-  });
-
-  it("parses subagent activity updates", () => {
-    expect(
-      parseUpdateLine(
-        '{"type":"subagent_activity","subagentName":"researcher","event":"delta","text":"Searching"}',
-      ),
-    ).toEqual({
-      type: "subagent_activity",
-      subagentName: "researcher",
-      event: "delta",
-      text: "Searching",
-    });
-  });
-
-  it("returns null for malformed JSON", () => {
+  it("drops malformed and off-catalog updates", () => {
     expect(parseUpdateLine("not json")).toBeNull();
-  });
-
-  it("returns null for unknown update types", () => {
-    expect(parseUpdateLine('{"type":"other","text":"hi"}')).toBeNull();
-  });
-});
-
-describe("applyUiUpdate", () => {
-  function recorder() {
-    const calls: string[] = [];
-    return {
-      calls,
-      handlers: {
-        onMessage: (text: string) => calls.push(`message:${text}`),
-        onQuestion: (question: { prompt: string }) => calls.push(`question:${question.prompt}`),
-        onSpec: () => calls.push("spec"),
-        onError: (message: string) => calls.push(`error:${message}`),
-        onMainAgentActivity: (update: { event: string }) => calls.push(`main:${update.event}`),
-        onSubagentActivity: (update: { subagentName: string; event: string }) =>
-          calls.push(`subagent:${update.subagentName}:${update.event}`),
-      },
-    };
-  }
-
-  it("routes message updates to onMessage", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate({ type: "message", text: "hi" }, handlers);
-    expect(calls).toEqual(["message:hi"]);
-  });
-
-  it("routes ui updates to onSpec", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate({ type: "ui", spec: { root: "root", elements: {} } }, handlers);
-    expect(calls).toEqual(["spec"]);
-  });
-
-  it("routes question updates to onQuestion", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate(
-      {
-        type: "question",
-        question: {
-          id: "constraints",
-          prompt: "Any constraints?",
-          kind: "open_text",
-        },
-      },
-      handlers,
-    );
-    expect(calls).toEqual(["question:Any constraints?"]);
-  });
-
-  it("routes error updates to onError", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate({ type: "error", message: "boom" }, handlers);
-    expect(calls).toEqual(["error:boom"]);
-  });
-
-  it("routes main agent activity updates to onMainAgentActivity", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate({ type: "main_agent_activity", event: "started" }, handlers);
-    expect(calls).toEqual(["main:started"]);
-  });
-
-  it("routes subagent activity updates to onSubagentActivity", () => {
-    const { calls, handlers } = recorder();
-    applyUiUpdate(
-      { type: "subagent_activity", subagentName: "researcher", event: "completed" },
-      handlers,
-    );
-    expect(calls).toEqual(["subagent:researcher:completed"]);
+    expect(
+      parseUpdateLine(
+        JSON.stringify({ type: "ui", components: [{ id: "x", component: "Unknown" }] }),
+      ),
+    ).toBeNull();
   });
 });
 
 describe("normalizeUiUpdate", () => {
-  it("validates envelope shape and passes messages through", () => {
-    expect(normalizeUiUpdate({ type: "message", text: "hi" })).toEqual({
-      type: "message",
-      text: "hi",
-    });
+  it("accepts canonical v2 updates", () => {
+    expect(normalizeUiUpdate(textUpdate)).toEqual(textUpdate);
   });
 
-  it("validates multiple-choice question updates", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "question",
-        question: {
-          id: "audience",
-          prompt: "Who is this for?",
-          kind: "multiple_choice",
-          options: ["Founders", "Designers"],
-        },
-      }),
-    ).toEqual({
-      type: "question",
-      question: {
-        id: "audience",
-        prompt: "Who is this for?",
-        kind: "multiple_choice",
-        options: ["Founders", "Designers"],
-      },
-    });
-  });
-
-  it("rejects multiple-choice questions with too many options", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "question",
-        question: {
-          id: "audience",
-          prompt: "Who is this for?",
-          kind: "multiple_choice",
-          options: ["A", "B", "C", "D", "E"],
-        },
-      }),
-    ).toBeNull();
-  });
-
-  it("validates open-text question updates", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "question",
-        question: {
-          id: "constraints",
-          prompt: "Any constraints?",
-          kind: "open_text",
-          placeholder: "Budget, deadline, platform",
-        },
-      }),
-    ).toEqual({
-      type: "question",
-      question: {
-        id: "constraints",
-        prompt: "Any constraints?",
-        kind: "open_text",
-        placeholder: "Budget, deadline, platform",
-      },
-    });
-  });
-
-  it("returns null for unknown update types", () => {
-    expect(normalizeUiUpdate({ type: "other", text: "hi" })).toBeNull();
-  });
-
-  it("validates subagent activity updates", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "subagent_activity",
-        subagentRunId: "run-1",
-        subagentName: "analyst",
-        event: "started",
-        task: "Review the plan",
-      }),
-    ).toEqual({
-      type: "subagent_activity",
-      subagentRunId: "run-1",
-      subagentName: "analyst",
-      event: "started",
-      task: "Review the plan",
-    });
-  });
-
-  it("validates main agent activity updates", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "main_agent_activity",
-        event: "completed",
-        message: "done",
-      }),
-    ).toEqual({
-      type: "main_agent_activity",
-      event: "completed",
-      message: "done",
-    });
-  });
-
-  it("rejects subagent activity with unknown events", () => {
-    expect(
-      normalizeUiUpdate({
-        type: "subagent_activity",
-        subagentName: "analyst",
-        event: "reasoning",
-        text: "hidden",
-      }),
-    ).toBeNull();
-  });
-
-  it("passes the ui spec through unchanged without a normalizeSpec hook", () => {
-    const spec = { root: "root", elements: { root: { type: "Card", props: {}, children: [] } } };
-    expect(normalizeUiUpdate({ type: "ui", spec })).toEqual({ type: "ui", spec });
-  });
-
-  it("delegates ui spec validation to the normalizeSpec hook", () => {
-    const normalizeSpec = (spec: unknown) =>
-      spec && typeof spec === "object" && "root" in spec
-        ? ({ root: "ok", elements: {} } as const)
-        : null;
-    expect(normalizeUiUpdate({ type: "ui", spec: { root: "root" } }, normalizeSpec)).toEqual({
-      type: "ui",
-      spec: { root: "ok", elements: {} },
-    });
-  });
-
-  it("rejects ui updates when the normalizeSpec hook rejects the spec", () => {
-    const rejectAll = () => null;
-    expect(normalizeUiUpdate({ type: "ui", spec: { root: "root" } }, rejectAll)).toBeNull();
+  it("rejects the legacy spec envelope", () => {
+    expect(normalizeUiUpdate({ type: "ui", spec: { root: "root", elements: {} } })).toBeNull();
   });
 });
 
-describe("uiUpdateZone", () => {
-  it("keeps subagent activity out of the chat zone", () => {
-    expect(
-      uiUpdateZone({
-        type: "subagent_activity",
-        subagentName: "researcher",
-        event: "delta",
-        text: "Searching",
-      }),
-    ).toBe("interaction");
+describe("applyUiUpdate", () => {
+  it("routes update variants", () => {
+    const seen: string[] = [];
+    let spec: UiSpec | undefined;
+    const handlers = {
+      onMessage: (text: string) => seen.push(text),
+      onSpec: (value: UiSpec) => {
+        spec = value;
+      },
+      onError: (message: string) => seen.push(message),
+      onMainAgentActivity: () => seen.push("main"),
+      onSubagentActivity: () => seen.push("subagent"),
+    };
+
+    applyUiUpdate({ type: "message", text: "hi" }, handlers);
+    applyUiUpdate(textUpdate, handlers);
+    applyUiUpdate({ type: "error", message: "boom" }, handlers);
+    applyUiUpdate({ type: "main_agent_activity", event: "started" }, handlers);
+    applyUiUpdate(
+      { type: "subagent_activity", subagentName: "researcher", event: "completed" },
+      handlers,
+    );
+
+    expect(seen).toEqual(["hi", "boom", "main", "subagent"]);
+    expect(spec).toEqual({ components: textUpdate.components, rootId: "root" });
+  });
+});
+
+describe("classification helpers", () => {
+  it("retains diagnostics for invalid UI candidates", () => {
+    const result = classifyUpdateText(
+      JSON.stringify({ type: "ui", components: [{ id: "x", component: "Unknown" }] }),
+    );
+    expect(result.accepted).toEqual([]);
+    expect(result.rejectedUiCandidates[0]?.issues[0]?.code).toBe("unknown_component");
   });
 
-  it("keeps main agent activity out of the chat zone", () => {
-    expect(
-      uiUpdateZone({
-        type: "main_agent_activity",
-        event: "started",
-      }),
-    ).toBe("interaction");
+  it("normalizes options and routes zones", () => {
+    expect(normalizeQuestionOption("One")).toEqual({ label: "One" });
+    expect(normalizeQuestionOption({ label: "One", recommended: true })).toEqual({
+      label: "One",
+      recommended: true,
+    });
+    expect(uiUpdateZone(textUpdate)).toBe("interaction");
+    expect(uiUpdateZone({ type: "message", text: "hi" })).toBe("chat");
   });
 });

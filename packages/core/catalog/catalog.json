@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "limits": {
+    "maxComponents": 100,
+    "maxStringLength": 4096,
+    "maxJsonBytes": 131072
+  },
+  "components": {
+    "Button": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "maxLength": 4096 },
+        "action": { "type": "string", "maxLength": 4096 }
+      },
+      "required": ["label"]
+    },
+    "Card": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "ImagePlaceholder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alt": { "type": "string", "maxLength": 4096 },
+        "prompt": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "ProductCard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "maxLength": 4096 },
+        "description": { "type": "string", "maxLength": 4096 },
+        "imageAlt": { "type": "string", "maxLength": 4096 },
+        "imagePrompt": { "type": "string", "maxLength": 4096 }
+      },
+      "required": ["title", "description"]
+    },
+    "ProductGrid": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "heading": { "type": "string", "maxLength": 4096 }
+      }
+    },
+    "Stack": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "direction": { "type": "string", "enum": ["row", "column"] },
+        "gap": { "type": "string", "enum": ["xs", "sm", "md", "lg"] }
+      }
+    },
+    "Text": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "maxLength": 4096 },
+        "variant": { "type": "string", "enum": ["title", "body", "muted", "caption"] }
+      },
+      "required": ["text"]
+    },
+    "TextInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "maxLength": 4096 },
+        "name": { "type": "string", "maxLength": 4096 },
+        "placeholder": { "type": "string", "maxLength": 4096 },
+        "inputType": { "type": "string", "enum": ["text", "email", "password"] }
+      },
+      "required": ["label", "name"]
+    },
+    "product-card": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "description": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "imageUrl": { "type": "string", "format": "uri" },
+        "status": { "type": "string", "enum": ["streaming", "complete"] }
+      },
+      "required": ["title", "description"]
+    }
+  }
+}
