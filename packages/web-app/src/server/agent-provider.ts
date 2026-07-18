@@ -18,6 +18,11 @@ function resolveWebAppDirectory(): string {
 }
 
 function resolveMemoryRoot(): string {
+  // This local file store is intended for the single-user template only.
+  // In production, the application bundle may be read-only, and several server
+  // processes may race while creating the seed files below. Use durable object
+  // storage, such as a bucket with a separate prefix for each user's memory,
+  // and create missing seed files atomically.
   const configuredRoot = process.env.WEB_APP_MEMORY_DIR?.trim() || ".data/memory";
   return path.resolve(resolveWebAppDirectory(), configuredRoot);
 }
