@@ -1,0 +1,40 @@
+diff --git a/dist/converters/completions.cjs b/dist/converters/completions.cjs
+index e15ed2aeb3e8b1e058f431cc8f3e7577c40640d9..733e572325cc7581bca70a9d3dcb4acef4eee929 100644
+--- a/dist/converters/completions.cjs
++++ b/dist/converters/completions.cjs
+@@ -472,6 +472,7 @@ const convertStandardContentMessageToCompletionsMessage = ({ message, model }) =
+ 		};
+ 		if (_langchain_core_messages.AIMessage.isInstance(message) && !!message.tool_calls?.length) completionParam.tool_calls = message.tool_calls.map(_langchain_core_output_parsers_openai_tools.convertLangChainToolCallToOpenAI);
+ 		else if (message.additional_kwargs.tool_calls != null) completionParam.tool_calls = message.additional_kwargs.tool_calls;
++		if (message.additional_kwargs.reasoning_content != null) completionParam.reasoning_content = message.additional_kwargs.reasoning_content;
+ 		return completionParam;
+ 	} else if (role === "tool" && _langchain_core_messages.ToolMessage.isInstance(message)) return {
+ 		role: "tool",
+@@ -590,6 +591,7 @@ const convertMessagesToCompletionsMessageParams = ({ messages, model }) => {
+ 			if (message.additional_kwargs.tool_calls != null) completionParam.tool_calls = message.additional_kwargs.tool_calls;
+ 			if (_langchain_core_messages.ToolMessage.isInstance(message) && message.tool_call_id != null) completionParam.tool_call_id = message.tool_call_id;
+ 		}
++		if (message.additional_kwargs.reasoning_content != null) completionParam.reasoning_content = message.additional_kwargs.reasoning_content;
+ 		if (message.additional_kwargs.audio && typeof message.additional_kwargs.audio === "object" && "id" in message.additional_kwargs.audio) return [completionParam, {
+ 			role: "assistant",
+ 			audio: { id: message.additional_kwargs.audio.id }
+diff --git a/dist/converters/completions.js b/dist/converters/completions.js
+index 530c77309dc7359addc0e6e6e0c1269486af3fae..d3e1f1322955f62c8c3cb93856aaf1a924afc596 100644
+--- a/dist/converters/completions.js
++++ b/dist/converters/completions.js
+@@ -472,6 +472,7 @@ const convertStandardContentMessageToCompletionsMessage = ({ message, model }) =
+ 		};
+ 		if (AIMessage.isInstance(message) && !!message.tool_calls?.length) completionParam.tool_calls = message.tool_calls.map(convertLangChainToolCallToOpenAI);
+ 		else if (message.additional_kwargs.tool_calls != null) completionParam.tool_calls = message.additional_kwargs.tool_calls;
++		if (message.additional_kwargs.reasoning_content != null) completionParam.reasoning_content = message.additional_kwargs.reasoning_content;
+ 		return completionParam;
+ 	} else if (role === "tool" && ToolMessage.isInstance(message)) return {
+ 		role: "tool",
+@@ -590,6 +591,7 @@ const convertMessagesToCompletionsMessageParams = ({ messages, model }) => {
+ 			if (message.additional_kwargs.tool_calls != null) completionParam.tool_calls = message.additional_kwargs.tool_calls;
+ 			if (ToolMessage.isInstance(message) && message.tool_call_id != null) completionParam.tool_call_id = message.tool_call_id;
+ 		}
++		if (message.additional_kwargs.reasoning_content != null) completionParam.reasoning_content = message.additional_kwargs.reasoning_content;
+ 		if (message.additional_kwargs.audio && typeof message.additional_kwargs.audio === "object" && "id" in message.additional_kwargs.audio) return [completionParam, {
+ 			role: "assistant",
+ 			audio: { id: message.additional_kwargs.audio.id }

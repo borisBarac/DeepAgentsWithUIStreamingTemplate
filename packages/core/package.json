@@ -12,6 +12,9 @@
     ".": "./src/index.ts",
     "./agent": "./src/agent/index.ts",
     "./generative-ui": "./src/generative-ui/index.ts",
+    "./generative-ui/catalog": "./src/generative-ui/browser-catalog.ts",
+    "./generative-ui/schema": "./src/generative-ui/browser-schema.ts",
+    "./generative-ui/types": "./src/generative-ui/browser-types.ts",
     "./interaction-stream": "./src/interaction-stream/index.ts",
     "./memory": "./src/memory/index.ts",
     "./models": "./src/models/index.ts",
@@ -27,6 +30,8 @@
     "@langchain/langgraph": "^1.4.2",
     "@langchain/mcp-adapters": "^1.1.3",
     "@langchain/openai": "^1.4.7",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "deepagents": "^1.10.2",
     "langchain": "^1.4.5",
     "zod": "^4.4.3"
