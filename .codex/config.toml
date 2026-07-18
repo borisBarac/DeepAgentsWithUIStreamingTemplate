@@ -5,7 +5,7 @@ memories = true
 command = "npx"
 args = ["-y", "chrome-devtools-mcp@latest"]
 startup_timeout_sec = 20
-enabled = false
+enabled = true
 
 [mcp_servers.codex_apps]
 command = "npx"
