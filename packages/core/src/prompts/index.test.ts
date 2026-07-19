@@ -89,21 +89,17 @@ describe("prompt defaults", () => {
   });
 
   it("renders prompt builders with custom clarification limits", () => {
-    expect(createClarifierSystemPrompt({ maxRounds: 6, questionsPerRound: 2 })).toContain(
+    expect(createClarifierSystemPrompt({ questionsPerRound: 2 })).toContain(
       "between 1 and 2 high-value clarification questions per round",
     );
-    expect(createClarifierSystemPrompt({ maxRounds: 6, questionsPerRound: 2 })).toContain(
-      "round 6",
-    );
-    expect(createClarifierSystemPrompt({ maxRounds: 6, questionsPerRound: 2 })).toContain(
+    expect(createClarifierSystemPrompt({ questionsPerRound: 2 })).toContain("round 2");
+    expect(createClarifierSystemPrompt({ questionsPerRound: 2 })).toContain(
       "list the explicit assumptions execution should use",
     );
-    expect(createSupervisorSystemPrompt({ maxRounds: 6 })).toContain(
-      "If clarification remains unresolved after 6 rounds",
+    expect(createSupervisorSystemPrompt({})).toContain(
+      "If clarification remains unresolved after 2 rounds",
     );
-    expect(createSupervisorSystemPrompt({ maxRounds: 6 })).toContain(
-      "proceed with explicit assumptions",
-    );
+    expect(createSupervisorSystemPrompt({})).toContain("proceed with explicit assumptions");
   });
 
   it("loads default prompts from the markdown prompt loader", () => {
@@ -211,17 +207,17 @@ describe("prompt defaults", () => {
     const stripDateTime = (prompt: string): string =>
       prompt.replace(/Current date and time \([^)]*\): [^\n]*\n?/g, "");
 
-    expect(stripDateTime(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 }))).toBe(
+    expect(stripDateTime(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({}))).toBe(
       stripDateTime(DEFAULT_SUPERVISOR_SYSTEM_PROMPT),
     );
-    expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ maxRounds: 2, questionsPerRound: 3 })).toBe(
+    expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ questionsPerRound: 3 })).toBe(
       DEFAULT_CLARIFIER_SYSTEM_PROMPT,
     );
   });
 
   it("injects the current date, time, and timezone into the supervisor prompt", () => {
     const before = Date.now();
-    const supervisor = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 });
+    const supervisor = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({});
     const after = Date.now();
 
     const extractIsoMs = (prompt: string): number => {
@@ -250,7 +246,7 @@ describe("prompt defaults", () => {
       await Bun.sleep(0);
     } while (Date.now() <= new Date(constantIso).getTime());
 
-    const fresh = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({ maxRounds: 2 });
+    const fresh = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({});
     const freshIso = fresh.match(/Current date and time \([^)]*\): .*; (\S+)/)?.[1] as string;
 
     expect(new Date(freshIso).getTime()).toBeGreaterThan(new Date(constantIso).getTime());

@@ -87,6 +87,16 @@ export type ClarificationConfig = {
 };
 
 /**
+ * Public override surface for clarification tuning. `maxRounds` is locked to
+ * {@link DEFAULT_CLARIFICATION_MAX_ROUNDS} (currently 2); the only public
+ * knobs are `questionsPerRound` (1-3), `triage.enabled`, plus `enabled`/`mode`
+ * for completeness. Internal helpers like {@link createClarificationState}
+ * keep accepting `Partial<ClarificationConfig>` so cap-completion tests can
+ * still construct states at known round values.
+ */
+export type ClarificationOverrideOptions = Omit<Partial<ClarificationConfig>, "maxRounds">;
+
+/**
  * Configuration for the pre-clarifier triage gate.
  *
  * - `enabled`: defaults to `true`. Set to `false` to restore the legacy

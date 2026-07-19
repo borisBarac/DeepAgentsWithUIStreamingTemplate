@@ -91,14 +91,13 @@ describe("runtime scaffold defaults", () => {
     const scaffold = createRuntimeScaffold({
       imageGenerationService: testImageGenerationService,
       clarificationOptions: {
-        maxRounds: 6,
         questionsPerRound: 2,
       },
     });
 
-    expect(scaffold.clarification.config.maxRounds).toBe(6);
+    expect(scaffold.clarification.config.maxRounds).toBe(2);
     expect(scaffold.clarification.config.questionsPerRound).toBe(2);
-    expect(scaffold.systemPrompt).toContain("after 6 rounds");
+    expect(scaffold.systemPrompt).toContain("after 2 rounds");
     expect(JSON.stringify(asDefaultSubagents(scaffold.subagents)[0]?.systemPrompt)).toContain(
       "between 1 and 2 high-value clarification questions per round",
     );

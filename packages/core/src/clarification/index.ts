@@ -31,6 +31,7 @@ export {
   type ClarificationConfig,
   type ClarificationMode,
   type ClarificationOption,
+  type ClarificationOverrideOptions,
   type ClarificationQuestion,
   type ClarificationQuestionsPerRound,
   type ClarificationResult,

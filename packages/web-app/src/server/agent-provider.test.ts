@@ -107,32 +107,6 @@ describe("createAgentProvider", () => {
     expect(typeof agent.invoke).toBe("function");
   });
 
-  it("passes WEB_APP_CLARIFICATION_MAX_ROUNDS to the scaffold without error", async () => {
-    const agent = await withTempMemory({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "1" }, () =>
-      createAgentProvider(),
-    );
-    expect(agent).toBeTruthy();
-    expect(typeof agent.invoke).toBe("function");
-  });
-
-  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is zero", async () => {
-    await expect(
-      withTempMemory({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "0" }, () => createAgentProvider()),
-    ).rejects.toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
-  });
-
-  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is non-numeric", async () => {
-    await expect(
-      withTempMemory({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "abc" }, () => createAgentProvider()),
-    ).rejects.toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
-  });
-
-  it("throws clearly when WEB_APP_CLARIFICATION_MAX_ROUNDS is a decimal", async () => {
-    await expect(
-      withTempMemory({ WEB_APP_CLARIFICATION_MAX_ROUNDS: "1.5" }, () => createAgentProvider()),
-    ).rejects.toThrow("WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer");
-  });
-
   it("seeds missing memory files and preserves backend edits across providers", async () => {
     await withTempMemory({}, async (rootDir) => {
       await createAgentProvider();

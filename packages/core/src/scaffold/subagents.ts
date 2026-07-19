@@ -1,6 +1,9 @@
 import type { SubAgent } from "deepagents";
 
-import { type ClarificationConfig, createClarificationConfig } from "../clarification/index.ts";
+import {
+  type ClarificationOverrideOptions,
+  createClarificationConfig,
+} from "../clarification/index.ts";
 import { createImageDesignerTool } from "../image-designer/index.ts";
 import {
   DEFAULT_PROMPT_LOADER,
@@ -33,7 +36,7 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
 
 export function createDefaultSubagentCatalog(
   options: CreateDefaultSubagentCatalogOptions = {},
-  clarificationOptions: Partial<ClarificationConfig> = {},
+  clarificationOptions: ClarificationOverrideOptions = {},
   promptLoader: PromptLoader = DEFAULT_PROMPT_LOADER,
 ): DefaultSubagentCatalog {
   const clarification = createClarificationConfig(clarificationOptions);

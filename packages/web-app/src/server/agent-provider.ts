@@ -27,22 +27,7 @@ function resolveMemoryRoot(): string {
   return path.resolve(resolveWebAppDirectory(), configuredRoot);
 }
 
-function parseClarificationMaxRounds(): number | undefined {
-  const raw = process.env.WEB_APP_CLARIFICATION_MAX_ROUNDS;
-  if (raw === undefined || raw === "") {
-    return undefined;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(
-      `WEB_APP_CLARIFICATION_MAX_ROUNDS must be a positive integer, received "${raw}".`,
-    );
-  }
-  return parsed;
-}
-
 export async function createAgentProvider(): Promise<DeepAgent> {
-  const maxRounds = parseClarificationMaxRounds();
   const store = createFileSystemMemoryStore({ rootDir: resolveMemoryRoot() });
   const repository = createMemoryRepository({ store });
 
@@ -61,7 +46,6 @@ export async function createAgentProvider(): Promise<DeepAgent> {
     guardrails: false,
     imageGenerationService: createImageGenerationServiceFromEnv(),
     modelRuntime,
-    clarificationOptions: maxRounds !== undefined ? { maxRounds } : undefined,
     store,
   });
 }

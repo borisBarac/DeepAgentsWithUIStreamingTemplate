@@ -29,15 +29,14 @@ import taskScopeClassificationPromptText from "../../prompts/task-scope-classifi
 };
 import uiRepairFeedbackPromptText from "../../prompts/ui-repair-feedback.md" with { type: "text" };
 import {
-  type ClarificationConfig,
+  type ClarificationOverrideOptions,
   createClarificationConfig,
-  DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
 } from "../clarification/index.ts";
 
 export interface PromptLoader {
-  getSupervisorPrompt(config: Partial<ClarificationConfig>): string;
-  getClarifierPrompt(config: Partial<ClarificationConfig>): string;
+  getSupervisorPrompt(config: ClarificationOverrideOptions): string;
+  getClarifierPrompt(config: ClarificationOverrideOptions): string;
   getClarificationTriagePrompt(): string;
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
@@ -104,7 +103,7 @@ function getCurrentDateTimeContext(): { currentDateTime: string; timezone: strin
 }
 
 export class MarkdownPromptLoader implements PromptLoader {
-  getSupervisorPrompt(config: Partial<ClarificationConfig> = {}): string {
+  getSupervisorPrompt(config: ClarificationOverrideOptions = {}): string {
     const clarification = createClarificationConfig(config);
 
     return withFilesystemContract(
@@ -115,7 +114,7 @@ export class MarkdownPromptLoader implements PromptLoader {
     );
   }
 
-  getClarifierPrompt(config: Partial<ClarificationConfig> = {}): string {
+  getClarifierPrompt(config: ClarificationOverrideOptions = {}): string {
     const clarification = createClarificationConfig(config);
 
     return withFilesystemContract(
@@ -150,20 +149,18 @@ export class MarkdownPromptLoader implements PromptLoader {
 export const DEFAULT_PROMPT_LOADER = new MarkdownPromptLoader();
 
 export function createSupervisorSystemPrompt(
-  clarificationOptions: Partial<ClarificationConfig> = {},
+  clarificationOptions: ClarificationOverrideOptions = {},
 ): string {
   return DEFAULT_PROMPT_LOADER.getSupervisorPrompt(clarificationOptions);
 }
 
 export function createClarifierSystemPrompt(
-  clarificationOptions: Partial<ClarificationConfig> = {},
+  clarificationOptions: ClarificationOverrideOptions = {},
 ): string {
   return DEFAULT_PROMPT_LOADER.getClarifierPrompt(clarificationOptions);
 }
 
-export const DEFAULT_SUPERVISOR_SYSTEM_PROMPT = createSupervisorSystemPrompt({
-  maxRounds: DEFAULT_CLARIFICATION_MAX_ROUNDS,
-});
+export const DEFAULT_SUPERVISOR_SYSTEM_PROMPT = createSupervisorSystemPrompt({});
 
 export const DEFAULT_RESEARCHER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getResearcherPrompt();
 
@@ -174,6 +171,5 @@ export const DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getIma
 export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
 
 export const DEFAULT_CLARIFIER_SYSTEM_PROMPT = createClarifierSystemPrompt({
-  maxRounds: DEFAULT_CLARIFICATION_MAX_ROUNDS,
   questionsPerRound: DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
 });

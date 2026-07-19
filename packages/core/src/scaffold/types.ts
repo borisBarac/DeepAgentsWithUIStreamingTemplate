@@ -8,7 +8,11 @@ import type {
 } from "deepagents";
 import type { ImageGenerationServiceContract } from "../../../image-gen/src/index.ts";
 
-import type { ClarificationConfig, ClarificationTriageClassifier } from "../clarification/index.ts";
+import type {
+  ClarificationConfig,
+  ClarificationOverrideOptions,
+  ClarificationTriageClassifier,
+} from "../clarification/index.ts";
 import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
@@ -100,7 +104,7 @@ export type RuntimeScaffold = SupervisorSpecialistsRuntimeScaffold;
 export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions & {
   backend?: CreateDeepAgentParams["backend"];
   backendOptions?: CreateCompositeBackendOptions;
-  clarificationOptions?: Partial<ClarificationConfig>;
+  clarificationOptions?: ClarificationOverrideOptions;
   reviewOptions?: Partial<ReviewConfig>;
   interruptOn?: CreateDeepAgentParams["interruptOn"];
   memory?: CreateDeepAgentParams["memory"];
