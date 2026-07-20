@@ -13,6 +13,16 @@ export type LangSmithTracingConfig = {
   workspaceId?: string;
 };
 
+export {
+  buildSubagentFilter,
+  getLangSmithClient,
+  type LangSmithClientOptions,
+  LC_AGENT_NAME_METADATA_KEY,
+  listRunsBySubagent,
+  listTracesBySubagent,
+  type SubagentQueryOptions,
+} from "./query.ts";
+
 const trueValue = "true";
 const falseValue = "false";
 

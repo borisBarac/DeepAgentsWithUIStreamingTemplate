@@ -18,6 +18,7 @@ export type {
   CreateDefaultSubagentCatalogOptions,
   CreateRuntimeScaffoldOptions,
   DefaultSubagentCatalog,
+  DefaultSubagentOverride,
   RuntimeScaffold,
   RuntimeScaffoldArchitecture,
   SpecialistRole,

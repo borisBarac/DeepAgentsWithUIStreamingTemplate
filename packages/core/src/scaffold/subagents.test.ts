@@ -8,18 +8,17 @@ import { z } from "zod";
 import { IMAGE_DESIGNER_TOOL_NAME } from "../image-designer/index.ts";
 import { createModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
-import { reviewReportSchema } from "../review/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
 import { createDefaultSubagentCatalog } from "./subagents.ts";
 
 const testPromptLoader: PromptLoader = {
   getSupervisorPrompt: () => "supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
-  getClarificationTriagePrompt: () => "custom triage prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
   getReviewAgentPrompt: () => "custom review prompt",
+  getProductGeneratorPrompt: () => "custom product generator prompt",
 };
 
 const testImageGenerationService = {
@@ -183,32 +182,16 @@ describe("default subagents", () => {
     expect(clarifier?.middleware?.map((middleware) => middleware.name)).toEqual(["caller"]);
   });
 
-  it("lets an explicit reviewer responseFormat override the default schema", () => {
-    const customSchema = reviewReportSchema;
-    const [, , , , reviewer] = asDefaultSubagents(
-      createDefaultSubagentCatalog({
-        imageGenerationService: testImageGenerationService,
-        reviewer: {
-          responseFormat: customSchema,
-        },
-      }),
-    );
-
-    expect(reviewer?.responseFormat).toBe(customSchema);
-    expect(reviewer?.middleware).toEqual([]);
-  });
-
-  it("retains caller middleware when explicit responseFormat opts out", () => {
+  it("retains caller middleware when no responseFormat is supplied", () => {
     const callerMiddleware: AgentMiddleware = { name: "caller" };
     const reviewer = createDefaultSubagentCatalog({
       reviewer: {
-        responseFormat: reviewReportSchema,
         middleware: [callerMiddleware],
       },
     }).byRole.reviewer;
 
-    expect(reviewer?.responseFormat).toBe(reviewReportSchema);
-    expect(reviewer?.middleware).toEqual([callerMiddleware]);
+    expect(reviewer?.responseFormat).toBeUndefined();
+    expect(reviewer?.middleware?.map((middleware) => middleware.name)).toEqual(["caller"]);
   });
 
   it("assigns role models to every default specialist and preserves explicit model overrides", () => {
@@ -255,7 +238,7 @@ describe("default subagents", () => {
     expect(overriddenReviewer?.model).toBe(explicitReviewerModel);
   });
 
-  it("keeps the specialist catalog unchanged when generativeUi is enabled", () => {
+  it("adds product-generator when generativeUi is enabled", () => {
     const subagents = asDefaultSubagents(
       createDefaultSubagentCatalog({
         imageGenerationService: testImageGenerationService,
@@ -267,6 +250,7 @@ describe("default subagents", () => {
       "clarifier",
       "researcher",
       "analyst",
+      "product-generator",
       "image-designer",
       "review-agent",
     ]);

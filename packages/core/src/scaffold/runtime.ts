@@ -1,7 +1,4 @@
-import {
-  createClarificationConfig,
-  createClarificationTriageClassifier,
-} from "../clarification/index.ts";
+import { createClarificationConfig } from "../clarification/index.ts";
 import { DEFAULT_PROMPT_LOADER, withFilesystemContract } from "../prompts/index.ts";
 import { createReviewConfig } from "../review/index.ts";
 import { createDefaultCompositeBackend } from "./backend.ts";
@@ -15,6 +12,21 @@ export function createRuntimeScaffold(options: CreateRuntimeScaffoldOptions = {}
   return createSupervisorSpecialistsRuntimeScaffold(options);
 }
 
+function assertRequiredSubagentsPresent(
+  subagents: RuntimeScaffold["subagents"],
+  options: CreateRuntimeScaffoldOptions,
+): void {
+  const present = new Set(subagents.map((subagent) => subagent.name));
+  const required = ["clarifier", "review-agent"];
+  if (options.generativeUi) required.push("product-generator");
+  const missing = required.filter((name) => !present.has(name));
+  if (missing.length > 0) {
+    throw new Error(
+      `createRuntimeScaffold is missing required subagent(s): ${missing.join(", ")}.`,
+    );
+  }
+}
+
 function createSupervisorSpecialistsRuntimeScaffold(
   options: CreateRuntimeScaffoldOptions,
 ): RuntimeScaffold {
@@ -26,6 +38,7 @@ function createSupervisorSpecialistsRuntimeScaffold(
   const systemPrompt = withFilesystemContract(
     options.systemPrompt ?? promptLoader.getSupervisorPrompt(clarification),
   );
+  // Idempotent: default catalog pre-wraps via mergeSubagent, but user-supplied subagents may not.
   const subagents = (
     options.subagents ?? createDefaultSubagentCatalog(options, clarification, promptLoader).all
   ).map((subagent) =>
@@ -34,14 +47,7 @@ function createSupervisorSpecialistsRuntimeScaffold(
       : subagent,
   );
 
-  const triageEnabled = clarification.triage?.enabled !== false;
-  const triageClassifier = triageEnabled
-    ? createClarificationTriageClassifier({
-        classifier: options.triageClassifier,
-        model: options.modelRuntime?.getModelForRole("triage"),
-        promptLoader,
-      })
-    : undefined;
+  assertRequiredSubagentsPresent(subagents, options);
 
   return {
     virtualFilesystem: createVirtualFilesystemLayout(),
@@ -56,14 +62,18 @@ function createSupervisorSpecialistsRuntimeScaffold(
       config: clarification,
       requiredSubagent: "clarifier",
     },
-    triage: {
-      enabled: triageEnabled && triageClassifier !== undefined,
-      classifier: triageClassifier,
-    },
     review: {
       config: review,
       requiredSubagent: "review-agent",
     },
+    ...(options.generativeUi
+      ? {
+          productGeneration: {
+            enabled: true as const,
+            requiredSubagent: "product-generator" as const,
+          },
+        }
+      : {}),
     generativeUi: options.generativeUi,
   };
 }

@@ -7,7 +7,6 @@ export const OPENAI_COMPATIBLE_PROVIDER = "openai-compatible" as const;
 export const MODEL_ROLES = [
   "supervisor",
   "clarifier",
-  "triage",
   "researcher",
   "analyst",
   "image-designer",
@@ -39,7 +38,6 @@ export const DEFAULT_MODEL_CATEGORY: ModelCategory = "normal";
  */
 export const DEFAULT_ROLE_CATEGORY_ASSIGNMENTS: Partial<Record<ModelRole, ModelCategory>> = {
   clarifier: "fast",
-  triage: "fast",
   researcher: "normal",
   "image-designer": "normal",
   coder: "normal",

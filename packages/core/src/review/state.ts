@@ -17,7 +17,7 @@ export function createReviewState(
     status: "review_required",
     reports: [],
     reviewCount: 0,
-    maxRevisions: resolved.maxRevisions,
+    maxReviewCycles: resolved.maxReviewCycles,
     caveated: false,
     required: true,
     ...overrides,

@@ -4,6 +4,7 @@ import { clarificationResultSchema } from "./types.ts";
 
 describe("clarification result schema", () => {
   const validResult = {
+    requestKind: "products",
     status: "needs_clarification",
     readyToProceed: false,
     questions: [{ id: "platform", question: "Which platform should this ship on first?" }],
@@ -124,27 +125,6 @@ describe("clarification result schema", () => {
 
   it("rejects payloads with an unknown status", () => {
     expect(() => clarificationResultSchema.parse({ ...validResult, status: "unknown" })).toThrow();
-  });
-
-  it("accepts an optional skipReason recording that the clarifier was short-circuited", () => {
-    const parsed = clarificationResultSchema.parse({
-      ...validResult,
-      status: "ready_to_proceed",
-      readyToProceed: true,
-      questions: [],
-      skipReason: "triage_classifier",
-    });
-
-    expect(parsed.skipReason).toBe("triage_classifier");
-  });
-
-  it("rejects an unknown skipReason literal", () => {
-    expect(() =>
-      clarificationResultSchema.parse({
-        ...validResult,
-        skipReason: "skipped_skipped",
-      }),
-    ).toThrow();
   });
 
   it("rejects payloads that omit required fields", () => {

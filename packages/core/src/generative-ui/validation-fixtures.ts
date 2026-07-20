@@ -27,21 +27,6 @@ export const acceptedUiUpdateFixtures: readonly AcceptedUiUpdateFixture[] = [
     name: "valid non-UI update",
     value: { type: "message", text: "Hello" },
   },
-  {
-    name: "valid product image URI",
-    value: {
-      type: "ui",
-      components: [
-        {
-          id: "product",
-          component: "product-card",
-          title: "Lamp",
-          description: "Adjustable desk lamp",
-          imageUrl: "https://example.com/lamp.png",
-        },
-      ],
-    },
-  },
 ];
 
 export const rejectedUiUpdateFixtures: readonly RejectedUiUpdateFixture[] = [
@@ -124,37 +109,5 @@ export const rejectedUiUpdateFixtures: readonly RejectedUiUpdateFixture[] = [
     name: "empty components",
     value: { type: "ui", components: [] },
     errorCode: "empty_components",
-  },
-  {
-    name: "URI without content",
-    value: {
-      type: "ui",
-      components: [
-        {
-          id: "product",
-          component: "product-card",
-          title: "Lamp",
-          description: "Adjustable desk lamp",
-          imageUrl: "foo:",
-        },
-      ],
-    },
-    errorCode: "invalid_envelope",
-  },
-  {
-    name: "URI with malformed percent escape",
-    value: {
-      type: "ui",
-      components: [
-        {
-          id: "product",
-          component: "product-card",
-          title: "Lamp",
-          description: "Adjustable desk lamp",
-          imageUrl: "https://example.com/%zz",
-        },
-      ],
-    },
-    errorCode: "invalid_envelope",
   },
 ];

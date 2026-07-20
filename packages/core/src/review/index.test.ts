@@ -34,21 +34,21 @@ const changesReport: ReviewReport = {
 };
 
 describe("createReviewConfig", () => {
-  it("defaults maxRevisions to four real reviewer calls", () => {
-    expect(createReviewConfig().maxRevisions).toBe(DEFAULT_REVIEW_MAX_REVISIONS);
+  it("defaults maxReviewCycles to four real reviewer calls", () => {
+    expect(createReviewConfig().maxReviewCycles).toBe(DEFAULT_REVIEW_MAX_REVISIONS);
   });
 
-  it("honours explicit maxRevisions overrides", () => {
-    expect(createReviewConfig({ maxRevisions: 7 }).maxRevisions).toBe(7);
-    expect(createReviewConfig({ maxRevisions: 7 }).maxRevisions).not.toBe(
+  it("honours explicit maxReviewCycles overrides", () => {
+    expect(createReviewConfig({ maxReviewCycles: 7 }).maxReviewCycles).toBe(7);
+    expect(createReviewConfig({ maxReviewCycles: 7 }).maxReviewCycles).not.toBe(
       DEFAULT_REVIEW_MAX_REVISIONS,
     );
   });
 
-  it("rejects non-positive maxRevisions", () => {
-    expect(() => createReviewConfig({ maxRevisions: 0 })).toThrow();
-    expect(() => createReviewConfig({ maxRevisions: -1 })).toThrow();
-    expect(() => createReviewConfig({ maxRevisions: 1.5 })).toThrow();
+  it("rejects non-positive maxReviewCycles", () => {
+    expect(() => createReviewConfig({ maxReviewCycles: 0 })).toThrow();
+    expect(() => createReviewConfig({ maxReviewCycles: -1 })).toThrow();
+    expect(() => createReviewConfig({ maxReviewCycles: 1.5 })).toThrow();
   });
 });
 
@@ -119,9 +119,9 @@ describe("parseReviewReport", () => {
 
 describe("review lifecycle state", () => {
   it("starts in review_required with the configured loop limit", () => {
-    const state = createReviewState({ maxRevisions: 3 });
+    const state = createReviewState({ maxReviewCycles: 3 });
     expect(state.status).toBe("review_required");
-    expect(state.maxRevisions).toBe(3);
+    expect(state.maxReviewCycles).toBe(3);
     expect(state.reviewCount).toBe(0);
     expect(state.caveated).toBe(false);
     expect(state.required).toBe(true);

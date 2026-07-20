@@ -26,7 +26,7 @@ export type ReviewReport = {
 };
 
 export type ReviewConfig = {
-  maxRevisions: number;
+  maxReviewCycles: number;
 };
 
 export type ReviewState = {
@@ -34,7 +34,7 @@ export type ReviewState = {
   report?: ReviewReport;
   reports: ReviewReport[];
   reviewCount: number;
-  maxRevisions: number;
+  maxReviewCycles: number;
   caveated: boolean;
   required: boolean;
 };
@@ -66,5 +66,5 @@ export const reviewReportSchema = z.object({
 });
 
 export const reviewConfigSchema = z.object({
-  maxRevisions: z.number().int().positive(),
+  maxReviewCycles: z.number().int().positive(),
 });

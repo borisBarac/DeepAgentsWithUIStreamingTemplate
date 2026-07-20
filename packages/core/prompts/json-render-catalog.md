@@ -15,8 +15,7 @@ Rules:
 - `children` is optional and must contain component ID strings only, never nested child objects. Every child ID must exist in `components`.
 - Put component props directly on each component object beside `id`, `component`, and optional `children`.
 - Do not emit a `spec` field, a `root`/`elements` structure, or a `props` wrapper.
-- Never use component types outside the allowed catalog.
+- Never use component types outside the allowed catalog. Use `ProductCard` for every product card.
 - Qualification questions must be emitted as {"type":"question",...} updates, not as UI components.
 - Product details in caller-authored layouts belong in `ui` updates. `ProductCard` and `ProductGrid` are available for those layouts.
-- A `ProductCard` must include a clear title, description, and either imagePrompt or a child ImagePlaceholder.
-- Treat `ProductCard` and `product-card` as distinct catalog component types and follow each type's listed props.
+- `ProductCard.imagePrompt` is optional. Do not add `imageAlt` or other props not listed for the component.

@@ -12,6 +12,7 @@ import {
 describe("user-facing question selection", () => {
   it("returns the full question objects when clarification is needed", () => {
     const questions = selectUserFacingQuestions({
+      requestKind: "products",
       status: "needs_clarification",
       readyToProceed: false,
       questions: [
@@ -33,6 +34,7 @@ describe("user-facing question selection", () => {
 
   it("returns no questions once the request is ready to proceed", () => {
     const questions = selectUserFacingQuestions({
+      requestKind: "products",
       status: "ready_to_proceed",
       readyToProceed: true,
       questions: [],
@@ -48,6 +50,7 @@ describe("user-facing question selection", () => {
 
   it("returns full question objects including structured options", () => {
     const questions = selectUserFacingQuestions({
+      requestKind: "products",
       status: "needs_clarification",
       readyToProceed: false,
       questions: [
@@ -85,6 +88,7 @@ describe("clarification state management", () => {
     const state = applyClarificationResult(
       createClarificationState("Prepare a rollout plan.", { maxRounds: 10 }),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [
@@ -112,13 +116,14 @@ describe("clarification state management", () => {
     const readyState = applyClarificationResult(
       createClarificationState("Prepare a rollout plan.", { maxRounds: 10 }),
       {
+        requestKind: "products",
         status: "ready_to_proceed",
         readyToProceed: true,
         questions: [],
         missingInformation: [],
         answeredInformation: [{ key: "team", value: "platform" }],
         reasoningSummary: "The request is sufficiently specified.",
-        roundCount: 1,
+        roundCount: 0,
         maxRounds: 10,
       },
     );

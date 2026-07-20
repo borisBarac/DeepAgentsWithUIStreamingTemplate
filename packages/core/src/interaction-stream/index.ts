@@ -21,6 +21,7 @@ export type {
 } from "../generative-ui/index.ts";
 
 export type AgentInputMessage = {
+  additional_kwargs?: Record<string, unknown>;
   content: string;
   role: "assistant" | "user";
 };
@@ -29,7 +30,6 @@ export type AgentResult = {
   messages?: unknown[];
   structuredResponse?: unknown;
   workResult?: unknown;
-  presentationError?: string;
 };
 
 type StreamTextMessage = {
@@ -54,12 +54,6 @@ export type StreamableAgent = {
     subagents?: AsyncIterable<StreamSubagent>;
     output: Promise<AgentResult>;
   }>;
-  present?: (request: {
-    messages: unknown[];
-    workResult: unknown;
-    sessionId?: string;
-    repairFeedback?: string;
-  }) => Promise<ModelUiOutput>;
 };
 
 export type InteractionStreamOptions = {
@@ -194,18 +188,16 @@ async function runInteraction(
   if (attempt1.classification.rejectedUiCandidates.length > 0) {
     const feedback = buildRepairFeedback(attempt1.classification.rejectedUiCandidates);
     const attemptedOutput = attemptedOutputContent(attempt1);
-    if (options.agent.present && attempt1.result?.workResult !== undefined) {
-      lastAttempt = await runPresentationRepair(attempt1, feedback, options);
-    } else {
-      const repairMessages: AgentInputMessage[] = [
-        ...options.messages,
-        ...(attemptedOutput
-          ? ([{ content: attemptedOutput, role: "assistant" }] satisfies AgentInputMessage[])
-          : []),
-        { content: feedback, role: "user" },
-      ];
-      lastAttempt = await runAttempt(repairMessages, options, onUpdate);
-    }
+    const repairMessages: AgentInputMessage[] = [
+      ...options.messages,
+      ...(attemptedOutput
+        ? ([
+            assistantHistoryMessage(attemptedOutput, attempt1.result),
+          ] satisfies AgentInputMessage[])
+        : []),
+      { content: feedback, role: "user" },
+    ];
+    lastAttempt = await runAttempt(repairMessages, options, onUpdate);
     hadRepair = true;
   }
 
@@ -286,40 +278,6 @@ async function runAttempt(
   }
   const classification = mainClassification;
   return { finalText, result, classification, hasStructuredResponse, structuredOutput };
-}
-
-async function runPresentationRepair(
-  prior: Attempt,
-  feedback: string,
-  options: InteractionStreamOptions,
-): Promise<Attempt> {
-  let structuredResponse: unknown;
-  let presentationError: string | undefined;
-  try {
-    structuredResponse = await options.agent.present?.({
-      messages: options.messages,
-      workResult: prior.result?.workResult,
-      sessionId: options.sessionId,
-      repairFeedback: feedback,
-    });
-  } catch (error) {
-    presentationError = error instanceof Error ? error.message : String(error);
-  }
-  const structuredOutput = normalizeModelUiOutput(structuredResponse);
-  const classification = structuredOutput
-    ? classifyModelUiOutput(structuredOutput)
-    : classifyInvalidModelUiOutput(structuredResponse);
-  return {
-    finalText: prior.finalText,
-    result: {
-      ...(prior.result ?? {}),
-      structuredResponse,
-      presentationError,
-    },
-    classification,
-    hasStructuredResponse: structuredResponse !== undefined,
-    structuredOutput,
-  };
 }
 
 function classifyModelUiOutput(output: ModelUiOutput): ClassifiedUpdates {
@@ -431,7 +389,7 @@ function buildHistory(
   requireStructuredOutput: boolean,
 ): unknown[] {
   if (structuredOutput) {
-    return [...messages, { content: JSON.stringify(structuredOutput), role: "assistant" }];
+    return [...messages, assistantHistoryMessage(JSON.stringify(structuredOutput), attempt.result)];
   }
   if (requireStructuredOutput) return messages;
   if (!hadRepair) {
@@ -446,12 +404,45 @@ function buildHistory(
     .filter(Boolean)
     .join("\n");
   if (visibleText) {
-    return [...messages, { content: visibleText, role: "assistant" }];
+    return [...messages, assistantHistoryMessage(visibleText, attempt.result)];
   }
   if (!attempt.hasStructuredResponse && attempt.finalText.trim()) {
-    return [...messages, { content: attempt.finalText.trim(), role: "assistant" }];
+    return [...messages, assistantHistoryMessage(attempt.finalText.trim(), attempt.result)];
   }
   return messages;
+}
+
+function assistantHistoryMessage(content: string, result: AgentResult | null): AgentInputMessage {
+  const reasoningContent = latestReasoningContent(result);
+  return {
+    ...(reasoningContent === undefined
+      ? {}
+      : { additional_kwargs: { reasoning_content: reasoningContent } }),
+    content,
+    role: "assistant",
+  };
+}
+
+function latestReasoningContent(result: AgentResult | null): unknown {
+  const messageLists = [
+    result?.messages,
+    typeof result?.workResult === "object" && result.workResult !== null
+      ? (result.workResult as { messages?: unknown }).messages
+      : undefined,
+  ];
+  for (const messages of messageLists) {
+    if (!Array.isArray(messages)) continue;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (typeof message !== "object" || message === null) continue;
+      const additionalKwargs = (message as { additional_kwargs?: unknown }).additional_kwargs;
+      if (typeof additionalKwargs !== "object" || additionalKwargs === null) continue;
+      const reasoningContent = (additionalKwargs as { reasoning_content?: unknown })
+        .reasoning_content;
+      if (reasoningContent !== undefined) return reasoningContent;
+    }
+  }
+  return undefined;
 }
 
 function dedupeUiUpdatesByRoot(updates: UiUpdate[]): UiUpdate[] {

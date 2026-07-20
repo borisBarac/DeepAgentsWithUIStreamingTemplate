@@ -18,12 +18,6 @@ const validComponentSamples: Record<string, Record<string, unknown>> = {
   Stack: { direction: "row", gap: "md" },
   Text: { text: "Hello", variant: "body" },
   TextInput: { label: "Email", name: "email", inputType: "email" },
-  "product-card": {
-    title: "Launch Map",
-    description: "A planning workspace for design teams.",
-    imageUrl: "https://example.com/launch-map.png",
-    status: "complete",
-  },
 };
 
 function instance(
@@ -88,24 +82,17 @@ describe("validateComponentInstance (pass 2)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects product-card missing title", () => {
-    const result = validateComponentInstance({
-      id: "x",
-      component: "product-card",
-      description: "D",
-    });
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects an invalid product-card imageUrl", () => {
+  it("rejects lowercase product-card as an unknown catalog component", () => {
     const result = validateComponentInstance({
       id: "x",
       component: "product-card",
       title: "T",
       description: "D",
-      imageUrl: "not-a-url",
     });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.issues[0]?.code).toBe("unknown_component");
+    }
   });
 });
 

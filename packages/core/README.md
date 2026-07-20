@@ -8,6 +8,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 
 - A supervisor-first agent factory: `createScaffoldedAgent`
 - Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `review-agent`
+- Named specialist delegation, with the `general-purpose` fallback subagent disabled by default
 - A mandatory clarification-first intake gate for new supervisor-path requests
 - Two default preflight guardrails: `safety` and `taskScope`
 - A specialized tool store for building explicit role-based tool bundles
@@ -86,6 +87,49 @@ The smoke script uses an intentionally invalid model key/endpoint, catches the e
 and prints a unique marker that can be searched in the configured LangSmith project. It sets
 `LANGCHAIN_CALLBACKS_BACKGROUND=false` so trace submission completes before the process exits.
 
+### Querying traces by subagent
+
+Every run produced by a subagent carries `metadata.lc_agent_name` (written automatically by `deepagents`). Query runs programmatically via the helpers in `packages/core/src/observability/query.ts`:
+
+```ts
+import { listRunsBySubagent } from "@deep-agent-template/core";
+
+// Every run emitted by the researcher subagent in the configured project.
+const runs = await listRunsBySubagent({ subagentName: "researcher", limit: 50 });
+
+// Complete trace trees rooted at coordinator runs (root-only, like `langsmith trace list`).
+import { listTracesBySubagent } from "@deep-agent-template/core";
+const traces = await listTracesBySubagent({ subagentName: "coordinator", limit: 10 });
+```
+
+Both helpers default `project` to `process.env.LANGSMITH_PROJECT`, accept `since`, `errorOnly`, and `order`, and materialize the SDK's async iterable into an array capped at `limit`. The filter DSL is `eq(metadata.lc_agent_name, "<name>")`; the same string works with the `langsmith trace list --filter` CLI.
+
+### Harness profile
+
+`deepagents` resolves a `HarnessProfile` from the supervisor model on every `createDeepAgent` call. The profile shapes app-wide ambient configuration: a `systemPromptSuffix` appended (as a separate text block) to deepagents' base agent prompt, the auto-added `general-purpose` subagent's `systemPrompt`/`description`/`enabled`, optional `toolDescriptionOverrides`, `excludedTools`, `excludedMiddleware`, and `extraMiddleware`.
+
+This repo's `createScaffoldedAgent` registers a single profile under the bare `"openai"` key before constructing the agent. The default profile lives at `packages/core/src/profiles/index.ts`:
+
+- `systemPromptSuffix`: a short prose-contract reminder.
+- `generalPurposeSubagent.enabled`: `false`, so `deepagents` does not add its fallback subagent.
+
+Override per agent construction:
+
+```ts
+import { createScaffoldedAgent } from "@deep-agent-template/core";
+
+const agent = createScaffoldedAgent({
+  modelRuntime,
+  profile: {
+    systemPromptSuffix: "Always cite source files by path:line.",
+  },
+});
+```
+
+Scalar fields in the caller's profile replace defaults. The `generalPurposeSubagent` object is shallow-merged, so callers can override individual subfields.
+
+Caveat: deepagents' resolver lands on the bare `"openai"` key for our `ChatOpenAI` instances (their `model_name`/`modelName` are undefined, so the more-specific `"<provider>:<model>"` lookup never matches). The harness profile is therefore effectively **app-wide** — per-role customization continues to flow through `subagentOverrides`.
+
 ## Model configuration
 
 Models are organized around three **categories** — `fast`, `normal`, and `pro` —
@@ -122,13 +166,15 @@ mapping.
 
 | Category | Roles |
 |----------|-------|
-| `fast`   | `clarifier`, `triage`, *(task-scope guardrail classifier)* |
+| `fast`   | `clarifier`, *(task-scope guardrail classifier)* |
 | `normal` | `researcher`, `image-designer`, `coder` |
 | `pro`    | `supervisor`, `analyst`, `reviewer`, `finalizer` |
 
+The `general-purpose` subagent is disabled by default. Set the harness profile's `generalPurposeSubagent.enabled` to `true` to restore it. It inherits the supervisor's model and tools and has no role assignment.
+
 `assignments.default` resolves to `normal`. The guardrail task-scope classifier
-and the clarification triage classifier both use the `fast` category (cheap
-structured-output classification).
+and the clarifier both use the `fast` category (cheap structured-output
+classification).
 
 Explicit `subagentOverrides.<role>.model` values still win over the runtime's
 category resolution for a single specialist instance.
@@ -162,7 +208,6 @@ const modelRuntime = createModelRuntime({
   assignments: {
     default: "normal",
     clarifier: "fast",
-    triage: "fast",
     reviewer: "pro",
   },
 });
@@ -273,6 +318,8 @@ const result = await agent.invoke({
 ```
 
 The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists. Supplying `imageGenerationService` adds the default `image-designer` specialist with its image-generation tool; without that service, the specialist is omitted. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+
+The auto-added `general-purpose` subagent is **not** part of the catalog and is not customizable via `subagentOverrides`. It inherits the supervisor's tools (which do not include the sandbox-scoped `execute_python` tool — that's wired only into `researcher` and `analyst`). Customize it through the harness profile instead.
 
 The default `clarifier` subagent is wired with the bundled `clarify-deeply` skill via `skills: ["/skills/clarify-deeply/"]`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
 
@@ -393,14 +440,10 @@ const agent = createScaffoldedAgent({
 
 ## Clarification-first supervisor flow
 
-The scaffolded supervisor treats clarification as a required preflight phase — but with a triage gate in front. Every new top-level request (and every user reply after `waiting_for_user`) first passes through a cheap `triage` classifier running on the `fast` model tier. The classifier decides whether the full clarifier subagent round is needed:
+The scaffolded supervisor treats clarification as a required preflight phase. Every new top-level request (and every user reply after `waiting_for_user`) enters the `clarification` phase and the `clarifier` subagent is invoked once on the `fast` model tier. The clarifier itself decides whether questions are needed before any are asked:
 
-- **Skip** — the request is self-contained, a continuation token (`continue`, `yes`, `ok`, `go ahead`), an answer to a prior clarifier question, or a trivial prompt answerable in one shot. The workflow synthesizes a `ready_to_proceed` clarification result with `skipReason: "triage_classifier"` and transitions straight to `execution`. No clarifier subagent call is made.
-- **Proceed** — the request has material ambiguity or is the start of a new multi-step task. The normal clarifier preflight runs as before.
-
-The triage gate is on by default. Disable it with `clarificationOptions: { triage: { enabled: false } }` to restore the legacy always-clarify behavior. The gate is also a safe default: any classifier exception (network, parse error) falls through to `proceed`, so a flaky fast-model never blocks the run.
-
-When triage routes through, the `clarifier` subagent returns a structured readiness payload (parsed by the supervisor from the `workflow_submit_clarification` tool boundary). The supervisor is instructed to relay the exact `questions` from that payload back to the user when `status` is `needs_clarification`.
+- **Ready to proceed** — the request is self-contained, a continuation token (`continue`, `yes`, `ok`, `go ahead`), an answer to a prior clarifier question, or a trivial prompt answerable in one shot. The clarifier returns `status: ready_to_proceed`, empty `questions`, and no `missingInformation`. The supervisor translates that into `workflow_submit_clarification` and the workflow transitions straight to `execution` — no second model round.
+- **Needs clarification** — the request has material ambiguity or is the start of a new multi-step task. The clarifier returns bounded questions, the supervisor relays them verbatim, and the loop continues until the clarifier returns `ready_to_proceed` or the round cap forces it.
 
 The clarifier returns a structured readiness payload with:
 
@@ -412,7 +455,6 @@ The clarifier returns a structured readiness payload with:
 - `reasoningSummary`
 - `roundCount`
 - `maxRounds`
-- `skipReason?` — present only when the clarifier was short-circuited (`"triage_classifier"`, `"user_command"`, or `"config_disabled"`)
 
 Each question may optionally include 2-4 structured `options`. An option has a user-facing `label`,
 a one-sentence `description`, and an optional `recommended` marker. At most one option may be
@@ -425,20 +467,18 @@ The default clarification policy is:
 - `mode: "mandatory-preflight"`
 - `maxRounds: 2`
 - `questionsPerRound: 3`
-- `triage: { enabled: true }`
 
-Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below). `triage.enabled` toggles the pre-clarifier gate.
+Both `maxRounds` and `questionsPerRound` are overridable through `clarificationOptions` (see the example below).
 
 If the request is still unresolved at the round cap, the clarification state is forced to `ready_to_proceed` — the supervisor proceeds using the known context and clearly stated assumptions rather than blocking. An explicit `blocked` result before the cap still blocks.
 
 The intended end-to-end intake loop is:
 
 1. User sends a new request.
-2. Triage classifier inspects the message. On `skip`, jump to step 6 with a synthetic `ready_to_proceed` result. On `proceed`, continue.
-3. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
-4. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
-5. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`. Triage runs again on the user's reply (a `continue` here will skip).
-6. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning), or until the round cap forces `ready_to_proceed`. An explicit `blocked` result before the cap still blocks.
+2. Supervisor delegates to the `clarifier`, which returns a structured `ClarificationResult`.
+3. If `status` is `needs_clarification`, the supervisor relays `result.questions` to the user verbatim.
+4. The user answers; the answers are recorded with `recordClarificationAnswers(...)` and folded into the intake with `applyClarificationResult(...)`.
+5. The clarifier runs again until it returns `ready_to_proceed` (proceed to planning), or until the round cap forces `ready_to_proceed`. An explicit `blocked` result before the cap still blocks.
 
 Use the exported clarification helpers to manage intake state outside the prompt layer:
 
@@ -472,7 +512,6 @@ const runtime = createRuntimeScaffold({
   clarificationOptions: {
     maxRounds: 6,
     questionsPerRound: 2,
-    triage: { enabled: false }, // restore legacy always-clarify behavior
   },
 });
 

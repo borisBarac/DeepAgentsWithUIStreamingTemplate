@@ -13,9 +13,13 @@ import {
 import { DEFAULT_REVIEW_AGENT_DESCRIPTION, DEFAULT_REVIEW_AGENT_NAME } from "../review/index.ts";
 import { createDockerSandboxBackend, createPythonSandboxTool } from "../sandbox/index.ts";
 import { CLARIFY_DEEPLY_SKILL_DIR } from "../skills/index.ts";
-import type { CreateDefaultSubagentCatalogOptions, DefaultSubagentCatalog } from "./types.ts";
+import type {
+  CreateDefaultSubagentCatalogOptions,
+  DefaultSubagentCatalog,
+  DefaultSubagentOverride,
+} from "./types.ts";
 
-function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined): SubAgent {
+function mergeSubagent(base: SubAgent, override: DefaultSubagentOverride | undefined): SubAgent {
   if (!override) {
     return { ...base, systemPrompt: withFilesystemContract(base.systemPrompt) };
   }
@@ -28,7 +32,6 @@ function mergeSubagent(base: SubAgent, override: Partial<SubAgent> | undefined):
     middleware: [...(override.middleware ?? []), ...(base.middleware ?? [])],
     interruptOn: override.interruptOn ?? base.interruptOn,
     skills: override.skills ?? base.skills,
-    responseFormat: override.responseFormat ?? base.responseFormat,
     permissions: override.permissions ?? base.permissions,
   };
   return { ...merged, systemPrompt: withFilesystemContract(merged.systemPrompt) };
@@ -97,8 +100,23 @@ export function createDefaultSubagentCatalog(
     options.reviewer,
   );
 
+  const productGenerator = options.generativeUi
+    ? mergeSubagent(
+        {
+          name: "product-generator",
+          description: "Create or fully replace the reviewed product set for product requests.",
+          systemPrompt: promptLoader.getProductGeneratorPrompt(),
+          model: options.modelRuntime?.getModelForRole("analyst"),
+          tools: [],
+          skills: [],
+        },
+        options.productGenerator,
+      )
+    : undefined;
+
   let imageDesigner: SubAgent | undefined;
   const subagents: SubAgent[] = [clarifier, researcher, analyst];
+  if (productGenerator) subagents.push(productGenerator);
 
   if (imageDesignerTool) {
     imageDesigner = mergeSubagent(
@@ -123,6 +141,7 @@ export function createDefaultSubagentCatalog(
       researcher,
       analyst,
       reviewer,
+      "product-generator": productGenerator,
       "image-designer": imageDesigner,
     },
     all: subagents,

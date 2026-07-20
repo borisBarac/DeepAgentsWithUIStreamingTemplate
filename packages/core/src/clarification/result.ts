@@ -40,17 +40,19 @@ function validateClarificationResultRound(
   state: ClarificationState,
   result: ClarificationResult,
 ): void {
-  if (!Number.isInteger(result.roundCount) || result.roundCount < 1) {
-    throw new Error("Clarification roundCount must be a positive integer.");
+  if (!Number.isInteger(result.roundCount) || result.roundCount < 0) {
+    throw new Error("Clarification roundCount must be a non-negative integer.");
   }
 
   if (!Number.isInteger(result.maxRounds) || result.maxRounds < 1) {
     throw new Error("Clarification maxRounds must be a positive integer.");
   }
 
-  if (result.roundCount !== state.roundCount + 1) {
+  const expectedRoundCount =
+    result.status === "ready_to_proceed" ? state.roundCount : state.roundCount + 1;
+  if (result.roundCount !== expectedRoundCount) {
     throw new Error(
-      `Clarification roundCount must increment sequentially. Expected ${state.roundCount + 1}, received ${result.roundCount}.`,
+      `Clarification roundCount must increment for unresolved results and remain unchanged for ready results. Expected ${expectedRoundCount}, received ${result.roundCount}.`,
     );
   }
 

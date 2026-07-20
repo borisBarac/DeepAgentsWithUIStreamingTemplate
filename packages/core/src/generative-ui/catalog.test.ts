@@ -30,10 +30,9 @@ describe("a2ui catalog loader", () => {
         "Stack",
         "Text",
         "TextInput",
-        "product-card",
       ]),
     );
-    expect(catalogComponentNames).toHaveLength(9);
+    expect(catalogComponentNames).toHaveLength(8);
   });
 
   it("preserves insertion order from the JSON file", () => {
@@ -47,13 +46,12 @@ describe("a2ui catalog loader", () => {
       "Stack",
       "Text",
       "TextInput",
-      "product-card",
     ]);
   });
 
   it("knows which components are in the catalog", () => {
     expect(isKnownComponent("Button")).toBe(true);
-    expect(isKnownComponent("product-card")).toBe(true);
+    expect(isKnownComponent("product-card")).toBe(false);
     expect(isKnownComponent("Mystery")).toBe(false);
     expect(isKnownComponent("button")).toBe(false);
     expect(isKnownComponent("")).toBe(false);
@@ -62,8 +60,9 @@ describe("a2ui catalog loader", () => {
   it("returns the schema for known components and undefined otherwise", () => {
     expect(getComponentSchema("Button")).toBeDefined();
     expect(getComponentSchema("Button")?.required).toEqual(["label"]);
-    expect(getComponentSchema("product-card")?.required).toEqual(["title", "description"]);
+    expect(getComponentSchema("ProductCard")?.required).toEqual(["title", "description"]);
     expect(getComponentSchema("Mystery")).toBeUndefined();
+    expect(getComponentSchema("product-card")).toBeUndefined();
   });
 
   it("declares additionalProperties:false on every component", () => {

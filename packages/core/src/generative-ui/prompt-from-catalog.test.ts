@@ -11,15 +11,14 @@ import {
 const expectedPropsBlockTail = `- Button: {"label": string, "action"?: string}
 - Card: {"title"?: string}
 - ImagePlaceholder: {"alt"?: string, "prompt"?: string}
-- ProductCard: {"title": string, "description": string, "imageAlt"?: string, "imagePrompt"?: string}
+- ProductCard: {"title": string, "description": string, "imagePrompt"?: string}
 - ProductGrid: {"heading"?: string}
 - Stack: {"direction"?: "row" | "column", "gap"?: "xs" | "sm" | "md" | "lg"}
 - Text: {"text": string, "variant"?: "title" | "body" | "muted" | "caption"}
-- TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}
-- product-card: {"title": string, "description": string, "imageUrl"?: string, "status"?: "streaming" | "complete"}`;
+- TextInput: {"label": string, "name": string, "placeholder"?: string, "inputType"?: "text" | "email" | "password"}`;
 
 const expectedComponentTypeUnion =
-  '"Button" | "Card" | "ImagePlaceholder" | "ProductCard" | "ProductGrid" | "Stack" | "Text" | "TextInput" | "product-card"';
+  '"Button" | "Card" | "ImagePlaceholder" | "ProductCard" | "ProductGrid" | "Stack" | "Text" | "TextInput"';
 
 describe("prompt-from-catalog walker", () => {
   it("produces the byte-for-byte legacy prop description block", () => {
@@ -34,7 +33,8 @@ describe("prompt-from-catalog walker", () => {
     const rendered = catalogPromptFromJsonCatalog(CORE_PROMPT_TEMPLATES.jsonRenderCatalog);
     expect(rendered).toContain("Allowed component props:");
     expect(rendered).toContain("- Button: {");
-    expect(rendered).toContain("- product-card: {");
+    expect(rendered).toContain("- TextInput: {");
+    expect(rendered).not.toContain("- product-card:");
     expect(rendered).not.toContain("{{componentPropsCatalog}}");
     expect(rendered).not.toContain("{{componentTypeUnion}}");
   });
@@ -96,7 +96,6 @@ describe("prompt-from-catalog walker", () => {
       "Stack",
       "Text",
       "TextInput",
-      "product-card",
     ]) {
       expect(rendered).toContain(`- ${name}:`);
     }
@@ -107,7 +106,7 @@ describe("prompt-from-catalog walker", () => {
     // Button.label is required (no ?), Button.action is optional (?).
     expect(rendered).toContain('"label": string');
     expect(rendered).toContain('"action"?: string');
-    expect(rendered).toContain('- product-card: {"title": string');
+    expect(rendered).toContain('- ProductCard: {"title": string');
   });
 
   it("renders enums as quoted pipe-separated unions", () => {

@@ -23,7 +23,11 @@ type FakeStreamRun = {
     output?: Promise<unknown>;
   }>;
   output: Promise<{
-    messages: Array<{ content: string; role: "assistant" }>;
+    messages: Array<{
+      additional_kwargs?: Record<string, unknown>;
+      content: string;
+      role: "assistant";
+    }>;
     structuredResponse?: unknown;
   }>;
 };
@@ -133,7 +137,11 @@ function createStructuredAgent(
 
 function createInspectableAgent(
   outputs: string[],
-  resultMessages?: Array<{ content: string; role: "assistant" }>,
+  resultMessages?: Array<{
+    additional_kwargs?: Record<string, unknown>;
+    content: string;
+    role: "assistant";
+  }>,
 ): InspectableAgent {
   let index = 0;
   const inputs: Array<{ messages: Array<{ content: string; role: "assistant" | "user" }> }> = [];
@@ -333,42 +341,48 @@ describe("workflow delivery streaming", () => {
 });
 
 describe("createInteractionStream", () => {
-  it("repairs only presentation when the two-phase output is invalid", async () => {
-    let workCalls = 0;
-    let presentationCalls = 0;
-    const agent: StreamableAgent = {
-      async invoke() {
-        throw new Error("not used");
-      },
+  it("preserves reasoning_content in structured-output history", async () => {
+    const agent: FakeAgent = {
       async streamEvents() {
-        workCalls += 1;
         return {
-          messages: asyncIterableFrom([{ text: asyncIterableFrom(["work candidate"]) }]),
+          messages: asyncIterableFrom([]),
           output: Promise.resolve({
-            messages: [{ content: "work candidate", role: "assistant" }],
-            structuredResponse: { invalid: true },
-            workResult: { messages: [{ content: "work candidate", role: "assistant" }] },
+            messages: [
+              {
+                additional_kwargs: { reasoning_content: "private reasoning" },
+                content: "work candidate",
+                role: "assistant",
+              },
+            ],
+            structuredResponse: {
+              version: 1,
+              updates: [{ type: "message", text: "Visible answer" }],
+            },
           }),
         };
       },
-      async present({ repairFeedback }) {
-        presentationCalls += 1;
-        expect(repairFeedback).toContain("invalid_model_output");
-        return { version: 1, updates: [{ type: "message", text: "Repaired answer" }] };
-      },
     };
     const interaction = createInteractionStream({
-      agent,
+      agent: asStreamable(agent),
       messages: [{ content: "Do it", role: "user" }],
       requireStructuredOutput: true,
-      sessionId: "presentation-only-repair",
+      sessionId: "reasoning-history",
     });
-    const updates: UiUpdate[] = [];
-    for await (const update of interaction.updates) updates.push(update);
+    for await (const _update of interaction.updates) {
+      /* drain */
+    }
 
-    expect(updates).toEqual([{ type: "message", text: "Repaired answer" }]);
-    expect(workCalls).toBe(1);
-    expect(presentationCalls).toBe(1);
+    expect((await interaction.result).history).toEqual([
+      { content: "Do it", role: "user" },
+      {
+        additional_kwargs: { reasoning_content: "private reasoning" },
+        content: JSON.stringify({
+          version: 1,
+          updates: [{ type: "message", text: "Visible answer" }],
+        }),
+        role: "assistant",
+      },
+    ]);
   });
 
   it("prefers validated structured output over conflicting assistant prose", async () => {
@@ -838,6 +852,26 @@ async function collectRepairUpdates(
 }
 
 describe("createInteractionStream — NDJSON UI repair", () => {
+  it("preserves reasoning_content in the assistant message sent for repair", async () => {
+    const agent = createInspectableAgent(
+      [uiLine(unknownComponentUpdate), uiLine(textUpdate("text", "fixed"))],
+      [
+        {
+          additional_kwargs: { reasoning_content: "repair reasoning" },
+          content: uiLine(unknownComponentUpdate),
+          role: "assistant",
+        },
+      ],
+    );
+
+    await collectRepairUpdates(agent);
+
+    expect(agent.inputs[1]?.messages[1]).toMatchObject({
+      additional_kwargs: { reasoning_content: "repair reasoning" },
+      role: "assistant",
+    });
+  });
+
   it("commits structured attempts atomically after catalog validation", async () => {
     const agent = createStructuredAgent([
       {

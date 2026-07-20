@@ -1,6 +1,50 @@
+import type { UiSpecUpdate } from "../generative-ui/index.ts";
+import {
+  clarificationResultToQuestionUpdates,
+  productBatchToUiUpdate,
+} from "../generative-ui/index.ts";
+import type { ProductBatch } from "./products.ts";
 import type { WorkflowDecision, WorkflowEvent, WorkflowPhase, WorkflowState } from "./types.ts";
 
-export function createWorkflowState(originalRequest: string): WorkflowState {
+/**
+ * Builds the deterministic UI payload for delivery after review approves the
+ * current product batch (or the review budget exhausts with a caveat). UI is
+ * intentionally produced only at this point: nothing is rendered before review
+ * approval, and revision must repeat generation and review before any UI is
+ * emitted. Returns `undefined` when no batch has been generated (e.g.
+ * product generation is disabled), which keeps the message-only path intact
+ * for runtimes that opt out of the product flow.
+ */
+function approvedProductUi(state: WorkflowState): UiSpecUpdate | undefined {
+  if (!state.productGenerationEnabled) return undefined;
+  const batch = currentProductBatch(state);
+  return batch ? productBatchToUiUpdate(batch) : undefined;
+}
+
+function currentProductBatch(state: WorkflowState): ProductBatch | undefined {
+  if (state.generatedProducts) return state.generatedProducts;
+  if (state.existingProducts) {
+    return {
+      mode: state.productMode,
+      gridRoot: state.existingProducts.gridRoot,
+      products: state.existingProducts.products,
+    };
+  }
+  return undefined;
+}
+
+export function createWorkflowState(
+  originalRequest: string,
+  productState: Pick<
+    WorkflowState,
+    "existingProducts" | "productMode" | "targetProductCount" | "productGenerationEnabled"
+  > = {
+    existingProducts: null,
+    productMode: "create",
+    targetProductCount: 3,
+    productGenerationEnabled: false,
+  },
+): WorkflowState {
   return {
     phase: "clarification",
     originalRequest,
@@ -10,6 +54,7 @@ export function createWorkflowState(originalRequest: string): WorkflowState {
     revisionCount: 0,
     controllerRetryCount: 0,
     caveated: false,
+    ...productState,
   };
 }
 
@@ -39,6 +84,10 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         controllerRetryCount: 0,
         completedSubagent: undefined,
         lastFeedback: undefined,
+        pendingClarificationUi: event.result.readyToProceed
+          ? undefined
+          : clarificationResultToQuestionUpdates(event.result),
+        pendingProductUi: undefined,
       };
     case "user_replied":
       return state.phase === "waiting_for_user"
@@ -50,10 +99,21 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
         ...state,
         outcome: event.outcome,
         assumptions: event.outcome.assumptions,
+        phase: state.productGenerationEnabled ? "product_generation" : "review",
+        controllerRetryCount: 0,
+        completedSubagent: undefined,
+        lastFeedback: undefined,
+      };
+    case "products_submitted":
+      if (state.phase !== "product_generation") return invalid(state, event);
+      return {
+        ...state,
+        generatedProducts: event.batch,
         phase: "review",
         controllerRetryCount: 0,
         completedSubagent: undefined,
         lastFeedback: undefined,
+        pendingClarificationUi: undefined,
       };
     case "review_completed": {
       if (state.phase !== "review") return invalid(state, event);
@@ -66,9 +126,10 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
           controllerRetryCount: 0,
           completedSubagent: undefined,
           lastFeedback: undefined,
+          pendingProductUi: approvedProductUi(state),
         };
       }
-      if (reviewHistory.length >= event.maxRevisions) {
+      if (reviewHistory.length >= event.maxReviewCycles) {
         return {
           ...state,
           reviewHistory,
@@ -77,6 +138,7 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
           controllerRetryCount: 0,
           completedSubagent: undefined,
           lastFeedback: undefined,
+          pendingProductUi: approvedProductUi(state),
         };
       }
       return {
@@ -105,11 +167,13 @@ export function reduceWorkflowState(state: WorkflowState, event: WorkflowEvent):
       }
       return { ...state, controllerRetryCount: count, lastFeedback: event.message };
     }
+    case "ui_drained":
+      return { ...state, pendingProductUi: undefined, pendingClarificationUi: undefined };
   }
 }
 
 const EXECUTION_ENTRY_DIRECTIVE =
-  "Clarification complete. Begin execution now: delegate to `researcher` or `analyst`, or write deliverables directly via tools. Do NOT call the clarifier.";
+  "Clarification complete. Begin execution now: delegate to `researcher` or `analyst` only when product generation needs external facts or deeper analysis, or submit `workflow_complete_execution` directly to advance to product generation. Do NOT call the clarifier.";
 
 const actions: Record<WorkflowPhase, WorkflowDecision> = {
   clarification: {
@@ -128,6 +192,12 @@ const actions: Record<WorkflowPhase, WorkflowDecision> = {
     requiredAction: "execute",
     canFinalize: false,
     feedback: EXECUTION_ENTRY_DIRECTIVE,
+  },
+  product_generation: {
+    phase: "product_generation",
+    requiredAction: "generate_products",
+    requiredSubagent: "product-generator",
+    canFinalize: false,
   },
   review: {
     phase: "review",

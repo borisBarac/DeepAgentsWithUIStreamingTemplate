@@ -23,22 +23,47 @@ describe("prompt defaults", () => {
       DEFAULT_PROMPT_LOADER.getAnalystPrompt(),
       DEFAULT_PROMPT_LOADER.getImageDesignerPrompt(),
       DEFAULT_PROMPT_LOADER.getReviewAgentPrompt(),
+      DEFAULT_PROMPT_LOADER.getProductGeneratorPrompt(),
     ];
 
     expect(FILESYSTEM_CONTRACT_PROMPT).toContain("`/reports`");
     expect(FILESYSTEM_CONTRACT_PROMPT).toContain("`/home/user`");
+    expect(FILESYSTEM_CONTRACT_PROMPT).toContain(
+      "UI identifiers such as `rootId`, `gridRoot`, and `products` are not filesystem paths",
+    );
+    expect(FILESYSTEM_CONTRACT_PROMPT).toContain("Never pass them to filesystem tools");
     for (const prompt of prompts) {
       expect(prompt).toContain(FILESYSTEM_CONTRACT_PROMPT);
     }
   });
 
   it("exports the default clarifier system prompt", () => {
-    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You are the clarifier subagent.");
-    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("You may use prose or JSON.");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
+      "You are the clarifier subagent for a product design system.",
+    );
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("PROSE WITH STABLE LABELED FIELDS");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("Do NOT return JSON");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).not.toContain("You may use prose or JSON");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).not.toMatch(/prose or JSON/i);
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
       "between 1 and 3 high-value clarification questions per round",
     );
     expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("round 2");
+  });
+
+  it("forbids JSON in both the clarifier and reviewer prompts", () => {
+    const clarifier = DEFAULT_PROMPT_LOADER.getClarifierPrompt({});
+    const reviewer = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
+
+    for (const prompt of [clarifier, reviewer]) {
+      expect(prompt).toContain("PROSE WITH STABLE LABELED FIELDS");
+      expect(prompt).toContain("Do NOT return JSON");
+      // No phrase anywhere in the prompt that permits JSON as a valid output.
+      expect(prompt).not.toMatch(/you may (?:also )?(?:return|use|emit) JSON/i);
+      expect(prompt).not.toMatch(/prose or JSON/i);
+      expect(prompt).not.toMatch(/JSON or prose/i);
+      expect(prompt).not.toMatch(/if you use JSON/i);
+    }
   });
 
   it("makes clarification a required supervisor intake phase", () => {
@@ -46,11 +71,24 @@ describe("prompt defaults", () => {
       "Send unresolved or new top-level requests to `clarifier` whenever the workflow controller routes you there",
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
-      "Follow this order: bounded clarification; execution and artifact creation; unified review; autonomous revision and resubmission; final delivery.",
+      "Follow this order: bounded clarification; execution and artifact creation when research or deeper analysis is needed; product generation; unified review; autonomous revision and resubmission; final delivery as a catalog UI.",
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
-      "pre-clarifier triage classifier runs on most new requests",
+      "Every request enters the clarification phase. The clarifier itself decides whether questions are needed",
     );
+  });
+
+  it("requires the clarifier to make a clarify-or-proceed decision before asking questions", () => {
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
+      "Decide FIRST whether any questions are needed",
+    );
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain(
+      "Always return `ready_to_proceed` with no questions",
+    );
+    // Continuation-token heuristics are part of the clarifier decision.
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("`continue`");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("`design three greeting cards`");
+    expect(DEFAULT_CLARIFIER_SYSTEM_PROMPT).toContain("`REQUEST_KIND`");
   });
 
   it("tells the supervisor to relay clarifier questions verbatim", () => {
@@ -94,7 +132,7 @@ describe("prompt defaults", () => {
     );
     expect(createClarifierSystemPrompt({ questionsPerRound: 2 })).toContain("round 2");
     expect(createClarifierSystemPrompt({ questionsPerRound: 2 })).toContain(
-      "list the explicit assumptions execution should use",
+      "list the explicit assumptions product generation should use",
     );
     expect(createSupervisorSystemPrompt({})).toContain(
       "If clarification remains unresolved after 2 rounds",
@@ -109,6 +147,7 @@ describe("prompt defaults", () => {
     expect(loader.getAnalystPrompt()).toContain("You are the analyst subagent.");
     expect(loader.getImageDesignerPrompt()).toContain("You are the image designer subagent.");
     expect(loader.getReviewAgentPrompt()).toContain("You are the Review Agent.");
+    expect(loader.getProductGeneratorPrompt()).toContain("product generator subagent");
   });
 
   it("loads and fully renders every internal prompt template", () => {
@@ -186,10 +225,13 @@ describe("prompt defaults", () => {
     );
   });
 
-  it("exports the default review agent prompt with the structured report contract", () => {
+  it("exports the default review agent prompt with the prose report contract", () => {
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("You are the Review Agent.");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("`STATUS`");
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
-      "status`: `approved` | `changes_required` | `blocked",
+      "`approved`, `changes_required`, or `blocked`",
     );
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("`SCORE`");
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain(
       "Do not rewrite the artifact unless explicitly asked",
     );
@@ -198,9 +240,10 @@ describe("prompt defaults", () => {
     );
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("all deliverables");
     expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).not.toContain("non-product");
-    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).not.toContain("product batch");
-    expect(CORE_PROMPT_TEMPLATES.presentation).toContain("accepted final answer and any UI");
-    expect(CORE_PROMPT_TEMPLATES.presentation).not.toContain("product cards");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("generated product batch");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("PROSE WITH STABLE LABELED FIELDS");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).toContain("Do NOT return JSON");
+    expect(DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT).not.toContain("in prose or JSON");
   });
 
   it("uses the default markdown loader for compatibility exports", () => {

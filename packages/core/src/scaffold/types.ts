@@ -8,18 +8,20 @@ import type {
 } from "deepagents";
 import type { ImageGenerationServiceContract } from "../../../image-gen/src/index.ts";
 
-import type {
-  ClarificationConfig,
-  ClarificationOverrideOptions,
-  ClarificationTriageClassifier,
-} from "../clarification/index.ts";
+import type { ClarificationConfig, ClarificationOverrideOptions } from "../clarification/index.ts";
 import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig } from "../review/index.ts";
 import type { SandboxBackend } from "../sandbox/index.ts";
 
-export type SpecialistRole = "researcher" | "analyst" | "reviewer" | "clarifier" | "image-designer";
+export type SpecialistRole =
+  | "researcher"
+  | "analyst"
+  | "reviewer"
+  | "clarifier"
+  | "product-generator"
+  | "image-designer";
 
 export type VirtualFilesystemLayout = {
   scratch: string;
@@ -45,17 +47,27 @@ export type CreateDefaultPermissionsOptions = {
   restrictReads?: boolean;
 };
 
+/**
+ * Public override surface for a single default subagent. Mirrors {@link SubAgent}
+ * minus `responseFormat`: subagents must return prose so the main agent can
+ * translate that prose into typed `workflow_submit_*` tool calls. Any caller
+ * that needs structured output should hook the main agent's presentation phase
+ * (`generativeUi`) instead of bypassing the prose contract here.
+ */
+export type DefaultSubagentOverride = Omit<Partial<SubAgent>, "responseFormat">;
+
 export type CreateDefaultSubagentCatalogOptions = {
   additionalResearcherTools?: NonNullable<SubAgent["tools"]>;
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
   pythonSandboxBackend?: SandboxBackend;
   generativeUi?: GenerativeUiOptions;
-  researcher?: Partial<SubAgent>;
-  analyst?: Partial<SubAgent>;
-  reviewer?: Partial<SubAgent>;
-  clarifier?: Partial<SubAgent>;
-  imageDesigner?: Partial<SubAgent>;
+  researcher?: DefaultSubagentOverride;
+  analyst?: DefaultSubagentOverride;
+  reviewer?: DefaultSubagentOverride;
+  clarifier?: DefaultSubagentOverride;
+  imageDesigner?: DefaultSubagentOverride;
+  productGenerator?: DefaultSubagentOverride;
 };
 
 export type DefaultSubagentCatalog = {
@@ -82,20 +94,13 @@ export type SupervisorSpecialistsRuntimeScaffold = RuntimeScaffoldBase & {
     config: ClarificationConfig;
     requiredSubagent: "clarifier";
   };
-  /**
-   * Pre-clarifier triage gate. Constructed by the scaffold from
-   * `modelRuntime.getModelForRole("triage")` (or an explicit override) when
-   * `clarification.config.triage.enabled` is not `false`. `undefined` when
-   * triage is disabled — callers should preserve the legacy always-clarify
-   * behavior in that case.
-   */
-  triage: {
-    enabled: boolean;
-    classifier?: ClarificationTriageClassifier;
-  };
   review: {
     config: ReviewConfig;
     requiredSubagent: "review-agent";
+  };
+  productGeneration?: {
+    enabled: true;
+    requiredSubagent: "product-generator";
   };
 };
 
@@ -114,11 +119,4 @@ export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions &
   promptLoader?: PromptLoader;
   subagents?: CreateDeepAgentParams["subagents"];
   systemPrompt?: string;
-  /**
-   * Explicit override for the pre-clarifier triage classifier. When omitted,
-   * the scaffold constructs one from `modelRuntime.getModelForRole("triage")`
-   * (if a model runtime is supplied and triage is not disabled via
-   * `clarificationOptions.triage.enabled`).
-   */
-  triageClassifier?: ClarificationTriageClassifier;
 };

@@ -1,4 +1,4 @@
-import type { CreateDeepAgentParams } from "deepagents";
+import type { CreateDeepAgentParams, HarnessProfileOptions } from "deepagents";
 
 import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { CreateGuardrailDecisionOptions } from "../guardrails/index.ts";
@@ -39,6 +39,17 @@ export type CreateScaffoldedAgentOptions = Omit<
     promptLoader?: PromptLoader;
     langSmith?: LangSmithTracingOptions;
     generativeUi?: GenerativeUiOptions;
+    /**
+     * Harness profile overrides merged on top of
+     * {@link DEFAULT_AGENT_PROFILE} and registered globally under the
+     * `"openai"` key before `createDeepAgent` is called. Scalars in the
+     * caller's profile replace defaults.
+     *
+     * Note: deepagents' resolver always lands on the bare `"openai"` key for
+     * our `ChatOpenAI` instances, so the harness profile is effectively
+     * app-wide. For per-role shaping, use `subagentOverrides` instead.
+     */
+    profile?: HarnessProfileOptions;
   } & Omit<
     CreateRuntimeScaffoldOptions,
     "promptLoader" | "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"

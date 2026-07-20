@@ -3,7 +3,7 @@ import type { DeepAgent } from "deepagents";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
 import { createWorkflowControllerMiddleware } from "../workflow/index.ts";
-import type { TwoPhaseDeepAgent } from "./runtime.ts";
+import type { WorkflowUiAgent } from "./runtime.ts";
 import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import type { CreateScaffoldedAgentOptions } from "./types.ts";
 
@@ -11,7 +11,7 @@ export function createScaffoldedAgent(
   options: CreateScaffoldedAgentOptions & {
     generativeUi: NonNullable<CreateScaffoldedAgentOptions["generativeUi"]>;
   },
-): TwoPhaseDeepAgent;
+): WorkflowUiAgent;
 export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent;
 export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): DeepAgent {
   const {
@@ -27,6 +27,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     modelRuntime,
     permissions,
     permissionOptions,
+    profile,
     promptLoader = DEFAULT_PROMPT_LOADER,
     subagents,
     subagentOverrides,
@@ -63,10 +64,8 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
   const workflowController = createWorkflowControllerMiddleware({
     maxClarificationRounds: scaffold.clarification.config.maxRounds,
     questionsPerRound: scaffold.clarification.config.questionsPerRound,
-    maxRevisions: scaffold.review.config.maxRevisions,
-    triageClassifier: scaffold.triage.classifier,
-    triageEnabled: scaffold.triage.enabled,
-    promptLoader,
+    maxReviewCycles: scaffold.review.config.maxReviewCycles,
+    productGenerationEnabled: scaffold.productGeneration?.enabled === true,
   });
 
   return createAgentFromRuntimeScaffold({
@@ -75,6 +74,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     modelRuntime,
     guardrails,
     langSmith,
+    profile,
     middleware: [workflowController, ...(middleware ?? [])],
     store,
     agentOptions,

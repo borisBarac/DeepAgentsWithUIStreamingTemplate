@@ -10,11 +10,11 @@ import { createTestModelRuntime } from "./test-helpers.ts";
 const testPromptLoader: PromptLoader = {
   getSupervisorPrompt: () => "custom supervisor prompt",
   getClarifierPrompt: () => "custom clarifier prompt",
-  getClarificationTriagePrompt: () => "custom triage prompt",
   getResearcherPrompt: () => "custom researcher prompt",
   getAnalystPrompt: () => "custom analyst prompt",
   getImageDesignerPrompt: () => "custom image designer prompt",
   getReviewAgentPrompt: () => "custom review prompt",
+  getProductGeneratorPrompt: () => "custom product generator prompt",
 };
 
 const testImageGenerationService = {

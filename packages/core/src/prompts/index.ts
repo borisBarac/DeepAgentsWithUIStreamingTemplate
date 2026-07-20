@@ -1,11 +1,9 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
-import clarificationTriagePromptText from "../../prompts/clarification-triage.md" with {
-  type: "text",
-};
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
 import filesystemContractPromptText from "../../prompts/filesystem-contract.md" with {
   type: "text",
 };
+import generalPurposePromptText from "../../prompts/general-purpose.md" with { type: "text" };
 import generativeUiJsonObjectPromptText from "../../prompts/generative-ui-json-object.md" with {
   type: "text",
 };
@@ -13,7 +11,7 @@ import imageDesignerPromptText from "../../prompts/image-designer.md" with { typ
 import jsonRenderCatalogPromptText from "../../prompts/json-render-catalog.md" with {
   type: "text",
 };
-import presentationPromptText from "../../prompts/presentation.md" with { type: "text" };
+import productGeneratorPromptText from "../../prompts/product-generator.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
 import safetyClassificationPromptText from "../../prompts/safety-classification.md" with {
@@ -37,11 +35,11 @@ import {
 export interface PromptLoader {
   getSupervisorPrompt(config: ClarificationOverrideOptions): string;
   getClarifierPrompt(config: ClarificationOverrideOptions): string;
-  getClarificationTriagePrompt(): string;
   getResearcherPrompt(): string;
   getAnalystPrompt(): string;
   getImageDesignerPrompt(): string;
   getReviewAgentPrompt(): string;
+  getProductGeneratorPrompt(): string;
 }
 
 export const FILESYSTEM_CONTRACT_PROMPT = filesystemContractPromptText.trim();
@@ -73,13 +71,11 @@ function definePromptTemplates<const T extends Readonly<Record<string, string>>>
 export const CORE_PROMPT_TEMPLATES = definePromptTemplates({
   generativeUiJsonObject: generativeUiJsonObjectPromptText,
   jsonRenderCatalog: jsonRenderCatalogPromptText,
-  presentation: presentationPromptText,
   safetyClassification: safetyClassificationPromptText,
   structuredJson: structuredJsonPromptText,
   structuredJsonCorrection: structuredJsonCorrectionPromptText,
   taskScopeClassification: taskScopeClassificationPromptText,
   uiRepairFeedback: uiRepairFeedbackPromptText,
-  clarificationTriage: clarificationTriagePromptText,
 });
 
 function getCurrentDateTimeContext(): { currentDateTime: string; timezone: string } {
@@ -125,10 +121,6 @@ export class MarkdownPromptLoader implements PromptLoader {
     );
   }
 
-  getClarificationTriagePrompt(): string {
-    return clarificationTriagePromptText;
-  }
-
   getResearcherPrompt(): string {
     return withFilesystemContract(researcherPromptText);
   }
@@ -143,6 +135,10 @@ export class MarkdownPromptLoader implements PromptLoader {
 
   getReviewAgentPrompt(): string {
     return withFilesystemContract(reviewAgentPromptText);
+  }
+
+  getProductGeneratorPrompt(): string {
+    return withFilesystemContract(productGeneratorPromptText);
   }
 }
 
@@ -169,6 +165,20 @@ export const DEFAULT_ANALYST_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getAnalystPro
 export const DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getImageDesignerPrompt();
 
 export const DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT = DEFAULT_PROMPT_LOADER.getReviewAgentPrompt();
+export const DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT =
+  DEFAULT_PROMPT_LOADER.getProductGeneratorPrompt();
+
+/**
+ * System prompt for the auto-added `general-purpose` subagent. deepagents
+ * injects this subagent into every agent unless explicitly disabled. The
+ * repo's harness profile wires this prompt in via
+ * `generalPurposeSubagent.systemPrompt` so the GP subagent follows the same
+ * prose contract as the rest of the catalog.
+ *
+ * @see packages/core/src/profiles/index.ts
+ */
+export const DEFAULT_GENERAL_PURPOSE_SYSTEM_PROMPT =
+  withFilesystemContract(generalPurposePromptText);
 
 export const DEFAULT_CLARIFIER_SYSTEM_PROMPT = createClarifierSystemPrompt({
   questionsPerRound: DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,

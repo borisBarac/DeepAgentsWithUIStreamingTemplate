@@ -1,5 +1,4 @@
 export {
-  type CreateScaffoldedAgentOptions,
   createScaffoldedAgent,
   DEFAULT_AGENT_NAME,
   type DeepAgent,
@@ -19,6 +18,7 @@ export {
   type ClarificationOption,
   type ClarificationQuestion,
   type ClarificationQuestionsPerRound,
+  type ClarificationRequestKind,
   type ClarificationResult,
   type ClarificationState,
   type ClarificationStatus,
@@ -63,6 +63,8 @@ export {
   type OpenTextQuestion,
   parseUpdateLine,
   parseUpdateText,
+  productBatchToModelUiUpdates,
+  productBatchToUiUpdate,
   type QuestionUpdate,
   type RejectedUiCandidate,
   StreamingLineBuffer,
@@ -182,16 +184,34 @@ export {
   type RuntimeChatModel,
 } from "./models/index.ts";
 export {
+  buildSubagentFilter,
   configureLangSmithTracing,
+  getLangSmithClient,
+  type LangSmithClientOptions,
   type LangSmithTracingConfig,
   type LangSmithTracingOptions,
+  LC_AGENT_NAME_METADATA_KEY,
+  listRunsBySubagent,
+  listTracesBySubagent,
+  type SubagentQueryOptions,
 } from "./observability/index.ts";
+export {
+  AGENT_HARNESS_PROFILE_KEY,
+  clearHarnessProfileRegistry,
+  createAgentHarnessProfile,
+  DEFAULT_AGENT_PROFILE,
+  ensureDefaultAgentProfileRegistered,
+  HARNESS_PROFILE_REGISTRY_SYMBOL,
+  registerAgentProfile,
+} from "./profiles/index.ts";
 export {
   createClarifierSystemPrompt,
   createSupervisorSystemPrompt,
   DEFAULT_ANALYST_SYSTEM_PROMPT,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
+  DEFAULT_GENERAL_PURPOSE_SYSTEM_PROMPT,
   DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
+  DEFAULT_PRODUCT_GENERATOR_SYSTEM_PROMPT,
   DEFAULT_PROMPT_LOADER,
   DEFAULT_RESEARCHER_SYSTEM_PROMPT,
   DEFAULT_REVIEW_AGENT_SYSTEM_PROMPT,
@@ -244,9 +264,6 @@ export {
   type SandboxStatus,
 } from "./sandbox/index.ts";
 export {
-  type CreateCompositeBackendOptions,
-  type CreateDefaultPermissionsOptions,
-  type CreateDefaultSubagentCatalogOptions,
   type CreateRuntimeScaffoldOptions,
   createDefaultSubagentCatalog,
   createRuntimeScaffold,
@@ -257,10 +274,7 @@ export {
   DEFAULT_REPORTS_ROOT,
   DEFAULT_SCRATCH_ROOT,
   DEFAULT_SKILLS_ROOT,
-  type DefaultSubagentCatalog,
   type RuntimeScaffold,
-  type SpecialistRole,
-  type VirtualFilesystemLayout,
 } from "./scaffold/index.ts";
 export {
   CLARIFY_DEEPLY_SKILL_CONTENT,
@@ -273,6 +287,10 @@ export {
 export {
   createWorkflowControllerMiddleware,
   createWorkflowState,
+  type ExistingProductSet,
+  type ProductBatch,
+  type ProductItem,
+  type ProductMode,
   reduceWorkflowState,
   resolveWorkflowDecision,
   type WorkflowControllerOptions,
@@ -283,4 +301,7 @@ export {
   type WorkflowPhase,
   type WorkflowState,
   workflowCompleteExecutionTool,
+  workflowSubmitClarificationTool,
+  workflowSubmitProductsTool,
+  workflowSubmitReviewTool,
 } from "./workflow/index.ts";

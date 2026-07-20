@@ -36,7 +36,6 @@
       "properties": {
         "title": { "type": "string", "maxLength": 4096 },
         "description": { "type": "string", "maxLength": 4096 },
-        "imageAlt": { "type": "string", "maxLength": 4096 },
         "imagePrompt": { "type": "string", "maxLength": 4096 }
       },
       "required": ["title", "description"]
@@ -75,17 +74,6 @@
         "inputType": { "type": "string", "enum": ["text", "email", "password"] }
       },
       "required": ["label", "name"]
-    },
-    "product-card": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "title": { "type": "string", "minLength": 1, "maxLength": 4096 },
-        "description": { "type": "string", "minLength": 1, "maxLength": 4096 },
-        "imageUrl": { "type": "string", "format": "uri" },
-        "status": { "type": "string", "enum": ["streaming", "complete"] }
-      },
-      "required": ["title", "description"]
     }
   }
 }

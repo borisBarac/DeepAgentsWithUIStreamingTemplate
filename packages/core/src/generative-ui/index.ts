@@ -52,6 +52,10 @@ export {
   normalizeModelUiOutput,
 } from "./model-output.ts";
 export {
+  productBatchToModelUiUpdates,
+  productBatchToUiUpdate,
+} from "./product-ui.ts";
+export {
   composeGenerativeUiPrompt,
   GENERATIVE_UI_JSON_OBJECT_PROMPT,
 } from "./prompt.ts";

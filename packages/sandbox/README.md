@@ -7,7 +7,10 @@ tool definitions remain in `@deep-agent-template/core`.
 ## Quick start
 
 The scaffolded agent wires `execute_python` to the `researcher` and `analyst`
-subagents by default. Pass a custom backend to swap the implementation:
+subagents by default. The auto-added `general-purpose` subagent does **not**
+receive `execute_python` — it inherits the supervisor's tools, and the sandbox
+tool is scoped to specific subagents only. Pass a custom backend to swap the
+implementation:
 
 ```ts
 import { createScaffoldedAgent } from "@deep-agent-template/core";

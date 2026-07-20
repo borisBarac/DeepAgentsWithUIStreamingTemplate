@@ -34,6 +34,7 @@
     "ajv-formats": "^3.0.1",
     "deepagents": "^1.10.2",
     "langchain": "^1.4.5",
+    "langsmith": "^0.7.7",
     "zod": "^4.4.3"
   }
 }

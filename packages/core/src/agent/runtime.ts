@@ -1,18 +1,21 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 import {
-  composeGenerativeUiPrompt,
-  type ModelUiOutput,
-  modelUiOutputSchema,
-} from "../generative-ui/index.ts";
+  type CreateDeepAgentParams,
+  createDeepAgent,
+  type DeepAgent,
+  type HarnessProfileOptions,
+} from "deepagents";
+import { type ModelUiOutput, normalizeModelUiOutput } from "../generative-ui/index.ts";
 import type { CreateGuardrailDecisionOptions } from "../guardrails/index.ts";
 import { createGuardrailDecision } from "../guardrails/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { LangSmithTracingOptions } from "../observability/index.ts";
 import { configureLangSmithTracing } from "../observability/index.ts";
-import { CORE_PROMPT_TEMPLATES } from "../prompts/index.ts";
+import {
+  createAgentHarnessProfile,
+  ensureDefaultAgentProfileRegistered,
+  registerAgentProfile,
+} from "../profiles/index.ts";
 import type { RuntimeScaffold } from "../scaffold/index.ts";
-import type { WorkflowState } from "../workflow/index.ts";
 import { DEFAULT_AGENT_NAME } from "./constants.ts";
 
 type AgentPassthroughOptions = Pick<
@@ -30,70 +33,29 @@ export type CreateAgentFromRuntimeScaffoldOptions = {
   langSmith?: LangSmithTracingOptions;
   middleware?: CreateDeepAgentParams["middleware"];
   store?: CreateDeepAgentParams["store"];
+  /**
+   * Harness profile overrides. When omitted, the default profile from
+   * {@link DEFAULT_AGENT_PROFILE} is registered once (idempotently) and
+   * reused for every subsequent agent in this process. When provided, the
+   * merged profile replaces the registration.
+   */
+  profile?: HarnessProfileOptions;
   agentOptions?: AgentPassthroughOptions;
 };
 
-export type PresentationRequest = {
-  messages: unknown[];
-  workResult: unknown;
-  sessionId?: string;
-  repairFeedback?: string;
-};
-
-export type TwoPhaseDeepAgent = DeepAgent & {
+/**
+ * Agent wrapper that drains deterministic UI from the workflow controller
+ * after each work run. Replaces the former two-phase presentation adapter:
+ * there is no second LLM call. Product grids and clarification questions
+ * are constructed by pure converters (productBatchToUiUpdate,
+ * clarificationResultToQuestionUpdates) on the workflow reducer, stored on
+ * WorkflowState as pendingProductUi / pendingClarificationUi, and drained
+ * here so the interaction-stream sees them as a structured response.
+ */
+export type WorkflowUiAgent = DeepAgent & {
   invokeWork: DeepAgent["invoke"];
   streamWorkEvents: DeepAgent["streamEvents"];
-  present(request: PresentationRequest): Promise<ModelUiOutput>;
 };
-
-type WorkflowController = {
-  getWorkflowState(id: string): WorkflowState | undefined;
-};
-
-function textContent(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value
-    .map((part) =>
-      typeof part === "string"
-        ? part
-        : typeof part === "object" && part !== null && "text" in part
-          ? String(part.text)
-          : "",
-    )
-    .filter(Boolean)
-    .join("\n");
-}
-
-function candidateResponse(workResult: unknown): string {
-  if (typeof workResult !== "object" || workResult === null || !("messages" in workResult)) {
-    return "";
-  }
-  const messages = workResult.messages;
-  if (!Array.isArray(messages)) return "";
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (typeof message === "object" && message !== null && "content" in message) {
-      const text = textContent(message.content);
-      if (text) return text;
-    }
-  }
-  return "";
-}
-
-function presentationResult(
-  workResult: unknown,
-  structuredResponse?: ModelUiOutput,
-  error?: unknown,
-) {
-  const base = typeof workResult === "object" && workResult !== null ? workResult : {};
-  return {
-    ...base,
-    structuredResponse,
-    workResult,
-    ...(error ? { presentationError: error instanceof Error ? error.message : String(error) } : {}),
-  };
-}
 
 function threadIdFromConfig(config: unknown): string {
   return String(
@@ -102,67 +64,76 @@ function threadIdFromConfig(config: unknown): string {
   );
 }
 
-function createTwoPhaseAdapter(
+type WorkflowController = {
+  drainPendingUi(id: string): unknown[];
+};
+
+function findWorkflowController(
+  middleware: CreateDeepAgentParams["middleware"] | undefined,
+): WorkflowController | undefined {
+  const candidate = middleware?.find(
+    (entry) =>
+      typeof entry === "object" &&
+      entry !== null &&
+      (entry as { name?: unknown }).name === "workflowController" &&
+      typeof (entry as { drainPendingUi?: unknown }).drainPendingUi === "function",
+  );
+  return candidate as WorkflowController | undefined;
+}
+
+function drainToStructuredResponse(
+  controller: WorkflowController | undefined,
+  sessionId: string,
+): ModelUiOutput | undefined {
+  const updates = controller?.drainPendingUi(sessionId) ?? [];
+  if (updates.length === 0) return undefined;
+  const candidate: ModelUiOutput = { version: 1, updates: updates as ModelUiOutput["updates"] };
+  return normalizeModelUiOutput(candidate) ?? undefined;
+}
+
+function appendStructuredResponse(
+  workResult: unknown,
+  structuredResponse: ModelUiOutput | undefined,
+): unknown {
+  if (typeof workResult !== "object" || workResult === null) {
+    return structuredResponse ? { structuredResponse } : workResult;
+  }
+  if (structuredResponse === undefined) return workResult;
+  return { ...workResult, structuredResponse };
+}
+
+function createWorkflowUiAdapter(
   workAgent: DeepAgent,
-  presentationModel: ReturnType<
-    NonNullable<CreateAgentFromRuntimeScaffoldOptions["modelRuntime"]>["getModelForRole"]
-  >,
-  presentationPrompt: string,
   workflowController: WorkflowController | undefined,
-): TwoPhaseDeepAgent {
+): WorkflowUiAgent {
+  const adapter = workAgent as WorkflowUiAgent;
   const invokeWork = workAgent.invoke.bind(workAgent) as DeepAgent["invoke"];
   const streamWorkEvents = workAgent.streamEvents.bind(workAgent) as DeepAgent["streamEvents"];
-  const structuredModel = presentationModel.withStructuredOutput(modelUiOutputSchema);
-
-  const present = async (request: PresentationRequest): Promise<ModelUiOutput> => {
-    const workflowState = workflowController?.getWorkflowState(request.sessionId ?? "__default__");
-    const payload = {
-      conversation: request.messages,
-      workflowState,
-      completedWork: workflowState?.outcome ?? null,
-      candidateResponse: candidateResponse(request.workResult),
-      repairFeedback: request.repairFeedback,
-    };
-    const value = await structuredModel.invoke([
-      new SystemMessage(presentationPrompt),
-      new HumanMessage(`Present this input as JSON:\n${JSON.stringify(payload)}`),
-    ]);
-    return modelUiOutputSchema.parse(value);
-  };
-
-  const adapter = workAgent as TwoPhaseDeepAgent;
   adapter.invokeWork = invokeWork;
   adapter.streamWorkEvents = streamWorkEvents;
-  adapter.present = present;
   adapter.invoke = (async (input: unknown, config?: unknown) => {
     const workResult = await invokeWork(input as never, config as never);
-    const request = {
-      messages: (input as { messages?: unknown[] })?.messages ?? [],
-      workResult,
-      sessionId: threadIdFromConfig(config),
-    };
-    try {
-      return presentationResult(workResult, await present(request));
-    } catch (error) {
-      return presentationResult(workResult, undefined, error);
-    }
+    const structuredResponse = drainToStructuredResponse(
+      workflowController,
+      threadIdFromConfig(config),
+    );
+    return appendStructuredResponse(workResult, structuredResponse);
   }) as DeepAgent["invoke"];
+  // v3 stream callers see a structuredResponse-wrapped output; v2 and other
+  // property accesses pass through to the work run unchanged. LangGraph
+  // stream's internal `this`-binding is preserved by binding forwarded
+  // functions to the original target.
   adapter.streamEvents = (async (input: unknown, config: unknown) => {
     if ((config as { version?: unknown } | undefined)?.version !== "v3") {
       return streamWorkEvents(input as never, config as never);
     }
     const run = await streamWorkEvents(input as never, config as never);
-    const output = Promise.resolve(run.output).then(async (workResult) => {
-      const request = {
-        messages: (input as { messages?: unknown[] })?.messages ?? [],
-        workResult,
-        sessionId: threadIdFromConfig(config),
-      };
-      try {
-        return presentationResult(workResult, await present(request));
-      } catch (error) {
-        return presentationResult(workResult, undefined, error);
-      }
+    const output = Promise.resolve(run.output).then((workResult) => {
+      const structuredResponse = drainToStructuredResponse(
+        workflowController,
+        threadIdFromConfig(config),
+      );
+      return appendStructuredResponse(workResult, structuredResponse);
     });
     return new Proxy(run, {
       get(target, property) {
@@ -185,6 +156,7 @@ export function createAgentFromRuntimeScaffold(
     langSmith,
     middleware,
     modelRuntime,
+    profile,
     scaffold,
   } = options;
   const { responseFormat: callerResponseFormat, ...remainingAgentOptions } = agentOptions;
@@ -196,6 +168,18 @@ export function createAgentFromRuntimeScaffold(
   }
 
   configureLangSmithTracing(langSmith);
+
+  // Register the harness profile before createDeepAgent so its model-based
+  // resolver picks it up. When the caller passes a profile, merge it on top
+  // of DEFAULT_AGENT_PROFILE under the bare-openai key (additive: scalar
+  // fields from the caller replace defaults, array fields accumulate).
+  // Otherwise install the default profile once (idempotent across subsequent
+  // agent builds in this process).
+  if (profile) {
+    registerAgentProfile(createAgentHarnessProfile(profile));
+  } else {
+    ensureDefaultAgentProfileRegistered();
+  }
 
   if (scaffold.generativeUi && callerResponseFormat !== undefined) {
     throw new Error(
@@ -234,13 +218,12 @@ export function createAgentFromRuntimeScaffold(
 
   if (!scaffold.generativeUi) return workAgent;
 
-  const workflowController = middleware?.find(
-    (entry): entry is typeof entry & WorkflowController =>
-      entry.name === "workflowController" && "getWorkflowState" in entry,
-  );
-  const presentationPrompt = [
-    CORE_PROMPT_TEMPLATES.presentation,
-    composeGenerativeUiPrompt(scaffold.generativeUi.catalogPrompt),
-  ].join("\n\n");
-  return createTwoPhaseAdapter(workAgent, supervisorModel, presentationPrompt, workflowController);
+  // getWorkflowState(threadId) and drainPendingUi(threadId) are only reachable
+  // from main-agent middleware. workflowController is installed by
+  // createScaffoldedAgent on the main agent only (see scaffolded.ts) and does
+  // not propagate to subagents. Subagents cannot read workflow state directly
+  // — they receive the workflow packet via the `task` tool's description
+  // argument instead.
+  const workflowController = findWorkflowController(middleware);
+  return createWorkflowUiAdapter(workAgent, workflowController);
 }

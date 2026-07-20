@@ -35,6 +35,44 @@ describe("createModelRuntime", () => {
     });
   });
 
+  it("fills omitted DeepSeek reasoning content before replaying assistant tool calls", () => {
+    const [message] = convertMessagesToCompletionsMessageParams({
+      model: "deepseek-v4-flash",
+      messages: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call-1",
+              name: "task",
+              args: { subagent_type: "clarifier" },
+              type: "tool_call",
+            },
+          ],
+        }),
+      ],
+    });
+
+    expect(message).toMatchObject({
+      role: "assistant",
+      reasoning_content: "",
+    });
+  });
+
+  it("does not add DeepSeek reasoning content to other models", () => {
+    const [message] = convertMessagesToCompletionsMessageParams({
+      model: "gpt-4.1",
+      messages: [
+        new AIMessage({
+          content: "",
+          tool_calls: [{ id: "call-1", name: "task", args: {}, type: "tool_call" }],
+        }),
+      ],
+    });
+
+    expect(message).not.toHaveProperty("reasoning_content");
+  });
+
   it("constructs category models lazily and caches them by category", () => {
     let optionReads = 0;
     const providerOptions = Object.defineProperty({}, "topP", {
@@ -342,7 +380,6 @@ describe("createModelRuntimeFromEnvValues", () => {
     );
 
     expect(runtime.getCategoryForRole("clarifier")).toBe("fast");
-    expect(runtime.getCategoryForRole("triage")).toBe("fast");
     expect(runtime.getCategoryForRole("researcher")).toBe("normal");
     expect(runtime.getCategoryForRole("supervisor")).toBe("pro");
     expect(runtime.getCategoryForRole("reviewer")).toBe("pro");

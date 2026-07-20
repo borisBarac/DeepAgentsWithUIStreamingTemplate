@@ -9,8 +9,9 @@ import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import type { ChatResult } from "@langchain/core/outputs";
 import { DEFAULT_SAFETY_GUARDRAIL_NAME } from "../guardrails/safety.ts";
 import { DEFAULT_TASK_SCOPE_GUARDRAIL_NAME } from "../guardrails/task-scope.ts";
+import { clearHarnessProfileRegistry } from "../profiles/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
-import { createAgentFromRuntimeScaffold, type TwoPhaseDeepAgent } from "./runtime.ts";
+import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import { createTestModelRuntime } from "./test-helpers.ts";
 
 const langSmithEnvKeys = [
@@ -28,6 +29,7 @@ const originalLangSmithEnv = Object.fromEntries(
 class CapturingChatModel extends BaseChatModel {
   readonly boundOptions: Array<Record<string, unknown>> = [];
   readonly presentationInputs: unknown[] = [];
+  readonly structuredOutputSchemas: unknown[] = [];
   workCalls = 0;
 
   _llmType(): string {
@@ -45,7 +47,8 @@ class CapturingChatModel extends BaseChatModel {
     return { generations: [{ text: response.text, message: response }] };
   }
 
-  override withStructuredOutput(_schema: unknown): never {
+  override withStructuredOutput(schema: unknown): never {
+    this.structuredOutputSchemas.push(schema);
     return {
       invoke: async (input: unknown) => {
         this.presentationInputs.push(input);
@@ -75,6 +78,7 @@ afterEach(() => {
 
     process.env[key] = originalValue;
   }
+  clearHarnessProfileRegistry();
 });
 
 describe("createAgentFromRuntimeScaffold", () => {
@@ -143,37 +147,34 @@ describe("createAgentFromRuntimeScaffold", () => {
     ).toBeFalse();
   });
 
-  it("uses the same supervisor for work and a tool-free structured presentation", async () => {
+  it("does not invoke withStructuredOutput on the supervisor (no second LLM call)", () => {
+    // Contract: with the two-phase presentation adapter removed, the
+    // supervisor never calls withStructuredOutput. UI is emitted by pure
+    // converters drained from workflow state. Subagents return prose; the
+    // work agent neither sets responseFormat nor calls withStructuredOutput.
     const model = new CapturingChatModel({});
     const modelRuntime = createTestModelRuntime();
     const getModelForRole = modelRuntime.getModelForRole.bind(modelRuntime);
     modelRuntime.getModelForRole = (role) =>
       role === "supervisor" ? (model as never) : getModelForRole(role);
-    const agent = createAgentFromRuntimeScaffold({
+    createAgentFromRuntimeScaffold({
       factoryName: "createScaffoldedAgent",
       scaffold: createRuntimeScaffold({
         generativeUi: {},
         memory: [],
         modelRuntime,
-        subagents: [],
+        subagents: [
+          { name: "clarifier", description: "c", systemPrompt: "c" },
+          { name: "review-agent", description: "r", systemPrompt: "r" },
+          { name: "product-generator", description: "p", systemPrompt: "p" },
+        ],
       }),
       modelRuntime,
       guardrails: false,
     });
 
-    const result = await agent.invoke({ messages: [new HumanMessage("Return JSON.")] });
-
-    expect(result.structuredResponse).toEqual({
-      version: 1,
-      updates: [{ type: "message", text: "Presented output" }],
-    });
-    expect(model.workCalls).toBe(1);
-    expect(model.presentationInputs).toHaveLength(1);
-    expect(JSON.stringify(model.presentationInputs[0])).toContain("Return one JSON object");
-    expect(JSON.stringify(model.presentationInputs[0])).not.toContain("product-generator");
-    expect(model.boundOptions).toHaveLength(1);
-    expect(model.boundOptions[0]?.response_format).toBeUndefined();
-    expect(model.boundOptions[0]?.tool_choice).toBeUndefined();
+    expect(model.structuredOutputSchemas).toHaveLength(0);
+    expect(model.presentationInputs).toHaveLength(0);
   });
 
   it("preserves LangGraph stream private field access", async () => {
@@ -188,7 +189,11 @@ describe("createAgentFromRuntimeScaffold", () => {
         generativeUi: {},
         memory: [],
         modelRuntime,
-        subagents: [],
+        subagents: [
+          { name: "clarifier", description: "c", systemPrompt: "c" },
+          { name: "review-agent", description: "r", systemPrompt: "r" },
+          { name: "product-generator", description: "p", systemPrompt: "p" },
+        ],
       }),
       modelRuntime,
       guardrails: false,
@@ -203,23 +208,43 @@ describe("createAgentFromRuntimeScaffold", () => {
     expect(() => run[Symbol.asyncIterator]()).not.toThrow();
   });
 
-  it("exposes presentation repair without repeating work", async () => {
-    const model = new CapturingChatModel({});
-    const modelRuntime = createTestModelRuntime();
-    const getModelForRole = modelRuntime.getModelForRole.bind(modelRuntime);
-    modelRuntime.getModelForRole = (role) =>
-      role === "supervisor" ? (model as never) : getModelForRole(role);
+  it("auto-adds the general-purpose subagent to the task tool's available list", () => {
+    // Regression: deepagents silently unshifts a general-purpose subagent into
+    // the inline subagents array unless the harness profile disables it. This
+    // repo ships a custom GP prompt via DEFAULT_AGENT_PROFILE, so GP stays
+    // enabled. The supervisor must see `general-purpose` as a valid delegate
+    // target — the only signal is the `task` tool's description, which lists
+    // the available subagent names comma-separated after "Available:".
     const agent = createAgentFromRuntimeScaffold({
       factoryName: "createScaffoldedAgent",
-      scaffold: createRuntimeScaffold({ generativeUi: {}, memory: [], subagents: [] }),
-      modelRuntime,
+      scaffold: createRuntimeScaffold(),
+      modelRuntime: createTestModelRuntime(),
       guardrails: false,
     });
-    const twoPhaseAgent = agent as TwoPhaseDeepAgent;
-    const workResult = await twoPhaseAgent.invokeWork({ messages: [new HumanMessage("Do work")] });
-    await twoPhaseAgent.present({ messages: [], workResult, repairFeedback: "Fix the root." });
+    const subAgentMiddleware = agent.options?.middleware?.find(
+      (entry) => entry.name === "subAgentMiddleware",
+    );
+    const taskTool = subAgentMiddleware?.tools?.find(
+      (entry: { name?: string }) => entry.name === "task",
+    ) as { description?: string } | undefined;
+    expect(taskTool?.description).toMatch(/Available.*\bgeneral-purpose\b/s);
+  });
 
-    expect(model.workCalls).toBe(1);
-    expect(model.presentationInputs).toHaveLength(1);
+  it("registers a caller-supplied harness profile under the bare openai key", () => {
+    // The caller's profile overrides must land in deepagents' registry under
+    // the bare "openai" key, since getModelIdentifier returns undefined for
+    // our ChatOpenAI instances (only `model` is set, not model_name/modelName).
+    createAgentFromRuntimeScaffold({
+      factoryName: "createScaffoldedAgent",
+      scaffold: createRuntimeScaffold(),
+      modelRuntime: createTestModelRuntime(),
+      guardrails: false,
+      profile: { systemPromptSuffix: "CALLER_PROFILE_MARKER_XYZ" },
+    });
+    const registry = (globalThis as Record<symbol, { profiles: Map<string, unknown> } | undefined>)[
+      Symbol.for("deepagents.harness-profiles.v1")
+    ];
+    const raw = registry?.profiles?.get("openai") as { systemPromptSuffix?: string } | undefined;
+    expect(raw?.systemPromptSuffix).toMatch(/CALLER_PROFILE_MARKER_XYZ/);
   });
 });

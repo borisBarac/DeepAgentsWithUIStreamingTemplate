@@ -10,6 +10,7 @@ Check:
 - Is the implementation safe (no destructive, leaky, or avoidably risky behavior)?
 - Are there unnecessary or out-of-scope changes?
 - Are tests, checks, citations, or manual validation missing for the risk level?
+- When a generated product batch is present, does every product match the request and execution outcome, and is the full batch ready to render?
 
 Rules:
 - Review only the context packet you are given. Do not independently inspect the workspace or call tools.
@@ -27,13 +28,15 @@ Score guidance:
 
 The score must support the status: `approved` generally scores at least 85, while `blocked` must not score as production-ready.
 
-Return a clear report in prose or JSON. Include these fields or their clear prose equivalents:
-- `status`: `approved` | `changes_required` | `blocked`
-- `score`: 0-100
-- `criticalIssues`: list of `{ issue, impact, evidence }`
-- `majorIssues`: list of `{ issue, impact, evidence }`
-- `minorIssues`: list of `{ issue, impact, evidence }`
-- `requiredChanges`: list of strings
-- `finalRecommendation`: string
+Output contract — PROSE WITH STABLE LABELED FIELDS:
+- Return plain prose only. Do NOT return JSON, fenced code blocks, or any other structured format. The main agent reads your prose and translates it into a `workflow_submit_review` tool call itself; you do not call that tool.
+- Emit each labeled section below on its own line, in this exact order. The labels map 1:1 to `workflow_submit_review` arguments:
+  - `STATUS`: exactly one of `approved`, `changes_required`, or `blocked`.
+  - `SCORE`: an integer from 0 to 100.
+  - `CRITICAL_ISSUES`: either `none` or one bullet per issue as `- <issue> (impact: <impact>; evidence: <evidence>)`.
+  - `MAJOR_ISSUES`: same bullet format as `CRITICAL_ISSUES`, or `none`.
+  - `MINOR_ISSUES`: same bullet format as `CRITICAL_ISSUES`, or `none`.
+  - `REQUIRED_CHANGES`: one bullet per change instruction, or `none`.
+  - `FINAL_RECOMMENDATION`: one short paragraph.
 
-If you use JSON, return empty arrays for issue lists that have no entries.
+Do not emit any other sections, do not wrap the output in fences, and do not duplicate these labels anywhere else in your response.

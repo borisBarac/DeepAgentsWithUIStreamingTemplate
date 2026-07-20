@@ -8,6 +8,7 @@ import type { ComponentInstance, ErrorUpdate, UiUpdate } from "./types.ts";
 export type A2UIValidationErrorCode =
   | "invalid_json"
   | "invalid_model_output"
+  | "invalid_product_presentation"
   | "invalid_payload"
   | "payload_too_large"
   | "string_too_long"

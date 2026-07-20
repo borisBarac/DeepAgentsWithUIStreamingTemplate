@@ -4,11 +4,64 @@ import { applyClarificationResult } from "./result.ts";
 import { createClarificationState, recordClarificationAnswers } from "./state.ts";
 
 describe("clarification result application", () => {
+  it("does not count a ready result as a clarification round", () => {
+    const state = applyClarificationResult(
+      createClarificationState("What is 2+2?", { maxRounds: 2 }),
+      {
+        requestKind: "products",
+        status: "ready_to_proceed",
+        readyToProceed: true,
+        questions: [],
+        missingInformation: [],
+        answeredInformation: [],
+        reasoningSummary: "The request is ready for execution.",
+        roundCount: 0,
+        maxRounds: 2,
+      },
+    );
+
+    expect(state.roundCount).toBe(0);
+    expect(state.status).toBe("ready_to_proceed");
+  });
+
+  it("does not count readiness after an answered question batch as another round", () => {
+    const firstRound = applyClarificationResult(
+      createClarificationState("Create a migration plan.", { maxRounds: 2 }),
+      {
+        requestKind: "products",
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "database", question: "Which database is being migrated?" }],
+        missingInformation: ["database"],
+        answeredInformation: [],
+        reasoningSummary: "The database changes the migration path.",
+        roundCount: 1,
+        maxRounds: 2,
+      },
+    );
+
+    const ready = applyClarificationResult(firstRound, {
+      requestKind: "products",
+      status: "ready_to_proceed",
+      readyToProceed: true,
+      questions: [],
+      missingInformation: [],
+      answeredInformation: [{ key: "database", value: "postgres" }],
+      reasoningSummary: "The request is ready for execution.",
+      roundCount: 1,
+      maxRounds: 2,
+    });
+
+    expect(ready.roundCount).toBe(1);
+    expect(ready.status).toBe("ready_to_proceed");
+  });
+
   it("limits each clarification round to a small question batch", () => {
     const state = createClarificationState("Plan the migration.", { maxRounds: 10 });
 
     expect(() =>
       applyClarificationResult(state, {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [
@@ -30,6 +83,7 @@ describe("clarification result application", () => {
     const firstRound = applyClarificationResult(
       createClarificationState("Create a migration plan.", { maxRounds: 10 }),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [{ id: "database", question: "Which database is being migrated?" }],
@@ -44,6 +98,7 @@ describe("clarification result application", () => {
     const secondRound = applyClarificationResult(
       recordClarificationAnswers(firstRound, [{ key: "database", value: "postgres" }]),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [{ id: "downtime", question: "Is any downtime acceptable?" }],
@@ -66,6 +121,7 @@ describe("clarification result application", () => {
     const state = applyClarificationResult(
       createClarificationState("Choose a deployment model.", { maxRounds: 10 }),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [
@@ -110,6 +166,7 @@ describe("clarification result application", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 2 }),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [{ id: "market", question: "Which market launches first?" }],
@@ -122,6 +179,7 @@ describe("clarification result application", () => {
     );
 
     const cappedState = applyClarificationResult(state, {
+      requestKind: "products",
       status: "needs_clarification",
       readyToProceed: false,
       questions: [{ id: "market", question: "Which market launches first?" }],
@@ -142,6 +200,7 @@ describe("clarification result application", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 2 }),
       {
+        requestKind: "products",
         status: "needs_clarification",
         readyToProceed: false,
         questions: [{ id: "market", question: "Which market launches first?" }],
@@ -154,6 +213,7 @@ describe("clarification result application", () => {
     );
 
     const cappedState = applyClarificationResult(state, {
+      requestKind: "products",
       status: "needs_clarification",
       readyToProceed: false,
       questions: [{ id: "market", question: "Which market launches first?" }],
@@ -172,6 +232,7 @@ describe("clarification result application", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 10 }),
       {
+        requestKind: "products",
         status: "blocked",
         readyToProceed: false,
         questions: [],
@@ -191,6 +252,7 @@ describe("clarification result application", () => {
     const state = applyClarificationResult(
       createClarificationState("Launch the product.", { maxRounds: 1 }),
       {
+        requestKind: "products",
         status: "blocked",
         readyToProceed: false,
         questions: [],

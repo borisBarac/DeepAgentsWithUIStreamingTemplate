@@ -1,16 +1,13 @@
-import type {
-  ClarificationResult,
-  ClarificationState,
-  ClarificationTriageClassifier,
-  ClarificationTriageDecision,
-} from "../clarification/index.ts";
-import type { PromptLoader } from "../prompts/index.ts";
+import type { ClarificationResult, ClarificationState } from "../clarification/index.ts";
+import type { QuestionUpdate, UiSpecUpdate } from "../generative-ui/index.ts";
 import type { ReviewReport } from "../review/index.ts";
+import type { ExistingProductSet, ProductBatch, ProductMode } from "./products.ts";
 
 export type WorkflowPhase =
   | "clarification"
   | "waiting_for_user"
   | "execution"
+  | "product_generation"
   | "review"
   | "revision"
   | "delivery_ready"
@@ -20,6 +17,7 @@ export const WORKFLOW_PHASES: ReadonlySet<WorkflowPhase> = new Set<WorkflowPhase
   "clarification",
   "waiting_for_user",
   "execution",
+  "product_generation",
   "review",
   "revision",
   "delivery_ready",
@@ -46,6 +44,11 @@ export type WorkflowState = {
   clarificationResult?: ClarificationResult;
   assumptions: string[];
   outcome?: WorkflowOutcomePacket;
+  existingProducts: ExistingProductSet | null;
+  productMode: ProductMode;
+  targetProductCount: number;
+  productGenerationEnabled: boolean;
+  generatedProducts?: ProductBatch;
   reviewHistory: ReviewReport[];
   revisionCount: number;
   controllerRetryCount: number;
@@ -54,18 +57,14 @@ export type WorkflowState = {
   lastFeedback?: string;
   completedSubagent?: WorkflowDecision["requiredSubagent"];
   /**
-   * The most recent user message that the triage classifier has already
-   * evaluated. Prevents redundant classifier calls within a single turn
-   * (the workflow controller's `beforeAgent` hook fires on every agent
-   * invocation; without this memo the same message would be re-classified
-   * on each round-trip).
+   * Deterministic UI emitted by the controller (mirrors
+   * clarificationResultToQuestionUpdates / productBatchToUiUpdate). Drained
+   * by the interaction-stream after the workflow submits a batch or
+   * clarification questions. Cleared via the `ui_drained` event so retries
+   * do not re-emit.
    */
-  lastTriageMessage?: string;
-  /**
-   * The most recent triage decision recorded for {@link lastTriageMessage}.
-   * Surfaced for transcript inspection and tests; not consulted by the reducer.
-   */
-  lastTriageDecision?: ClarificationTriageDecision;
+  pendingProductUi?: UiSpecUpdate;
+  pendingClarificationUi?: QuestionUpdate[];
 };
 
 export type WorkflowEvent =
@@ -73,8 +72,10 @@ export type WorkflowEvent =
   | { type: "clarification_completed"; result: ClarificationResult; state: ClarificationState }
   | { type: "user_replied" }
   | { type: "execution_completed"; outcome: WorkflowOutcomePacket }
-  | { type: "review_completed"; report: ReviewReport; maxRevisions: number }
-  | { type: "controller_feedback"; message: string; retryLimit: number };
+  | { type: "products_submitted"; batch: ProductBatch }
+  | { type: "review_completed"; report: ReviewReport; maxReviewCycles: number }
+  | { type: "controller_feedback"; message: string; retryLimit: number }
+  | { type: "ui_drained" };
 
 export type WorkflowDecision = {
   phase: WorkflowPhase;
@@ -82,11 +83,12 @@ export type WorkflowDecision = {
     | "clarify"
     | "wait_for_user"
     | "execute"
+    | "generate_products"
     | "review"
     | "revise"
     | "deliver"
     | "fail";
-  requiredSubagent?: "clarifier" | "review-agent";
+  requiredSubagent?: "clarifier" | "product-generator" | "review-agent";
   canFinalize: boolean;
   feedback?: string;
 };
@@ -94,27 +96,7 @@ export type WorkflowDecision = {
 export type WorkflowControllerOptions = {
   maxClarificationRounds: number;
   questionsPerRound: 1 | 2 | 3;
-  maxRevisions: number;
+  maxReviewCycles: number;
   controllerRetryLimit?: number;
-  /**
-   * Pre-clarifier triage gate. When provided AND `triageEnabled` is not `false`,
-   * each new entry into the `clarification` phase invokes the classifier once.
-   * If it returns `skip`, the phase transitions straight to `execution` with a
-   * synthetic `ready_to_proceed` result carrying
-   * {@link ClarificationSkipReason}`.triage_classifier`. Omit this field to
-   * preserve the legacy always-clarify behavior.
-   */
-  triageClassifier?: ClarificationTriageClassifier;
-  /**
-   * Defaults to `true` when a {@link triageClassifier} is present. Set to
-   * `false` to forcibly disable triage even when a classifier is supplied
-   * (useful for unit tests that pin legacy behavior).
-   */
-  triageEnabled?: boolean;
-  /**
-   * Optional prompt loader used to render the triage classifier prompt. When
-   * omitted, the controller falls back to the inline template in
-   * `clarification/triage.ts`.
-   */
-  promptLoader?: PromptLoader;
+  productGenerationEnabled?: boolean;
 };

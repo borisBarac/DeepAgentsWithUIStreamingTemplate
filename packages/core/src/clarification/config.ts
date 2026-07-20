@@ -2,7 +2,6 @@ import {
   DEFAULT_CLARIFICATION_MAX_ROUNDS,
   DEFAULT_CLARIFICATION_MODE,
   DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
-  DEFAULT_CLARIFICATION_TRIAGE_ENABLED,
 } from "./defaults.ts";
 import type { ClarificationConfig, ClarificationQuestionsPerRound } from "./types.ts";
 
@@ -11,7 +10,6 @@ const DEFAULT_CLARIFICATION_CONFIG_VALUE: ClarificationConfig = Object.freeze({
   maxRounds: DEFAULT_CLARIFICATION_MAX_ROUNDS,
   questionsPerRound: DEFAULT_CLARIFICATION_QUESTIONS_PER_ROUND,
   mode: DEFAULT_CLARIFICATION_MODE,
-  triage: { enabled: DEFAULT_CLARIFICATION_TRIAGE_ENABLED },
 });
 
 function assertPositiveInteger(value: number, fieldName: string): void {
@@ -36,14 +34,10 @@ export function createClarificationConfig(
   assertPositiveInteger(maxRounds, "maxRounds");
   assertQuestionsPerRound(questionsPerRound);
 
-  const triageOverrides = overrides.triage ?? {};
-  const triageEnabled = triageOverrides.enabled ?? DEFAULT_CLARIFICATION_TRIAGE_ENABLED;
-
   return {
     enabled: overrides.enabled ?? DEFAULT_CLARIFICATION_CONFIG_VALUE.enabled,
     maxRounds,
     questionsPerRound,
     mode: overrides.mode ?? DEFAULT_CLARIFICATION_CONFIG_VALUE.mode,
-    triage: { enabled: triageEnabled },
   };
 }
