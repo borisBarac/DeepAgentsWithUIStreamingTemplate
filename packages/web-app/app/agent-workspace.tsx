@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { type ReactNode, useMemo, useState } from "react";
+import { labelSubagent } from "../src/ui/subagent-labels.ts";
 import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
@@ -119,7 +120,7 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
                 </header>
               ) : (
                 <header>
-                  <strong>{item.subagentName}</strong>
+                  <strong>{labelSubagent(item.subagentName)}</strong>
                   <span>{item.event}</span>
                 </header>
               )}

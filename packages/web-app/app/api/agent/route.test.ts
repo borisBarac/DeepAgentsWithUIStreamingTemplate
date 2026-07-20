@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import {
   finalTextToMessageFallback,
   type ModelUiOutput,
+  type UiUpdate,
 } from "@deep-agent-template/core/interaction-stream";
 
 import { POST } from "./route.ts";
@@ -492,6 +493,75 @@ describe("POST", () => {
       { content: JSON.stringify(committedFirstOutput), role: "assistant" },
       { content: "second", role: "user" },
     ]);
+  });
+
+  it("replaces three products on the same session root and leaves them unchanged for questions", async () => {
+    const route = await import("./route.ts");
+    const products = (prefix: string) => ({
+      version: 1,
+      updates: [
+        {
+          type: "ui",
+          rootId: "products",
+          components: [
+            {
+              id: "products",
+              component: "ProductGrid",
+              children: [`${prefix}-1`, `${prefix}-2`, `${prefix}-3`],
+            },
+            ...[1, 2, 3].map((number) => ({
+              id: `${prefix}-${number}`,
+              component: "ProductCard",
+              title: `${prefix} ${number}`,
+              description: `Product ${number}`,
+            })),
+          ],
+        },
+      ],
+    });
+    const agent = createInspectableStructuredAgent([
+      products("first"),
+      products("second"),
+      { version: 1, updates: [{ type: "message", text: "Three products remain." }] },
+    ]);
+    route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
+
+    const first = await readNdjson(
+      await POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "Create products", sessionId: "product-session" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    );
+    const second = await readNdjson(
+      await POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "Make them brighter", sessionId: "product-session" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    );
+    const question = await readNdjson(
+      await POST(
+        new Request("http://localhost/api/agent", {
+          body: JSON.stringify({ message: "How many are there?", sessionId: "product-session" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      ),
+    );
+
+    for (const updates of [first, second]) {
+      const update = updates[0] as Extract<UiUpdate, { type: "ui" }>;
+      expect(update.rootId).toBe("products");
+      expect(
+        update.components.filter((component) => component.component === "ProductCard"),
+      ).toHaveLength(3);
+    }
+    expect(question).toEqual([{ type: "message", text: "Three products remain." }]);
   });
 
   it("persists typed structured-output failure state after the bounded retry", async () => {

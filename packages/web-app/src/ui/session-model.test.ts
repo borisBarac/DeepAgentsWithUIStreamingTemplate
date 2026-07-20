@@ -12,7 +12,7 @@ import {
   previewAssistantTextFromActivity,
   previewSubagentTextFromActivity,
   replaceAssistantMessage,
-} from "./use-agent-chat.ts";
+} from "./session-model.ts";
 
 describe("generative UI state", () => {
   it("does not apply an invalid UI line and reports its first issue", () => {
@@ -129,6 +129,43 @@ describe("generative UI state", () => {
 
     expect(appendUiSpec(appendUiSpec([], first, "spec-1"), complete, "spec-2")).toEqual([
       { id: "spec-1", spec: complete },
+    ]);
+  });
+
+  it("removes older product roots when a canonical product grid arrives", () => {
+    const legacy = {
+      root: "legacy",
+      elements: {
+        legacy: {
+          type: "ProductCard",
+          props: { title: "Old", description: "Old" },
+          children: [],
+        },
+      },
+    };
+    const unrelated = {
+      root: "note",
+      elements: { note: { type: "Text", props: { text: "Keep" }, children: [] } },
+    };
+    const canonical = {
+      root: "products",
+      elements: {
+        products: { type: "ProductGrid", props: {}, children: ["new"] },
+        new: { type: "ProductCard", props: { title: "New", description: "New" }, children: [] },
+      },
+    };
+    expect(
+      appendUiSpec(
+        [
+          { id: "legacy-id", spec: legacy },
+          { id: "note-id", spec: unrelated },
+        ],
+        canonical,
+        "canonical-id",
+      ),
+    ).toEqual([
+      { id: "note-id", spec: unrelated },
+      { id: "canonical-id", spec: canonical },
     ]);
   });
 });

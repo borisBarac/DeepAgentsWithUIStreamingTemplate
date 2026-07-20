@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cli": "bun --env-file=../../.env run scripts/agent-cli.ts",
+    "bin:cli": "bun run scripts/agent-cli.ts"
   },
   "dependencies": {
     "@deep-agent-template/core": "workspace:*",

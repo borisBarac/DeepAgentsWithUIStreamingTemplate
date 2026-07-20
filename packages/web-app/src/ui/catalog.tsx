@@ -32,10 +32,6 @@ export const uiCatalog = defineCatalog(schema, {
       props: permissiveProps,
       description: "A product concept card with title, description, and image prompt.",
     },
-    "product-card": {
-      props: permissiveProps,
-      description: "A scaffold-generated product card with optional generated image URL.",
-    },
     ProductGrid: {
       props: permissiveProps,
       description: "A responsive container for one or more product concept cards.",
@@ -81,12 +77,6 @@ type ProductCardProps = {
   description: string;
   imageAlt?: string;
   imagePrompt?: string;
-};
-type ProductCardStreamedProps = {
-  title: string;
-  description: string;
-  imageUrl?: string;
-  status?: "streaming" | "complete";
 };
 type ProductGridProps = { heading?: string };
 type StackProps = { direction?: "row" | "column"; gap?: "xs" | "sm" | "md" | "lg" };
@@ -173,30 +163,6 @@ export const registry: ComponentRegistry = {
           <h3>{props.title}</h3>
           <p>{props.description}</p>
           {children}
-        </div>
-      </article>
-    );
-  },
-  "product-card": ({ element }) => {
-    const props = getProps(element) as ProductCardStreamedProps;
-    return (
-      <article className="product-card">
-        {props.imageUrl ? (
-          <div
-            aria-label={props.title}
-            className="product-image product-image-real"
-            role="img"
-            style={{ backgroundImage: `url("${props.imageUrl}")` }}
-          />
-        ) : (
-          <div aria-label={props.title} className="product-image" role="img">
-            <span>{props.status === "streaming" ? "Image pending" : "Product concept"}</span>
-          </div>
-        )}
-        <div className="product-card-body">
-          <h3>{props.title}</h3>
-          <p>{props.description}</p>
-          {props.status ? <small>{props.status}</small> : null}
         </div>
       </article>
     );

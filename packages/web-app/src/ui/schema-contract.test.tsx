@@ -22,12 +22,6 @@ const validSamples: Record<string, Record<string, unknown>> = {
   Stack: { direction: "row", gap: "md" },
   Text: { text: "Hello", variant: "body" },
   TextInput: { label: "Email", name: "email", inputType: "email" },
-  "product-card": {
-    title: "Launch Map",
-    description: "A planning workspace for design teams.",
-    imageUrl: "https://example.com/launch-map.png",
-    status: "complete",
-  },
 };
 
 describe("schema contract", () => {
