@@ -132,7 +132,7 @@ describe("generative UI state", () => {
     ]);
   });
 
-  it("removes older product roots when a canonical product grid arrives", () => {
+  it("keeps product cards until a replacement grid arrives", () => {
     const legacy = {
       root: "legacy",
       elements: {
@@ -154,16 +154,17 @@ describe("generative UI state", () => {
         new: { type: "ProductCard", props: { title: "New", description: "New" }, children: [] },
       },
     };
-    expect(
-      appendUiSpec(
-        [
-          { id: "legacy-id", spec: legacy },
-          { id: "note-id", spec: unrelated },
-        ],
-        canonical,
-        "canonical-id",
-      ),
-    ).toEqual([
+    const current = [
+      { id: "legacy-id", spec: legacy },
+      { id: "note-id", spec: unrelated },
+    ];
+
+    expect(current).toEqual([
+      { id: "legacy-id", spec: legacy },
+      { id: "note-id", spec: unrelated },
+    ]);
+
+    expect(appendUiSpec(current, canonical, "canonical-id")).toEqual([
       { id: "note-id", spec: unrelated },
       { id: "canonical-id", spec: canonical },
     ]);

@@ -108,7 +108,6 @@ export function useAgentChat(): AgentChat {
 
     loadingRef.current = true;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
-    setUiSpecs([]);
     setError(null);
     setInput("");
     setLoading(true);
