@@ -29,12 +29,22 @@ type FakeStreamRun = {
 
 type FakeAgent = {
   streamEvents: (input?: {
-    messages: Array<{ content: string; role: "assistant" | "user" }>;
+    messages: Array<{
+      additional_kwargs?: Record<string, unknown>;
+      content: string;
+      role: "assistant" | "user";
+    }>;
   }) => Promise<FakeStreamRun>;
 };
 
 type InspectableAgent = FakeAgent & {
-  inputs: Array<{ messages: Array<{ content: string; role: "assistant" | "user" }> }>;
+  inputs: Array<{
+    messages: Array<{
+      additional_kwargs?: Record<string, unknown>;
+      content: string;
+      role: "assistant" | "user";
+    }>;
+  }>;
 };
 
 type Deferred<T> = {
@@ -491,6 +501,11 @@ describe("POST", () => {
     expect(agent.inputs[1]?.messages).toEqual([
       { content: "first", role: "user" },
       { content: JSON.stringify(committedFirstOutput), role: "assistant" },
+      {
+        additional_kwargs: { transient_context: true },
+        content: expect.stringContaining("# Current Context"),
+        role: "user",
+      },
       { content: "second", role: "user" },
     ]);
   });
@@ -778,6 +793,11 @@ describe("POST", () => {
 
     expect(agent.inputs[2]?.messages).toEqual([
       { content: "generate concepts", role: "user" },
+      {
+        additional_kwargs: { transient_context: true },
+        content: expect.stringContaining("# Current Context"),
+        role: "user",
+      },
       { content: "try again", role: "user" },
     ]);
   });

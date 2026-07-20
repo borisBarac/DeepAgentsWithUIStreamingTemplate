@@ -388,10 +388,16 @@ function buildHistory(
   structuredOutput: ModelUiOutput | null,
   requireStructuredOutput: boolean,
 ): unknown[] {
+  const persistentMessages = messages.filter(
+    (message) => message.additional_kwargs?.transient_context !== true,
+  );
   if (structuredOutput) {
-    return [...messages, assistantHistoryMessage(JSON.stringify(structuredOutput), attempt.result)];
+    return [
+      ...persistentMessages,
+      assistantHistoryMessage(JSON.stringify(structuredOutput), attempt.result),
+    ];
   }
-  if (requireStructuredOutput) return messages;
+  if (requireStructuredOutput) return persistentMessages;
   if (!hadRepair) {
     const outputMessages = attempt.result?.messages;
     if (Array.isArray(outputMessages) && outputMessages.length > 0) {
@@ -404,12 +410,15 @@ function buildHistory(
     .filter(Boolean)
     .join("\n");
   if (visibleText) {
-    return [...messages, assistantHistoryMessage(visibleText, attempt.result)];
+    return [...persistentMessages, assistantHistoryMessage(visibleText, attempt.result)];
   }
   if (!attempt.hasStructuredResponse && attempt.finalText.trim()) {
-    return [...messages, assistantHistoryMessage(attempt.finalText.trim(), attempt.result)];
+    return [
+      ...persistentMessages,
+      assistantHistoryMessage(attempt.finalText.trim(), attempt.result),
+    ];
   }
-  return messages;
+  return persistentMessages;
 }
 
 function assistantHistoryMessage(content: string, result: AgentResult | null): AgentInputMessage {

@@ -1,5 +1,6 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
+import currentPromptText from "../../prompts/current.md" with { type: "text" };
 import filesystemContractPromptText from "../../prompts/filesystem-contract.md" with {
   type: "text",
 };
@@ -14,6 +15,7 @@ import jsonRenderCatalogPromptText from "../../prompts/json-render-catalog.md" w
 import productGeneratorPromptText from "../../prompts/product-generator.md" with { type: "text" };
 import researcherPromptText from "../../prompts/researcher.md" with { type: "text" };
 import reviewAgentPromptText from "../../prompts/review-agent.md" with { type: "text" };
+import soulPromptText from "../../prompts/SOUL.md" with { type: "text" };
 import safetyClassificationPromptText from "../../prompts/safety-classification.md" with {
   type: "text",
 };
@@ -43,6 +45,21 @@ export interface PromptLoader {
 }
 
 export const FILESYSTEM_CONTRACT_PROMPT = filesystemContractPromptText.trim();
+export const SOUL_PROMPT = soulPromptText.trim();
+
+export function createCurrentContextPrompt(now = new Date()): string {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const currentDateTime = new Intl.DateTimeFormat("en-US", {
+    dateStyle: "full",
+    timeStyle: "long",
+    timeZone: timezone,
+  }).format(now);
+
+  return renderPromptTemplate(currentPromptText, {
+    currentDateTime: `${currentDateTime}; ${now.toISOString()}`,
+    timezone,
+  }).trim();
+}
 
 export function withFilesystemContract(prompt: string): string {
   const trimmedPrompt = prompt.trim();
@@ -78,35 +95,14 @@ export const CORE_PROMPT_TEMPLATES = definePromptTemplates({
   uiRepairFeedback: uiRepairFeedbackPromptText,
 });
 
-function getCurrentDateTimeContext(): { currentDateTime: string; timezone: string } {
-  const now = new Date();
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const humanReadable = new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "shortOffset",
-    timeZone: timezone,
-  }).format(now);
-
-  return {
-    currentDateTime: `${humanReadable}; ${now.toISOString()}`,
-    timezone,
-  };
-}
-
 export class MarkdownPromptLoader implements PromptLoader {
   getSupervisorPrompt(config: ClarificationOverrideOptions = {}): string {
     const clarification = createClarificationConfig(config);
 
     return withFilesystemContract(
-      renderPromptTemplate(supervisorPromptText, {
+      `${SOUL_PROMPT}\n\n${renderPromptTemplate(supervisorPromptText, {
         maxRounds: clarification.maxRounds,
-        ...getCurrentDateTimeContext(),
-      }),
+      })}`,
     );
   }
 
