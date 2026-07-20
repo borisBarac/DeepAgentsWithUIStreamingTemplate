@@ -109,7 +109,9 @@ export async function sendTurn(
 
   const write = deps.stdout?.write ?? ((text: string) => console.log(text));
 
-  write(`[session ${session.sessionId}] → ${payload}\n`);
+  if (format === "pretty") {
+    write(`[session ${session.sessionId}] → ${payload}\n`);
+  }
 
   await streamAgentUpdates(
     {

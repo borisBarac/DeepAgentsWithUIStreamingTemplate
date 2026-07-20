@@ -95,9 +95,11 @@ export class SessionState {
         }
       }
       const ids = new Set(this.openQuestionIds);
-      this.openQuestionIds = new Set();
       const composed = formatQuestionAnswers(this.messages, answers, ids);
-      if (composed) return composed;
+      if (composed) {
+        this.openQuestionIds = new Set([...this.openQuestionIds].filter((id) => !answers.has(id)));
+        return composed;
+      }
     }
     return userText;
   }
