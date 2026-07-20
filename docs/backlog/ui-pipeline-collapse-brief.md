@@ -11,7 +11,7 @@ The UI pipeline now has explicit, narrow ownership:
 - `packages/core/catalog/catalog.json` is the source of truth for component names, prop JSON Schemas, and limits.
 - `packages/core/schemas/envelope.json` owns the catalogue-agnostic update envelope.
 - UI updates use a flat `ComponentInstance[]` wire format: structural `id`, `component`, optional `children`, and top-level component props.
-- Structural `id` identifies a component instance. It is not a `product-card` prop.
+- Structural `id` identifies a component instance. It is not a `ProductCard` prop.
 - The model-facing catalogue text is generated from `catalog.json`.
 - The server compiles the envelope and component schemas with Ajv 2020-12, applies payload and graph checks, and routes emits through strict `safeEmit`.
 - The browser uses a hand-rolled validator to avoid bundling Ajv while checking the same envelope, catalogue props, limits, and graph invariants.

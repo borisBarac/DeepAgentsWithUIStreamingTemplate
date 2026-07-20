@@ -32,7 +32,7 @@ A `type: "ui"` update carries a flat `components` array and an optional `rootId`
     },
     {
       "id": "product-1",
-      "component": "product-card",
+      "component": "ProductCard",
       "title": "Launch Map",
       "description": "A planning workspace."
     }
@@ -40,7 +40,7 @@ A `type: "ui"` update carries a flat `components` array and an optional `rootId`
 }
 ```
 
-Each `ComponentInstance` has structural fields `id`, `component`, and optional `children`; component props are the remaining top-level fields. `id` identifies the instance and is not a `product-card` prop. IDs must be unique. Child IDs must resolve, the graph must be acyclic, and every component must be reachable from `rootId` (or the first component when `rootId` is omitted).
+Each `ComponentInstance` has structural fields `id`, `component`, and optional `children`; component props are the remaining top-level fields. `id` identifies the instance and is not a `ProductCard` prop. IDs must be unique. Child IDs must resolve, the graph must be acyclic, and every component must be reachable from `rootId` (or the first component when `rootId` is omitted).
 
 The wire format does not use json-render's `{ root, elements }` shape. `packages/web-app/src/ui/spec-adapter.ts` performs that conversion only at the renderer boundary, keeping json-render details out of the protocol.
 
@@ -62,12 +62,13 @@ The old contract-based validator, nested spec contract, product batch, and produ
 | `Button` | Runs a local UI action. | `label`, optional `action` |
 | `Card` | Groups child content in a bordered container. | Optional `title` |
 | `ImagePlaceholder` | Shows an image description until an image exists. | Optional `alt`, optional `prompt` |
-| `ProductCard` | Shows a product in a model-authored layout. | `title`, `description`, optional `imageAlt`, optional `imagePrompt` |
+| `ProductCard` | Shows a product in a model-authored layout. | `title`, `description`, optional `imagePrompt` |
 | `ProductGrid` | Lays out one or more product cards. | Optional `heading` |
 | `Stack` | Lays out children in a row or column. | Optional `direction`, optional `gap` |
 | `Text` | Shows text with a fixed visual style. | `text`, optional `variant` |
 | `TextInput` | Stores a text, email, or password value in form data. | `label`, `name`, optional `placeholder`, optional `inputType` |
-| `product-card` | Shows a product result in the flat A2UI stream. | `title`, `description`, optional `imageUrl`, optional `status` |
+
+The agent is a product design system: successful delivery always renders one `ProductGrid` containing only reviewed `ProductCard` components.
 
 `Stack.direction` accepts `row` or `column`. `Stack.gap` accepts `xs`, `sm`, `md`, or `lg`. `Text.variant` accepts `title`, `body`, `muted`, or `caption`. `TextInput.inputType` accepts `text`, `email`, or `password`.
 

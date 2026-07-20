@@ -11,7 +11,7 @@ This complements the unit coverage in `packages/core/src/generative-ui/contract.
 - Targeted code path:
   - `validateStreamingSpec` / `diagnoseElement` → `unknown_component` issue with path `elements.<key>.type` (`packages/core/src/generative-ui/contract.ts:160`, `:229`).
   - `runInteraction` repair loop (`packages/core/src/interaction-stream/index.ts:189`) → `buildRepairFeedback` (`:296`) → one retry → `UNRENDERABLE_UI_MESSAGE` fallback (`:76`).
-- Trigger strategy (explicit instruction): the user prompt directs the agent to emit its **first** `ui` NDJSON line using a component type that is deliberately absent from the core catalog (e.g. `"Carousel"`). The core `catalogPrompt` advertises only `Button, Card, ImagePlaceholder, ProductCard, ProductGrid, Stack, Text, TextInput, product-card`, so the off-catalog type is guaranteed to reach `diagnoseElement`.
+- Trigger strategy (explicit instruction): the user prompt directs the agent to emit its **first** `ui` NDJSON line using a component type that is deliberately absent from the core catalog (e.g. `"Carousel"`). The core `catalogPrompt` advertises only `Button, Card, ImagePlaceholder, ProductCard, ProductGrid, Stack, Text, TextInput`, so the off-catalog type is guaranteed to reach `diagnoseElement`.
 
 ## New file
 
