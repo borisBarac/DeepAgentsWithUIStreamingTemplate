@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import type { Client, Run } from "langsmith";
 
 import {
+  __resetClientCacheForTest,
   buildSubagentFilter,
   getLangSmithClient,
   LC_AGENT_NAME_METADATA_KEY,
   listRunsBySubagent,
   listTracesBySubagent,
   type SubagentQueryOptions,
-  __resetClientCacheForTest,
 } from "./query.ts";
 
 const langSmithEnvKeys = [
