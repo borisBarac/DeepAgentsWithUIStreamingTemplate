@@ -7,7 +7,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 ## What is scaffolded
 
 - A supervisor-first agent factory: `createScaffoldedAgent`
-- Four default specialist subagents: `clarifier`, `researcher`, `analyst`, `review-agent`
+- Six default specialist subagents: `clarifier`, `researcher`, `analyst`, `review-agent`, `product-generator` (when generative UI is enabled), `image-designer` (when image generation service is provided)
 - Named specialist delegation, with the `general-purpose` fallback subagent disabled by default
 - A mandatory clarification-first intake gate for new supervisor-path requests
 - Two default preflight guardrails: `safety` and `taskScope`

@@ -1,8 +1,16 @@
 # Deep Agent Template
 
-Production-grade monorepo template for building autonomous AI agents with a **supervisor-specialist architecture**. Orchestrates multiple specialist LLM sub-agents under a supervisor, with a workflow engine, guardrails, memory system, generative UI pipeline, and a Next.js web interface.
+Ship a production-grade AI agent product this weekend — not next quarter.
 
-Every agent turn produces or edits products rendered as a catalog UI. Not a generic chatbot.
+This template hands you a fully wired, battle-ready agent system: a supervisor that orchestrates specialist sub-agents, a clarification-first intake, safety guardrails, durable memory, a Python sandbox, image generation, and a generative UI that renders real products your users can interact with. One `bun install` and you're running a multi-agent web app — not another blank chatbot scaffold.
+
+You should use **Deep Agent Template** because:
+
+1. **It kills the multi-agent plumbing tax.** No more hand-rolling supervisor loops, delegation logic, review cycles, or retry/auto-repair flows — a single `createScaffoldedAgent()` call returns a fully wired supervisor-specialist system with clarifier, researcher, coder, reviewer, and product-generator roles already talking to each other.
+2. **It replaces weeks of glue code with one clone.** Guardrails, clarification gates, durable memory, LangSmith tracing, a Docker Python sandbox, image generation, a validated UI catalogue, an NDJSON streaming protocol, a Next.js workspace with chat + preview + debug panes — all pre-integrated and wired end-to-end, instead of you stitching 12 libraries together.
+3. **So you go from idea to live agent product in a weekend.** Configure your LLM key, drop in your domain prompts and catalogue components, and ship a real, observable, safe agent that produces rendered UI products — not a weekend lost to boilerplate.
+
+Every agent turn produces or edits products rendered as an interactive catalog UI. This is a template for shipping agent products, not a generic chatbot starter.
 
 ## Architecture
 
@@ -11,7 +19,7 @@ User Request → Gatekeeper (guardrails) → Clarification Gate
   → [Research | Code | Finalize] → Reviewer → [Approved | Revise loop] → Deliver
 ```
 
-Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready`
+Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`)
 
 ### Monorepo (4 packages)
 
@@ -75,7 +83,7 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - Strict 128 KiB payload limit, max 100 components per update
 
 ### Workflow Controller (State Machine)
-- 8-phase state machine driving the agent lifecycle
+- State machine (8 phases including `error`) driving the agent lifecycle
 - Deterministic UI emission for clarification questions and product batches
 - Max clarification rounds, max review cycles, controller retry limits
 
