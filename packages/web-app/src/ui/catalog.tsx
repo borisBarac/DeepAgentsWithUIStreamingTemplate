@@ -4,7 +4,7 @@ import type { Spec, UIElement } from "@json-render/core";
 import { defineCatalog } from "@json-render/core";
 import type { ComponentRegistry } from "@json-render/react";
 import { JSONUIProvider, Renderer, schema, useDataBinding } from "@json-render/react";
-import { createContext, useContext, useState } from "react";
+import { createContext, type KeyboardEvent, useContext, useState } from "react";
 import { z } from "zod";
 
 // Permissive Zod for every component's props. The authoritative validator is
@@ -72,7 +72,7 @@ function getProps<P>(element: UIElement<string, P>): P {
 type ButtonProps = { label: string; action?: string };
 type CardProps = { title?: string };
 type ImagePlaceholderProps = { alt?: string; prompt?: string };
-type ProductCardProps = {
+export type ProductCardProps = {
   title: string;
   description: string;
   imageAlt?: string;
@@ -120,6 +120,16 @@ const PreviewActionContext = createContext<PreviewActionFeedback>({
 export type { PreviewActionFeedback };
 export { PreviewActionContext };
 
+type ProductRequestHandler = (
+  product: ProductCardProps,
+  rect: DOMRect,
+  source: HTMLElement,
+) => void;
+
+const ProductRequestContext = createContext<ProductRequestHandler>(() => undefined);
+
+export { ProductRequestContext };
+
 export const registry: ComponentRegistry = {
   Button: ({ element }) => {
     const props = getProps(element) as ButtonProps;
@@ -157,8 +167,34 @@ export const registry: ComponentRegistry = {
   },
   ProductCard: ({ element, children }) => {
     const props = getProps(element) as ProductCardProps;
+    const onProductClick = useContext(ProductRequestContext);
+    const handleActivate = (rect: DOMRect, source: HTMLElement) =>
+      onProductClick(props, rect, source);
     return (
-      <article className="product-card">
+      // biome-ignore lint/a11y/useSemanticElements: card may render interactive children, so a real <button> would nest invalid interactive elements
+      <div
+        className="product-card"
+        onClick={(event) => {
+          const interactive = (event.target as HTMLElement).closest(
+            'button, a, input, textarea, select, [role="button"]',
+          );
+          if (interactive && interactive !== event.currentTarget) {
+            return;
+          }
+          handleActivate(event.currentTarget.getBoundingClientRect(), event.currentTarget);
+        }}
+        onKeyDown={(event: KeyboardEvent<HTMLElement>) => {
+          if (event.target !== event.currentTarget) {
+            return;
+          }
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleActivate(event.currentTarget.getBoundingClientRect(), event.currentTarget);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+      >
         <div aria-label={props.imageAlt ?? props.title} className="product-image" role="img">
           <span>{props.imagePrompt ?? props.imageAlt ?? "Image concept"}</span>
         </div>
@@ -167,7 +203,7 @@ export const registry: ComponentRegistry = {
           <p>{props.description}</p>
           {children}
         </div>
-      </article>
+      </div>
     );
   },
   ProductGrid: ({ element, children }) => {
@@ -217,7 +253,15 @@ export const registry: ComponentRegistry = {
 
 const INITIAL_DATA: Record<string, unknown> = {};
 
-export function JsonRenderPreview({ loading, spec }: { loading: boolean; spec: Spec | null }) {
+export function JsonRenderPreview({
+  loading,
+  onProductClick,
+  spec,
+}: {
+  loading: boolean;
+  onProductClick?: (product: ProductCardProps, rect: DOMRect, source: HTMLElement) => void;
+  spec: Spec | null;
+}) {
   const [message, setMessage] = useState<string | null>(null);
 
   return (
@@ -227,22 +271,24 @@ export function JsonRenderPreview({ loading, spec }: { loading: boolean; spec: S
         runAction: (actionName) => setMessage(getActionFeedbackMessage(actionName)),
       }}
     >
-      <JSONUIProvider initialData={INITIAL_DATA} registry={registry}>
-        <form
-          className="jr-preview-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            setMessage(getActionFeedbackMessage("submit_demo"));
-          }}
-        >
-          <Renderer loading={loading} registry={registry} spec={spec} />
-        </form>
-        {message ? (
-          <p aria-live="polite" className="jr-action-feedback">
-            {message}
-          </p>
-        ) : null}
-      </JSONUIProvider>
+      <ProductRequestContext.Provider value={onProductClick ?? (() => undefined)}>
+        <JSONUIProvider initialData={INITIAL_DATA} registry={registry}>
+          <form
+            className="jr-preview-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setMessage(getActionFeedbackMessage("submit_demo"));
+            }}
+          >
+            <Renderer loading={loading} registry={registry} spec={spec} />
+          </form>
+          {message ? (
+            <p aria-live="polite" className="jr-action-feedback">
+              {message}
+            </p>
+          ) : null}
+        </JSONUIProvider>
+      </ProductRequestContext.Provider>
     </PreviewActionContext.Provider>
   );
 }

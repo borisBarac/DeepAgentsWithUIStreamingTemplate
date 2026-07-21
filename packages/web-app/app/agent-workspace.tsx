@@ -1,7 +1,18 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import type { ProductCardProps } from "../src/ui/catalog.tsx";
 import { labelSubagent } from "../src/ui/subagent-labels.ts";
 import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-chat.ts";
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
@@ -163,6 +174,115 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
   );
 }
 
+function ProductRequestPopover({
+  loading,
+  product,
+  rect,
+  onClose,
+  onSubmit,
+}: {
+  loading: boolean;
+  product: ProductCardProps;
+  rect: DOMRect;
+  onClose: () => void;
+  onSubmit: (product: ProductCardProps, userText: string) => void;
+}) {
+  const [value, setValue] = useState("");
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number }>(() => ({
+    left: Math.min(Math.max(rect.left, 8), window.innerWidth - 328),
+    top: rect.bottom + 8,
+  }));
+
+  useLayoutEffect(() => {
+    const node = popoverRef.current;
+    if (!node) {
+      return;
+    }
+    const popoverRect = node.getBoundingClientRect();
+    const gap = 8;
+    let top = rect.bottom + gap;
+    if (top + popoverRect.height > window.innerHeight - gap) {
+      const above = rect.top - popoverRect.height - gap;
+      if (above >= gap) {
+        top = above;
+      } else {
+        top = Math.max(gap, window.innerHeight - popoverRect.height - gap);
+      }
+    }
+    const left = Math.min(Math.max(rect.left, gap), window.innerWidth - popoverRect.width - gap);
+    setPosition({ top, left });
+  }, [rect]);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  return (
+    <>
+      <button
+        aria-label="Close request changes"
+        className="product-request-backdrop"
+        onClick={onClose}
+        tabIndex={-1}
+        type="button"
+      />
+      <div
+        aria-label={`Request changes to ${product.title}`}
+        className="product-request-popover"
+        ref={popoverRef}
+        role="dialog"
+        style={{ left: position.left, top: position.top }}
+      >
+        <form
+          onSubmit={(event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            onSubmit(product, value);
+            setValue("");
+          }}
+        >
+          <p className="product-request-heading">
+            Request changes to <strong>{product.title}</strong>
+          </p>
+          <textarea
+            aria-label="Requested changes"
+            disabled={loading}
+            name="product-request"
+            onChange={(event) => setValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                onClose();
+                return;
+              }
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            placeholder="Describe the changes you want"
+            ref={textareaRef}
+            rows={3}
+            value={value}
+          />
+          <div className="product-request-actions">
+            <button onClick={onClose} type="button">
+              Cancel
+            </button>
+            <button disabled={loading || !value.trim()} type="submit">
+              Send
+            </button>
+          </div>
+          <p className="product-request-hint">
+            <kbd>{SHORTCUT_KEY}</kbd>+<kbd>Enter</kbd> to send · <kbd>Esc</kbd> to close
+          </p>
+        </form>
+      </div>
+    </>
+  );
+}
+
 export function AgentWorkspace() {
   const {
     visibleMessages,
@@ -175,7 +295,60 @@ export function AgentWorkspace() {
     setInput,
     submitAnswer,
     submitMessage,
+    submitText,
   } = useAgentChat();
+  const [requestTarget, setRequestTarget] = useState<{
+    product: ProductCardProps;
+    rect: DOMRect;
+  } | null>(null);
+  const sourceCardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!requestTarget) {
+      return;
+    }
+    return () => {
+      sourceCardRef.current?.focus();
+      sourceCardRef.current = null;
+    };
+  }, [requestTarget]);
+
+  useEffect(() => {
+    if (!requestTarget) {
+      return;
+    }
+    const close = () => setRequestTarget(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [requestTarget]);
+
+  const handleProductClick = useCallback(
+    (product: ProductCardProps, rect: DOMRect, source: HTMLElement) => {
+      sourceCardRef.current = source;
+      setRequestTarget({ product, rect });
+    },
+    [],
+  );
+
+  const closeRequestPopover = useCallback(() => setRequestTarget(null), []);
+
+  const submitProductRequest = useCallback(
+    (product: ProductCardProps, userText: string) => {
+      const trimmed = userText.trim();
+      if (!trimmed) {
+        return;
+      }
+      const message = `Requesting changes to "${product.title}":\n${product.description}\n\n${trimmed}`;
+      void submitText(message);
+      setRequestTarget(null);
+    },
+    [submitText],
+  );
+
   const {
     bottomAnchorRef,
     containerRef: messageListRef,
@@ -279,7 +452,12 @@ export function AgentWorkspace() {
         <div className="preview-surface">
           {uiSpecs.length > 0 ? (
             uiSpecs.map(({ id, spec }) => (
-              <JsonRenderPreview key={id} loading={loading} spec={spec} />
+              <JsonRenderPreview
+                key={id}
+                loading={loading}
+                onProductClick={handleProductClick}
+                spec={spec}
+              />
             ))
           ) : (
             <div className="preview-empty">Product details appear here.</div>
@@ -288,6 +466,19 @@ export function AgentWorkspace() {
       </section>
 
       <AgentActivityPanel activity={agentActivity} />
+
+      {requestTarget
+        ? createPortal(
+            <ProductRequestPopover
+              loading={loading}
+              product={requestTarget.product}
+              rect={requestTarget.rect}
+              onClose={closeRequestPopover}
+              onSubmit={submitProductRequest}
+            />,
+            document.body,
+          )
+        : null}
     </main>
   );
 }

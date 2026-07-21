@@ -799,6 +799,7 @@ textarea {
   box-shadow: var(--elevation-1);
   contain-intrinsic-size: auto 320px;
   content-visibility: auto;
+  cursor: pointer;
   display: grid;
   min-width: 0;
   transition: box-shadow var(--duration-base) var(--easing-standard);
@@ -806,6 +807,11 @@ textarea {
 
 .product-card:hover {
   box-shadow: var(--elevation-2);
+}
+
+.product-card:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
 }
 
 .product-image {
@@ -873,6 +879,82 @@ textarea {
   font-weight: var(--text-label-weight);
   letter-spacing: var(--text-label-spacing);
   text-transform: uppercase;
+}
+
+/* ===========================================================
+   Product request popover (click-to-request-changes on a card)
+   =========================================================== */
+.product-request-backdrop {
+  background: transparent;
+  border: 0;
+  cursor: default;
+  height: 100vh;
+  inset: 0;
+  padding: 0;
+  position: fixed;
+  width: 100vw;
+  z-index: 60;
+}
+
+.product-request-popover {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-2);
+  max-width: min(420px, calc(100vw - 16px));
+  padding: var(--space-3);
+  position: fixed;
+  width: 320px;
+  z-index: 61;
+}
+
+.product-request-heading {
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption-line);
+  margin: 0 0 var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.product-request-heading strong {
+  color: var(--ink);
+  font-size: var(--text-body);
+  font-weight: 700;
+}
+
+.product-request-popover form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.product-request-popover textarea {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--text-body);
+  line-height: var(--text-body-line);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  width: 100%;
+}
+
+.product-request-popover textarea:focus-visible {
+  border-color: var(--brand-accent);
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 1px;
+}
+
+.product-request-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.product-request-hint {
+  color: var(--ink-muted);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption-line);
+  margin: 0;
 }
 
 /* ===========================================================

@@ -59,6 +59,7 @@ export type AgentChat = {
   setInput: (value: string) => void;
   submitAnswer: (questionId: string, answer: string) => void;
   submitMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  submitText: (rawMessage: string) => Promise<void>;
 };
 
 export function useAgentChat(): AgentChat {
@@ -293,5 +294,6 @@ export function useAgentChat(): AgentChat {
     setInput,
     submitAnswer,
     submitMessage,
+    submitText,
   };
 }
