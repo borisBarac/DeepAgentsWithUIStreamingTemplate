@@ -16,10 +16,37 @@ const JsonRenderPreview = dynamic(
 );
 
 const PROMPT_STARTERS = [
-  "Map the key agent workflows for a customer onboarding assistant.",
-  "Prototype a lightweight planning tool for design teams.",
-  "Create a qualification flow for an AI research concierge.",
+  "Design a modular desk lamp with swappable light modules.",
+  "Sketch a habit-tracking app focused on streak recovery.",
+  "Prototype a compact smart-garden sensor for windowsills.",
 ] as const;
+
+const SHORTCUT_KEY =
+  typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+    ? "\u2318"
+    : "Ctrl";
+
+function JumpToLatestButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="jump-to-latest" onClick={onClick} type="button">
+      <svg
+        aria-hidden="true"
+        fill="none"
+        height="16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2.5"
+        viewBox="0 0 24 24"
+        width="16"
+      >
+        <path d="M12 4v16" />
+        <path d="m6 14 6 6 6-6" />
+      </svg>
+      Latest
+    </button>
+  );
+}
 
 function QuestionControls({
   disabled,
@@ -131,11 +158,7 @@ function AgentActivityPanel({ activity }: { activity: DisplayAgentActivity[] }) 
         )}
         <div aria-hidden="true" ref={activityAnchorRef} />
       </div>
-      {showDebugJump ? (
-        <button className="jump-to-latest" onClick={jumpDebugToLatest} type="button">
-          ↓ Latest
-        </button>
-      ) : null}
+      {showDebugJump ? <JumpToLatestButton onClick={() => jumpDebugToLatest?.()} /> : null}
     </section>
   );
 }
@@ -167,21 +190,23 @@ export function AgentWorkspace() {
     <main className="app-shell">
       <section className="chat-pane" aria-label="Chat">
         <header className="app-header">
-          <p>Deep Agent Template</p>
-          <h1>Agent interaction workspace</h1>
-          <fieldset className="prompt-starters">
-            <legend className="sr-only">Prompt starters</legend>
-            {PROMPT_STARTERS.map((starter) => (
-              <button
-                disabled={loading}
-                key={starter}
-                type="button"
-                onClick={() => setInput(starter)}
-              >
-                {starter}
-              </button>
-            ))}
-          </fieldset>
+          <p>Product Studio</p>
+          <h1>Design a product with the agent</h1>
+          {visibleMessages.length === 0 ? (
+            <fieldset className="prompt-starters">
+              <legend className="sr-only">Prompt starters</legend>
+              {PROMPT_STARTERS.map((starter) => (
+                <button
+                  disabled={loading}
+                  key={starter}
+                  type="button"
+                  onClick={() => setInput(starter)}
+                >
+                  {starter}
+                </button>
+              ))}
+            </fieldset>
+          ) : null}
         </header>
 
         <div className="message-list-wrap">
@@ -213,11 +238,7 @@ export function AgentWorkspace() {
             <div aria-hidden="true" className="message-list-anchor" ref={bottomAnchorRef} />
           </div>
 
-          {showChatJump ? (
-            <button className="jump-to-latest" onClick={jumpChatToLatest} type="button">
-              ↓ Latest
-            </button>
-          ) : null}
+          {showChatJump ? <JumpToLatestButton onClick={() => jumpChatToLatest?.()} /> : null}
         </div>
 
         <form className="composer" onSubmit={submitMessage}>
@@ -225,8 +246,14 @@ export function AgentWorkspace() {
             aria-label="Message"
             name="message"
             onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
             placeholder="Describe the product you want to create"
-            rows={3}
+            rows={1}
             value={input}
           />
           <div className="composer-actions">
@@ -238,6 +265,9 @@ export function AgentWorkspace() {
               Send
             </button>
           </div>
+          <p className="composer-hint">
+            <kbd>{SHORTCUT_KEY}</kbd>+<kbd>Enter</kbd> to send
+          </p>
         </form>
       </section>
 

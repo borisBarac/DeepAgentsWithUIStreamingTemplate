@@ -21,7 +21,9 @@
     "prepare": "husky",
     "web-app": "bun --env-file=.env run --filter @deep-agent-template/web-app dev",
     "agent-cli": "bun --env-file=.env packages/web-app/scripts/agent-cli.ts",
-    "agent-cli:pipe": "bun run --filter @deep-agent-template/web-app bin:cli"
+    "agent-cli:pipe": "bun run --filter @deep-agent-template/web-app bin:cli",
+    "storybook": "bun run --filter @deep-agent-template/web-app storybook",
+    "build-storybook": "bun run --filter @deep-agent-template/web-app build-storybook"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.9.0",

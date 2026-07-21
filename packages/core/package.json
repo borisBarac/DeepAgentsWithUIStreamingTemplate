@@ -36,5 +36,17 @@
     "langchain": "^1.4.5",
     "langsmith": "^0.7.7",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@deep-agent-template/web-app": "workspace:*",
+    "@json-render/react": "^0.4.0",
+    "@storybook/addon-a11y": "^10.5.3",
+    "@storybook/addon-docs": "^10.5.3",
+    "@storybook/nextjs": "^10.5.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "storybook": "^10.5.3"
   }
 }

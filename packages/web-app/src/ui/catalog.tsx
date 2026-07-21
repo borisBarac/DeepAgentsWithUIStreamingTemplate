@@ -117,6 +117,9 @@ const PreviewActionContext = createContext<PreviewActionFeedback>({
   runAction: () => undefined,
 });
 
+export type { PreviewActionFeedback };
+export { PreviewActionContext };
+
 export const registry: ComponentRegistry = {
   Button: ({ element }) => {
     const props = getProps(element) as ButtonProps;
