@@ -3,6 +3,8 @@ import type { BaseStore } from "@langchain/langgraph";
 import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 import { z } from "zod";
 
+import { createCasualScopeGuardrail } from "../guardrails/casual-scope.ts";
+import type { StructuredTaskScopeModel, TaskScopeClassifier } from "../guardrails/types.ts";
 import { extractLatestProductSet } from "../workflow/products.ts";
 
 export const productGateDecisionSchema = z
@@ -13,10 +15,6 @@ export const productGateDecisionSchema = z
   .transform((value) => ({ route: value.route ?? value.destination ?? "product" }));
 type ProductGateDecision = { route: "casual" | "product" };
 
-type ProductGateClassifier = {
-  invoke(input: unknown): Promise<ProductGateDecision>;
-};
-
 type WorkflowStateReader = {
   hasWorkflowState(id: string, store?: BaseStore): Promise<boolean>;
 };
@@ -24,20 +22,16 @@ type WorkflowStateReader = {
 type ProductGateOptions = {
   mainAgent: DeepAgent;
   casualModel: CreateDeepAgentParams["model"];
-  classifierModel: {
-    withStructuredOutput(
-      schema: typeof productGateDecisionSchema,
-      options: { method: "jsonMode" },
-    ): ProductGateClassifier;
-  };
+  classifierModel: StructuredTaskScopeModel;
   workflowController?: WorkflowStateReader;
   stateStore?: BaseStore;
   casualAgent?: DeepAgent;
 };
 
 const CASUAL_SYSTEM_PROMPT = `You are a concise conversational assistant.
-Answer greetings, small talk, and general questions directly.
-Do not start, describe, or imitate the product workflow.`;
+Answer greetings, small talk, and brief, simple questions directly.
+Do not start, describe, or imitate the product workflow.
+If asked to perform a task or answer in depth, decline and explain that this system designs and builds product concepts.`;
 
 const ROUTER_SYSTEM_PROMPT = `Return JSON only. The JSON must have a single key "route" with value "casual" or "product".
 Route the latest user message to "product" when it asks to create, change, review, plan, research, or discuss a product or product idea.
@@ -82,7 +76,7 @@ function latestUserText(messages: readonly unknown[]): string {
 async function shouldUseMainAgent(
   input: unknown,
   config: unknown,
-  classifier: ProductGateClassifier,
+  classifier: TaskScopeClassifier,
   workflowController?: WorkflowStateReader,
   stateStore?: BaseStore,
 ): Promise<boolean> {
@@ -94,10 +88,11 @@ async function shouldUseMainAgent(
   const request = latestUserText(messages);
   if (!request) return true;
   try {
-    const decision = await classifier.invoke([
+    const raw = await classifier.invoke([
       { role: "system", content: ROUTER_SYSTEM_PROMPT },
       { role: "user", content: request },
     ]);
+    const decision: ProductGateDecision = productGateDecisionSchema.parse(raw);
     return decision.route !== "casual";
   } catch {
     return true;
@@ -112,6 +107,7 @@ export function createProductGateAgent(options: ProductGateOptions): DeepAgent {
       model: options.casualModel,
       systemPrompt: CASUAL_SYSTEM_PROMPT,
       subagents: [],
+      middleware: [createCasualScopeGuardrail({ model: options.classifierModel })],
     });
   const classifier = options.classifierModel.withStructuredOutput(productGateDecisionSchema, {
     method: "jsonMode",

@@ -1,4 +1,7 @@
 import analystPromptText from "../../prompts/analyst.md" with { type: "text" };
+import casualScopeClassificationPromptText from "../../prompts/casual-scope-classification.md" with {
+  type: "text",
+};
 import clarifierPromptText from "../../prompts/clarifier.md" with { type: "text" };
 import currentPromptText from "../../prompts/current.md" with { type: "text" };
 import filesystemContractPromptText from "../../prompts/filesystem-contract.md" with {
@@ -86,6 +89,7 @@ function definePromptTemplates<const T extends Readonly<Record<string, string>>>
 }
 
 export const CORE_PROMPT_TEMPLATES = definePromptTemplates({
+  casualScopeClassification: casualScopeClassificationPromptText,
   generativeUiJsonObject: generativeUiJsonObjectPromptText,
   jsonRenderCatalog: jsonRenderCatalogPromptText,
   safetyClassification: safetyClassificationPromptText,
