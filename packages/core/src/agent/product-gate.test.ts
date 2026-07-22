@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { HumanMessage } from "@langchain/core/messages";
 import type { DeepAgent } from "deepagents";
 
-import { createProductGateAgent } from "./product-gate.ts";
+import { createProductGateAgent, productGateDecisionSchema } from "./product-gate.ts";
 
 function fakeAgent(label: string, calls: string[]): DeepAgent {
   return {
@@ -23,6 +23,18 @@ function classifierModel(route: "casual" | "product", calls: string[]) {
       invoke: async () => {
         calls.push("classifier");
         return { route };
+      },
+    }),
+  } as never;
+}
+
+function classifierModelRaw(raw: unknown, calls: string[]) {
+  return {
+    withStructuredOutput: () => ({
+      invoke: async () => {
+        calls.push("classifier");
+        const parsed = productGateDecisionSchema.safeParse(raw);
+        return parsed.success ? parsed.data : { route: "product" as const };
       },
     }),
   } as never;
@@ -102,5 +114,33 @@ describe("product gate", () => {
     });
 
     expect(calls).toEqual(["main"]);
+  });
+
+  it("treats a 'destination' key from the classifier as 'route'", async () => {
+    const calls: string[] = [];
+    const agent = createProductGateAgent({
+      mainAgent: fakeAgent("main", calls),
+      casualAgent: fakeAgent("casual", calls),
+      casualModel: {} as never,
+      classifierModel: classifierModelRaw({ destination: "casual" }, calls),
+    });
+
+    await agent.invoke({ messages: [new HumanMessage("Hi")] });
+
+    expect(calls).toEqual(["classifier", "casual"]);
+  });
+
+  it("routes to main when classifier returns neither route nor destination", async () => {
+    const calls: string[] = [];
+    const agent = createProductGateAgent({
+      mainAgent: fakeAgent("main", calls),
+      casualAgent: fakeAgent("casual", calls),
+      casualModel: {} as never,
+      classifierModel: classifierModelRaw({ category: "smalltalk" }, calls),
+    });
+
+    await agent.invoke({ messages: [new HumanMessage("Hi")] });
+
+    expect(calls).toEqual(["classifier", "main"]);
   });
 });

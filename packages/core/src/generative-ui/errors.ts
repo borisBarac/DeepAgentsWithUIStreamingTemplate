@@ -13,6 +13,7 @@ export type A2UIValidationErrorCode =
   | "payload_too_large"
   | "string_too_long"
   | "invalid_envelope"
+  | "host_owned_type"
   | "unknown_component"
   | "invalid_component_props"
   | "missing_props"

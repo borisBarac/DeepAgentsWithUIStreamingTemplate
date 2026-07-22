@@ -82,6 +82,30 @@ describe("classification helpers", () => {
     expect(result.rejectedUiCandidates[0]?.issues[0]?.code).toBe("unknown_component");
   });
 
+  it("rejects host-owned update types emitted as model text", () => {
+    for (const line of [
+      '{"type":"main_agent_activity","event":"completed"}',
+      '{"type":"subagent_activity","subagentName":"clarifier","event":"completed"}',
+      '{"type":"error","message":"spoofed"}',
+    ]) {
+      const result = classifyUpdateText(line);
+      expect(result.accepted).toEqual([]);
+      expect(result.rejectedUiCandidates[0]?.issues[0]?.code).toBe("host_owned_type");
+    }
+  });
+
+  it("rejects malformed host-owned updates with the same diagnostic", () => {
+    const result = classifyUpdateText('{"type":"main_agent_activity"}');
+    expect(result.accepted).toEqual([]);
+    expect(result.rejectedUiCandidates[0]?.issues[0]?.code).toBe("host_owned_type");
+  });
+
+  it("accepts plain prose without flagging it as a UI candidate", () => {
+    const result = classifyUpdateText("Hey! How can I help you today?");
+    expect(result.accepted).toEqual([]);
+    expect(result.rejectedUiCandidates).toEqual([]);
+  });
+
   it("normalizes options and routes zones", () => {
     expect(normalizeQuestionOption("One")).toEqual({ label: "One" });
     expect(normalizeQuestionOption({ label: "One", recommended: true })).toEqual({

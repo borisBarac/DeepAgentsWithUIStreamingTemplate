@@ -5,12 +5,16 @@ import { z } from "zod";
 
 import { extractLatestProductSet } from "../workflow/products.ts";
 
-const productGateDecisionSchema = z.object({
-  route: z.enum(["casual", "product"]),
-});
+export const productGateDecisionSchema = z
+  .object({
+    route: z.enum(["casual", "product"]).optional(),
+    destination: z.enum(["casual", "product"]).optional(),
+  })
+  .transform((value) => ({ route: value.route ?? value.destination ?? "product" }));
+type ProductGateDecision = { route: "casual" | "product" };
 
 type ProductGateClassifier = {
-  invoke(input: unknown): Promise<{ route: "casual" | "product" }>;
+  invoke(input: unknown): Promise<ProductGateDecision>;
 };
 
 type WorkflowStateReader = {
@@ -35,10 +39,11 @@ const CASUAL_SYSTEM_PROMPT = `You are a concise conversational assistant.
 Answer greetings, small talk, and general questions directly.
 Do not start, describe, or imitate the product workflow.`;
 
-const ROUTER_SYSTEM_PROMPT = `Return JSON only.
+const ROUTER_SYSTEM_PROMPT = `Return JSON only. The JSON must have a single key "route" with value "casual" or "product".
 Route the latest user message to "product" when it asks to create, change, review, plan, research, or discuss a product or product idea.
 Route greetings, small talk, and unrelated general questions to "casual".
-When unsure, route to "product".`;
+When unsure, route to "product".
+Example: {"route": "product"}`;
 
 function threadIdFromConfig(config: unknown): string {
   return String(

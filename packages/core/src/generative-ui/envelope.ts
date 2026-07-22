@@ -128,6 +128,8 @@ export type ClassifiedUpdates = {
   rejectedUiCandidates: RejectedUiCandidate[];
 };
 
+const HOST_OWNED_UPDATE_TYPES = new Set(["error", "main_agent_activity", "subagent_activity"]);
+
 export function classifyUpdateText(text: string): ClassifiedUpdates {
   const accepted: UiUpdate[] = [];
   const rejectedUiCandidates: RejectedUiCandidate[] = [];
@@ -151,7 +153,36 @@ export function classifyUpdateText(text: string): ClassifiedUpdates {
 
     const result = validateUpdate(candidate);
     if (result.ok) {
-      accepted.push(result.update);
+      const type = (result.update as { type?: unknown }).type;
+      if (typeof type === "string" && HOST_OWNED_UPDATE_TYPES.has(type)) {
+        rejectedUiCandidates.push({
+          line,
+          issues: [
+            {
+              path: "$.type",
+              code: "host_owned_type",
+              message: `Update type "${type}" is host-owned and cannot be emitted by the model.`,
+            },
+          ],
+        });
+      } else {
+        accepted.push(result.update);
+      }
+    } else if (
+      typeof candidate === "object" &&
+      candidate !== null &&
+      HOST_OWNED_UPDATE_TYPES.has((candidate as { type?: unknown }).type as string)
+    ) {
+      rejectedUiCandidates.push({
+        line,
+        issues: [
+          {
+            path: "$.type",
+            code: "host_owned_type",
+            message: `Update type "${(candidate as { type?: unknown }).type}" is host-owned and cannot be emitted by the model.`,
+          },
+        ],
+      });
     } else if (
       typeof candidate === "object" &&
       candidate !== null &&

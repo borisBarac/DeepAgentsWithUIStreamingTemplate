@@ -265,7 +265,7 @@ async function runAttempt(
     : null;
   const mainClassification = structuredOutput
     ? classifyModelUiOutput(structuredOutput)
-    : expectsStructuredOutput
+    : hasStructuredResponse
       ? classifyInvalidModelUiOutput(result?.structuredResponse)
       : classifyUpdateText(finalText);
   if (

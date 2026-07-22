@@ -791,7 +791,7 @@ describe("POST", () => {
       }),
     );
 
-    expect(agent.inputs[2]?.messages).toEqual([
+    expect(agent.inputs[1]?.messages).toEqual([
       { content: "generate concepts", role: "user" },
       {
         additional_kwargs: { transient_context: true },
