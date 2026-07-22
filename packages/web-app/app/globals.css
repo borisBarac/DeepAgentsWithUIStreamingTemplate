@@ -646,7 +646,8 @@ textarea {
 }
 
 .composer textarea {
-  resize: vertical;
+  field-sizing: content;
+  resize: none;
 }
 
 .composer textarea::placeholder,
