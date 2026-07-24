@@ -1,6 +1,14 @@
 # Deep Agent Template
 
-Build an AI product with a working agent workflow, rendered product UI, and local development setup.
+## Intended Usage
+- Template to speed up development of multi agents systems
+- Should be forked and used as starting point of the new project
+
+## Features in development
+- Memory for generated UI
+- Support to use ImageGeneration while generating UI elements (example procut cart with a image of product)
+
+# Description
 
 Deep Agent Template provides a supervisor, specialist subagents, clarification, guardrails, durable memory, a Python sandbox, image generation, and a Next.js workspace. The default workflow creates and reviews product concepts, then renders them in the web app.
 
@@ -204,7 +212,6 @@ bun run --filter @deep-agent-template/core test:e2e
 | `docs/diagram.md` | Mermaid flowchart of the supervisor workflow |
 | `docs/agent-cli.md` | CLI usage, options, REPL commands |
 | `docs/ui-catalogue.md` | UI component catalogue, wire format, validation, adding components |
-| `docs/codex-cloud.md` | OpenAI Codex Cloud environment setup |
 | `packages/sandbox/README.md` | Sandbox backend design and "writing a new backend" checklist |
 | `CONTEXT.md` | Domain vocabulary |
 | `AGENTS.md` | Issue tracker config and quality gates |
@@ -232,4 +239,4 @@ REPL commands: `:reset`, `:session`, `:activity`, `:raw`, `:history`, `:specs`, 
 
 ## License
 
-Private
+MIT
