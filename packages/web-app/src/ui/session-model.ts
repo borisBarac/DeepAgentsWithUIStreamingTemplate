@@ -170,6 +170,14 @@ export function appendAgentActivity(
   );
 }
 
+export function reduceMainAgentActivity(
+  current: DisplayAgentActivity[],
+  update: MainAgentActivityUpdate,
+  id: string,
+): DisplayAgentActivity[] {
+  return appendAgentActivity(current, update, id);
+}
+
 export function appendChunk(current: string, delta: string): string {
   return `${current}${delta}`;
 }

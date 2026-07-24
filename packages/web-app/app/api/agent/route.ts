@@ -9,6 +9,7 @@ import {
 } from "@deep-agent-template/core/interaction-stream";
 import { NextResponse } from "next/server";
 import { createAgentProvider } from "../../../src/server/agent-provider.ts";
+import { createCurrentContext } from "../../../src/server/current-context.ts";
 
 export const runtime = "nodejs";
 
@@ -82,7 +83,15 @@ function getAgent(): Promise<Agent> {
 }
 
 function toInputMessages(history: unknown[], message: string): AgentInputMessage[] {
-  return [...(history as AgentInputMessage[]), { content: message, role: "user" }];
+  return [
+    ...(history as AgentInputMessage[]),
+    {
+      additional_kwargs: { transient_context: true },
+      content: createCurrentContext(),
+      role: "user",
+    },
+    { content: message, role: "user" },
+  ];
 }
 
 const encoder = new TextEncoder();

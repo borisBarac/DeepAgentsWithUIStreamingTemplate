@@ -600,7 +600,16 @@ describe("createInteractionStream", () => {
     expect(updates).toEqual([{ type: "message", text: SAFE_FALLBACK_MESSAGE }]);
     expect(updates.some((update) => update.type === "main_agent_activity")).toBeFalse();
     expect(agent.inputs).toHaveLength(2);
-    expect(result.failure).toMatchObject({ code: "invalid_model_output", attempts: 2 });
+    expect(result.failure).toMatchObject({
+      code: "invalid_ui_spec",
+      attempts: 2,
+      issues: [
+        expect.objectContaining({
+          code: "host_owned_type",
+          message: expect.stringContaining("main_agent_activity"),
+        }),
+      ],
+    });
   });
 
   it("buffers chunked main-agent output until the run completes", async () => {
@@ -662,6 +671,36 @@ describe("createInteractionStream", () => {
         text: "This is not JSON and not a UI update.",
       },
     ]);
+  });
+
+  it("accepts plain prose as a message even when requireStructuredOutput is set", async () => {
+    const interaction = createInteractionStream({
+      agent: asStreamable(createInspectableAgent(["Hi! How can I help you today?"])),
+      messages: [{ content: "Hey", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "prose-with-required-structured",
+    });
+    const updates: UiUpdate[] = [];
+    for await (const update of interaction.updates) updates.push(update);
+    const result = await interaction.result;
+
+    expect(updates).toEqual([{ type: "message", text: "Hi! How can I help you today?" }]);
+    expect(result.failure).toBeNull();
+  });
+
+  it("does not trigger a repair pass when the casual agent replies with prose", async () => {
+    const agent = createInspectableAgent(["Hi! How can I help you today?"]);
+    const interaction = createInteractionStream({
+      agent: asStreamable(agent),
+      messages: [{ content: "Hey", role: "user" }],
+      requireStructuredOutput: true,
+      sessionId: "no-repair-for-prose",
+    });
+    for await (const _ of interaction.updates) {
+      void _;
+    }
+
+    expect(agent.inputs).toHaveLength(1);
   });
 
   it("streams the default message when zero parsed lines and final text is empty", async () => {

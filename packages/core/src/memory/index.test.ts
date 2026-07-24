@@ -39,7 +39,7 @@ const testImageGenerationService = {
 };
 
 describe("memory default paths", () => {
-  it("loads project-facts.md and user-preferences.md by default", () => {
+  it("loads durable memory files by default", () => {
     expect(DEFAULT_MEMORY_FILE_PATHS).toEqual([
       "/memory/project-facts.md",
       "/memory/user-preferences.md",
