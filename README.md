@@ -6,9 +6,9 @@
 
 ## Features in development
 - Memory for generated UI
-- Support to use ImageGeneration while generating UI elements (example procut cart with a image of product)
+- Support to use ImageGeneration in the GeneratedUI elements (example procut cart with a image of product)
 
-# Description
+## Description
 
 Deep Agent Template provides a supervisor, specialist subagents, clarification, guardrails, durable memory, a Python sandbox, image generation, and a Next.js workspace. The default workflow creates and reviews product concepts, then renders them in the web app.
 
@@ -19,42 +19,9 @@ Deep Agent Template gives you:
 - A validated A2UI catalogue, an NDJSON interaction stream, durable memory, LangSmith tracing, and a Docker Python sandbox.
 - A Next.js workspace with chat, preview, and activity panes.
 
+[View the web app screenshot](IMG/web-app.jpg)
+
 Product requests create or update reviewed product batches. Casual messages go to a small conversational agent and do not start the product workflow.
-
-## Architecture
-
-```
-User request → product/casual gate → guardrails → clarification
-  → execution → product generation → review → revision or delivery
-```
-
-Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`). The controller also limits clarification rounds, review cycles, and retries.
-
-### Monorepo (4 packages)
-
-| Package | Purpose |
-|---|---|
-| `packages/core` | Agent framework, scaffolding, all AI logic |
-| `packages/web-app` | Next.js 16 frontend + API route |
-| `packages/sandbox` | Docker-based Python execution sandbox |
-| `packages/image-gen` | Image generation (Replicate + stub provider) |
-
-## Tech Stack
-
-- **Runtime**: Bun 1.3.14
-- **Language**: TypeScript 5.9 (strict, ES2023)
-- **AI Framework**: `deepagents` (supervisor-specialist agent library)
-- **LLM**: LangChain + OpenAI-compatible endpoints (DeepSeek, OpenAI, Ollama, vLLM)
-- **Web**: Next.js 16 (App Router), React 19
-- **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
-- **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
-- **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
-- **Image Gen**: Replicate SDK
-- **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
-- **Observability**: LangSmith tracing
-- **Linting**: Biome 2.5
-- **Testing**: Bun test runner
-- **Storybook**: 10.5
 
 ## Capabilities
 
@@ -137,6 +104,41 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - Per-role prompts + bundled skills (`clarify-deeply`)
 - `SOUL.md` core identity + `FILESYSTEM_CONTRACT` appended to all agents
 
+## Architecture
+
+```
+User request → product/casual gate → guardrails → clarification
+  → execution → product generation → review → revision or delivery
+```
+
+Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`). The controller also limits clarification rounds, review cycles, and retries.
+
+### Monorepo (4 packages)
+
+| Package | Purpose |
+|---|---|
+| `packages/core` | Agent framework, scaffolding, all AI logic |
+| `packages/web-app` | Next.js 16 frontend + API route |
+| `packages/sandbox` | Docker-based Python execution sandbox |
+| `packages/image-gen` | Image generation (Replicate + stub provider) |
+
+## Tech Stack
+
+- **Runtime**: Bun 1.3.14
+- **Language**: TypeScript 5.9 (strict, ES2023)
+- **AI Framework**: `deepagents` (supervisor-specialist agent library)
+- **LLM**: LangChain + OpenAI-compatible endpoints (DeepSeek, OpenAI, Ollama, vLLM)
+- **Web**: Next.js 16 (App Router), React 19
+- **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
+- **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
+- **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
+- **Image Gen**: Replicate SDK
+- **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
+- **Observability**: LangSmith tracing
+- **Linting**: Biome 2.5
+- **Testing**: Bun test runner
+- **Storybook**: 10.5
+
 ## Quick Start
 
 ```bash
@@ -216,17 +218,8 @@ bun run --filter @deep-agent-template/core test:e2e
 | `CONTEXT.md` | Domain vocabulary |
 | `AGENTS.md` | Issue tracker config and quality gates |
 
-## Web App
 
-Single-page agent workspace at `/`:
-
-- **Chat pane**: message list, prompt starters, text composer, clarification question controls
-- **Preview pane**: renders generated UI specs via `@json-render/react`
-- **Debug pane**: real-time agent/subagent activity log
-
-API endpoint: `POST /api/agent` (NDJSON streaming)
-
-## Agent CLI
+## Agent CLI for use with agents
 
 ```bash
 bun run agent-cli "Your message"          # One-shot
