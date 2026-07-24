@@ -1,25 +1,26 @@
 # Deep Agent Template
 
-Ship a production-grade AI agent product this weekend — not next quarter.
+Build an AI product with a working agent workflow, rendered product UI, and local development setup.
 
-This template hands you a fully wired, battle-ready agent system: a supervisor that orchestrates specialist sub-agents, a clarification-first intake, safety guardrails, durable memory, a Python sandbox, image generation, and a generative UI that renders real products your users can interact with. One `bun install` and you're running a multi-agent web app — not another blank chatbot scaffold.
+Deep Agent Template provides a supervisor, specialist subagents, clarification, guardrails, durable memory, a Python sandbox, image generation, and a Next.js workspace. The default workflow creates and reviews product concepts, then renders them in the web app.
 
-You should use **Deep Agent Template** because:
+Deep Agent Template gives you:
 
-1. **It kills the multi-agent plumbing tax.** No more hand-rolling supervisor loops, delegation logic, review cycles, or retry/auto-repair flows — a single `createScaffoldedAgent()` call returns a fully wired supervisor-specialist system with clarifier, researcher, coder, reviewer, and product-generator roles already talking to each other.
-2. **It replaces weeks of glue code with one clone.** Guardrails, clarification gates, durable memory, LangSmith tracing, a Docker Python sandbox, image generation, a validated UI catalogue, an NDJSON streaming protocol, a Next.js workspace with chat + preview + debug panes — all pre-integrated and wired end-to-end, instead of you stitching 12 libraries together.
-3. **So you go from idea to live agent product in a weekend.** Configure your LLM key, drop in your domain prompts and catalogue components, and ship a real, observable, safe agent that produces rendered UI products — not a weekend lost to boilerplate.
+- `createScaffoldedAgent()` with a supervisor, clarifier, researcher, analyst, reviewer, product-generator, and optional image-designer.
+- A workflow controller that owns clarification, execution, product generation, review, revision, delivery, and errors.
+- A validated A2UI catalogue, an NDJSON interaction stream, durable memory, LangSmith tracing, and a Docker Python sandbox.
+- A Next.js workspace with chat, preview, and activity panes.
 
-Every agent turn produces or edits products rendered as an interactive catalog UI. This is a template for shipping agent products, not a generic chatbot starter.
+Product requests create or update reviewed product batches. Casual messages go to a small conversational agent and do not start the product workflow.
 
 ## Architecture
 
 ```
-User Request → Gatekeeper (guardrails) → Clarification Gate
-  → [Research | Code | Finalize] → Reviewer → [Approved | Revise loop] → Deliver
+User request → product/casual gate → guardrails → clarification
+  → execution → product generation → review → revision or delivery
 ```
 
-Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`)
+Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`). The controller also limits clarification rounds, review cycles, and retries.
 
 ### Monorepo (4 packages)
 
@@ -37,7 +38,7 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **AI Framework**: `deepagents` (supervisor-specialist agent library)
 - **LLM**: LangChain + OpenAI-compatible endpoints (DeepSeek, OpenAI, Ollama, vLLM)
 - **Web**: Next.js 16 (App Router), React 19
-- **Generative UI**: `@json-render/core` + `@json-render/react` with catalogue-validated A2UI
+- **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
 - **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
 - **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
 - **Image Gen**: Replicate SDK
@@ -73,23 +74,26 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **TaskScopeGuardrail**: structured in-scope vs out-of-scope classification
 - Policy controlled by markdown files (`allowedTasks.md`, `disallowedTasks.md`, `requiredContext.md`)
 - Uses fast-tier model for classification
+- Casual messages use a separate scoped assistant and do not enter product execution
 
 ### Generative UI (A2UI) System
-- Model emits structured UI as NDJSON using a fixed catalogue of 8 components
+- Model-authored UI uses flat A2UI updates in the NDJSON interaction stream
 - Components: `Button`, `Card`, `ImagePlaceholder`, `ProductCard`, `ProductGrid`, `Stack`, `Text`, `TextInput`
 - `catalog.json` is the single source of truth for schemas and limits
 - Dual validation: Ajv (server) + mini-validator (browser)
-- Auto-repair loop: rejected UI candidates trigger one retry with structured feedback
+- Invalid model-authored UI gets one retry with structured validation feedback
 - Strict 128 KiB payload limit, max 100 components per update
 
 ### Workflow Controller (State Machine)
 - State machine (8 phases including `error`) driving the agent lifecycle
-- Deterministic UI emission for clarification questions and product batches
+- Deterministic UI emission for clarification questions and reviewed product batches
+- Product updates replace the current product grid while preserving the approved count
 - Max clarification rounds, max review cycles, controller retry limits
 
 ### Interaction Stream
 - NDJSON streaming: `message`, `ui`, `question`, `main_agent_activity`, `subagent_activity`, `error`
-- Auto-repair for invalid UI output (one retry with feedback)
+- Controller feedback stays in workflow state and is shown in activity updates, not as a chat message
+- Auto-repair for invalid model-authored UI output (one retry with feedback)
 - Chat history management with transient context stripping
 
 ### Memory System (Single-User Durable Storage)

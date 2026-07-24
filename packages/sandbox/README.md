@@ -1,8 +1,11 @@
 # Sandbox runtime
 
-Isolated Python execution for the Deep Agent runtime. Docker is one
+Isolated Python execution for the Deep Agent runtime. Docker is the default
 implementation behind the `SandboxBackend` interface. Agent-facing LangChain
 tool definitions remain in `@deep-agent-template/core`.
+
+The current runtime is single-user. It does not provide multi-tenant isolation,
+network access, package installation, GPU support, or a policy engine.
 
 ## Quick start
 

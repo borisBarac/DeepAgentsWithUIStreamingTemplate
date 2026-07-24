@@ -13,7 +13,7 @@ The default export path is intentionally a scaffold, not a finished product. It 
 - Two default preflight guardrails: `safety` and `taskScope`
 - A specialized tool store for building explicit role-based tool bundles
 - Safe-by-default interrupt rules for `write_file`, `edit_file`, and `execute`
-- A fixed persistent memory store mounted at `/memory`
+- A `/memory` virtual filesystem root backed by the store supplied by the caller
 - A constrained virtual filesystem layout for `/scratch`, `/plans`, `/reports`, `/artifacts`, `/memory`, and `/skills`
 - An inspectable runtime scaffold so the next implementation pass can extend the defaults instead of replacing them blindly
 - Markdown-backed default prompts with a typed `PromptLoader` extension point
@@ -317,7 +317,9 @@ const result = await agent.invoke({
 });
 ```
 
-The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. The default specialist subagents are intentionally isolated: they start with their own empty `tools` lists. Supplying `imageGenerationService` adds the default `image-designer` specialist with its image-generation tool; without that service, the specialist is omitted. Wire any additional specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app provides a filesystem-backed store under `packages/web-app/.data/memory`, or the path set by `WEB_APP_MEMORY_DIR`.
+
+The default specialist subagents are intentionally isolated. They start with their own empty tool lists except for the built-in Python tool on `researcher` and `analyst`. Supplying `imageGenerationService` adds the `image-designer` specialist with its image-generation tool. Wire other specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
 The auto-added `general-purpose` subagent is **not** part of the catalog and is not customizable via `subagentOverrides`. It inherits the supervisor's tools (which do not include the sandbox-scoped `execute_python` tool — that's wired only into `researcher` and `analyst`). Customize it through the harness profile instead.
 
@@ -354,6 +356,14 @@ reviewMemoryContent("LLM_API_KEY=sk-...").allowed; // false
 ```
 
 Durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
+
+## Product workflow and UI
+
+Pass `generativeUi` to enable the product workflow. The product gate routes product requests to the scaffolded supervisor and sends greetings, small talk, and unrelated short questions to a separate casual agent. Existing workflow state and the latest product UI keep follow-up product requests on the product path.
+
+The supervisor and specialist subagents use prose. The supervisor submits typed clarification, product, and review results through workflow tools. The workflow controller then emits clarification questions and the reviewed product grid as deterministic UI updates. Product updates replace the current product grid and keep the approved product count unless the request changes it.
+
+Custom model-authored UI uses the flat A2UI envelope and the catalogue validator. The interaction stream retries rejected UI candidates once with validation feedback. Product and clarification updates do not use that model-authored UI path.
 
 ## Prompts
 
