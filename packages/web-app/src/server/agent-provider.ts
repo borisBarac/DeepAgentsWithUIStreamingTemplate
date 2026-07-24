@@ -38,7 +38,6 @@ export async function createAgentProvider(): Promise<DeepAgent> {
       }
     }),
   );
-
   const modelRuntime = createModelRuntimeFromEnv({});
 
   return createScaffoldedAgent({

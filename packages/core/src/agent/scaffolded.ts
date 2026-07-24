@@ -3,6 +3,7 @@ import type { DeepAgent } from "deepagents";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
 import { createWorkflowControllerMiddleware } from "../workflow/index.ts";
+import { createProductGateAgent } from "./product-gate.ts";
 import type { WorkflowUiAgent } from "./runtime.ts";
 import { createAgentFromRuntimeScaffold } from "./runtime.ts";
 import type { CreateScaffoldedAgentOptions } from "./types.ts";
@@ -68,7 +69,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     productGenerationEnabled: scaffold.productGeneration?.enabled === true,
   });
 
-  return createAgentFromRuntimeScaffold({
+  const agent = createAgentFromRuntimeScaffold({
     factoryName: "createScaffoldedAgent",
     scaffold,
     modelRuntime,
@@ -79,4 +80,12 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     store,
     agentOptions,
   });
+  if (!generativeUi) return agent;
+  return createProductGateAgent({
+    mainAgent: agent,
+    casualModel: modelRuntime.getModelForCategory("fast"),
+    classifierModel: modelRuntime.getModelForCategory("fast"),
+    workflowController,
+    stateStore: store,
+  }) as WorkflowUiAgent;
 }

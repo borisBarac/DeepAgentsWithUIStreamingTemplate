@@ -10,7 +10,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "cli": "bun --env-file=../../.env run scripts/agent-cli.ts",
-    "bin:cli": "bun run scripts/agent-cli.ts"
+    "bin:cli": "bun run scripts/agent-cli.ts",
+    "storybook": "storybook dev -p 6006 -c .storybook",
+    "build-storybook": "storybook build -c .storybook"
   },
   "dependencies": {
     "@deep-agent-template/core": "workspace:*",
@@ -23,9 +25,14 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@storybook/addon-a11y": "^10.5.3",
+    "@storybook/addon-docs": "^10.5.3",
+    "@storybook/addon-onboarding": "^10.5.3",
+    "@storybook/nextjs": "^10.5.3",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "storybook": "^10.5.3",
     "typescript": "^5.9.3"
   }
 }

@@ -558,6 +558,8 @@ export function createWorkflowControllerMiddleware(options: WorkflowControllerOp
 
   return Object.assign(middleware, {
     getWorkflowState: (id: string) => states.get(id),
+    hasWorkflowState: async (id: string, store?: BaseStore): Promise<boolean> =>
+      (await load({ configurable: { thread_id: id }, store })) !== undefined,
     /**
      * Drain pending deterministic UI (products / clarification questions)
      * for a session and clear the fields via the `ui_drained` reducer event.

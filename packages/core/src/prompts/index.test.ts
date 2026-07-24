@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   CORE_PROMPT_TEMPLATES,
   createClarifierSystemPrompt,
+  createCurrentContextPrompt,
   createSupervisorSystemPrompt,
   DEFAULT_CLARIFIER_SYSTEM_PROMPT,
   DEFAULT_IMAGE_DESIGNER_SYSTEM_PROMPT,
@@ -107,13 +108,29 @@ describe("prompt defaults", () => {
   });
 
   it("tells the supervisor to use memory, filesystem layout, and specialist routing", () => {
-    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("Read `/memory/project-facts.md`");
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("`/memory/project-facts.md`");
+    expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("# SOUL");
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain(
       "Persist only explicit preferences and stable facts",
     );
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("Put plans in `/plans`");
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("Route evidence gathering to `researcher`");
     expect(DEFAULT_SUPERVISOR_SYSTEM_PROMPT).toContain("candidate final response");
+  });
+
+  it("defines the supervisor as an autonomous product designer and pragmatic builder", () => {
+    const supervisor = DEFAULT_SUPERVISOR_SYSTEM_PROMPT;
+
+    expect(supervisor).toContain("autonomous product designer and pragmatic product builder");
+    expect(supervisor).toContain("Lead with the user problem and desired outcome");
+    expect(supervisor).toContain("complete, user-centered product concepts, not abstract advice");
+    expect(supervisor).toContain(
+      "Balance product strategy, UX clarity, and realistic buildability",
+    );
+    expect(supervisor).toContain("Ask only high-value questions");
+    expect(supervisor).toContain("design, research, generation, review, and revision autonomously");
+    expect(supervisor).toContain("reviewed rendered catalogue as the primary product deliverable");
+    expect(supervisor).toContain("Do not become a generic coding assistant");
   });
 
   it("tells the clarifier to offer bounded options with a direct-question fallback", () => {
@@ -247,51 +264,28 @@ describe("prompt defaults", () => {
   });
 
   it("uses the default markdown loader for compatibility exports", () => {
-    const stripDateTime = (prompt: string): string =>
-      prompt.replace(/Current date and time \([^)]*\): [^\n]*\n?/g, "");
-
-    expect(stripDateTime(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({}))).toBe(
-      stripDateTime(DEFAULT_SUPERVISOR_SYSTEM_PROMPT),
-    );
+    expect(DEFAULT_PROMPT_LOADER.getSupervisorPrompt({})).toBe(DEFAULT_SUPERVISOR_SYSTEM_PROMPT);
     expect(DEFAULT_PROMPT_LOADER.getClarifierPrompt({ questionsPerRound: 3 })).toBe(
       DEFAULT_CLARIFIER_SYSTEM_PROMPT,
     );
   });
 
-  it("injects the current date, time, and timezone into the supervisor prompt", () => {
-    const before = Date.now();
+  it("keeps current.md out of static system prompt composition", () => {
     const supervisor = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({});
-    const after = Date.now();
-
-    const extractIsoMs = (prompt: string): number => {
-      const match = prompt.match(/Current date and time \([^)]*\): .*; (\S+)/);
-      expect(match).not.toBeNull();
-      return new Date(match?.[1] as string).getTime();
-    };
 
     expect(supervisor).not.toContain("{{currentDateTime}}");
     expect(supervisor).not.toContain("{{timezone}}");
-    expect(supervisor).toContain("Current date and time (");
-
-    const ts = extractIsoMs(supervisor);
-    expect(ts).toBeGreaterThanOrEqual(before);
-    expect(ts).toBeLessThanOrEqual(after);
+    expect(supervisor).not.toContain("# Current Context");
+    expect(supervisor).not.toContain("Current date and time (");
 
     expect(supervisor).toContain("If clarification remains unresolved after 2 rounds");
   });
 
-  it("renders the timestamp at call time rather than freezing it at module load", async () => {
-    const constantIso = DEFAULT_SUPERVISOR_SYSTEM_PROMPT.match(
-      /Current date and time \([^)]*\): .*; (\S+)/,
-    )?.[1] as string;
+  it("renders current context from current.md at request time", () => {
+    const context = createCurrentContextPrompt(new Date("2026-07-20T12:34:56.000Z"));
 
-    do {
-      await Bun.sleep(0);
-    } while (Date.now() <= new Date(constantIso).getTime());
-
-    const fresh = DEFAULT_PROMPT_LOADER.getSupervisorPrompt({});
-    const freshIso = fresh.match(/Current date and time \([^)]*\): .*; (\S+)/)?.[1] as string;
-
-    expect(new Date(freshIso).getTime()).toBeGreaterThan(new Date(constantIso).getTime());
+    expect(context).toContain("# Current Context");
+    expect(context).toContain("2026-07-20T12:34:56.000Z");
+    expect(context).not.toContain("{{currentDateTime}}");
   });
 });

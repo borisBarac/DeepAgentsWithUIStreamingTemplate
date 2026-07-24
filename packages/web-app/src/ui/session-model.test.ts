@@ -11,6 +11,7 @@ import {
   formatQuestionAnswers,
   previewAssistantTextFromActivity,
   previewSubagentTextFromActivity,
+  reduceMainAgentActivity,
   replaceAssistantMessage,
 } from "./session-model.ts";
 
@@ -132,7 +133,7 @@ describe("generative UI state", () => {
     ]);
   });
 
-  it("removes older product roots when a canonical product grid arrives", () => {
+  it("keeps product cards until a replacement grid arrives", () => {
     const legacy = {
       root: "legacy",
       elements: {
@@ -154,16 +155,17 @@ describe("generative UI state", () => {
         new: { type: "ProductCard", props: { title: "New", description: "New" }, children: [] },
       },
     };
-    expect(
-      appendUiSpec(
-        [
-          { id: "legacy-id", spec: legacy },
-          { id: "note-id", spec: unrelated },
-        ],
-        canonical,
-        "canonical-id",
-      ),
-    ).toEqual([
+    const current = [
+      { id: "legacy-id", spec: legacy },
+      { id: "note-id", spec: unrelated },
+    ];
+
+    expect(current).toEqual([
+      { id: "legacy-id", spec: legacy },
+      { id: "note-id", spec: unrelated },
+    ]);
+
+    expect(appendUiSpec(current, canonical, "canonical-id")).toEqual([
       { id: "note-id", spec: unrelated },
       { id: "canonical-id", spec: canonical },
     ]);
@@ -171,6 +173,51 @@ describe("generative UI state", () => {
 });
 
 describe("agent activity state", () => {
+  it("keeps workflow-controller feedback out of customer chat while products render", () => {
+    const feedback = [
+      "WORKFLOW_CONTROLLER_FEEDBACK",
+      "phase=execution",
+      "requiredAction=execute",
+      "Do the required action now. Do not narrate or finalize early.",
+    ].join("\n");
+    let messages: DisplayMessage[] = [];
+    let activity = reduceMainAgentActivity(
+      [],
+      { type: "main_agent_activity", event: "started" },
+      "activity-0",
+    );
+    activity = reduceMainAgentActivity(
+      activity,
+      { type: "main_agent_activity", event: "delta", text: feedback },
+      "activity-0",
+    );
+
+    const specs: unknown[] = [];
+    applyAgentChatUpdate(
+      {
+        type: "ui",
+        rootId: "products",
+        components: [
+          { id: "products", component: "ProductGrid", children: ["one", "two", "three"] },
+          { id: "one", component: "ProductCard", title: "One", description: "First" },
+          { id: "two", component: "ProductCard", title: "Two", description: "Second" },
+          { id: "three", component: "ProductCard", title: "Three", description: "Third" },
+        ],
+      },
+      {
+        onMessage: (text) => {
+          messages = appendAssistantChunk(messages, text, "assistant-0");
+        },
+        onSpec: (spec) => specs.push(spec),
+        onError: () => {},
+      },
+    );
+
+    expect(messages).toEqual([]);
+    expect(activity[0]?.rawText).toBe(feedback);
+    expect(specs).toHaveLength(1);
+  });
+
   it("keeps one main-agent block through started, delta, completed", () => {
     const messages: DisplayMessage[] = [];
     let activity = appendAgentActivity(

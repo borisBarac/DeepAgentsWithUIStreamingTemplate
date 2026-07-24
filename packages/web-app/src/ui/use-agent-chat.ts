@@ -18,8 +18,7 @@ import {
   createId,
   finishAssistantMessage,
   formatQuestionAnswers,
-  previewAssistantTextFromActivity,
-  replaceAssistantMessage,
+  reduceMainAgentActivity,
 } from "./session-model.ts";
 
 export type {
@@ -41,6 +40,7 @@ export {
   formatQuestionAnswers,
   previewAssistantTextFromActivity,
   previewSubagentTextFromActivity,
+  reduceMainAgentActivity,
   replaceAssistantMessage,
 } from "./session-model.ts";
 
@@ -59,6 +59,7 @@ export type AgentChat = {
   setInput: (value: string) => void;
   submitAnswer: (questionId: string, answer: string) => void;
   submitMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  submitText: (rawMessage: string) => Promise<void>;
 };
 
 export function useAgentChat(): AgentChat {
@@ -108,20 +109,17 @@ export function useAgentChat(): AgentChat {
 
     loadingRef.current = true;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
-    setUiSpecs([]);
     setError(null);
     setInput("");
     setLoading(true);
 
     let streamingAssistantId: string | null = null;
-    let streamingAssistantRawText = "";
     let mainActivityId: string | null = null;
     const activeSubagentActivityIds = new Map<string, string>();
     const finishedSubagentActivityKeys = new Set<string>();
     const finishStreamingAssistant = () => {
       const assistantId = streamingAssistantId;
       streamingAssistantId = null;
-      streamingAssistantRawText = "";
       setMessages((current) => finishAssistantMessage(current, assistantId));
     };
     const handlers: AgentChatUpdateHandlers = {
@@ -161,23 +159,11 @@ export function useAgentChat(): AgentChat {
       },
       onError: (errorMessage: string) => setError(errorMessage),
       onMainAgentActivity: (update) => {
-        if (update.event === "delta" && update.text) {
-          streamingAssistantRawText += update.text;
-          const preview = previewAssistantTextFromActivity(streamingAssistantRawText);
-          if (preview) {
-            streamingAssistantId ??= createId();
-            const assistantId = streamingAssistantId;
-            setMessages((current) => replaceAssistantMessage(current, preview, assistantId));
-          }
-        }
-        if (update.event === "completed") {
-          streamingAssistantRawText = "";
-        }
         if (update.event === "started") {
           mainActivityId ??= createId();
         }
         const activityId = mainActivityId ?? createId();
-        setAgentActivity((current) => appendAgentActivity(current, update, activityId));
+        setAgentActivity((current) => reduceMainAgentActivity(current, update, activityId));
       },
       onSubagentActivity: (update) => {
         const key = update.subagentRunId ?? update.subagentName;
@@ -294,5 +280,6 @@ export function useAgentChat(): AgentChat {
     setInput,
     submitAnswer,
     submitMessage,
+    submitText,
   };
 }

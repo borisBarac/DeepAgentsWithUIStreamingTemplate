@@ -102,6 +102,25 @@ describe("SessionState", () => {
     expect(state.openQuestionIds.size).toBe(0);
   });
 
+  it("keeps unanswered clarification questions open", () => {
+    const state = new SessionState({ sessionId: "s1" });
+    applyAll(state, [
+      {
+        type: "question",
+        question: { id: "colour", kind: "open_text", prompt: "Which colour?" },
+      },
+      {
+        type: "question",
+        question: { id: "size", kind: "open_text", prompt: "What size?" },
+      },
+    ]);
+
+    state.recordAnswer("colour", "blue");
+
+    expect(state.composeNextMessage("ignored")).toBe("Here are my answers:\n- Which colour?: blue");
+    expect(state.openQuestionIds).toEqual(new Set(["size"]));
+  });
+
   it("passes through raw text once questions are closed", () => {
     const state = new SessionState({ sessionId: "s1" });
     expect(state.composeNextMessage("hello")).toBe("hello");
