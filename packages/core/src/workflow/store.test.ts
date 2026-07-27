@@ -4,7 +4,7 @@ import { createWorkflowState } from "./reducer.ts";
 import { InMemoryWorkflowStateStore, RedisWorkflowStateStore } from "./store.ts";
 
 describe("InMemoryWorkflowStateStore", () => {
-  it("creates, loads, updates, archives, and isolates state by thread", () => {
+  it("creates, loads, updates, deletes archived state, and isolates state by thread", () => {
     const store = new InMemoryWorkflowStateStore();
     const initial = createWorkflowState("First request");
     const updated = { ...initial, phase: "waiting_for_user" as const };

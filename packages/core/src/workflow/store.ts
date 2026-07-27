@@ -24,12 +24,10 @@ const REDIS_WORKFLOW_STATE_STORE_NOT_IMPLEMENTED =
   "RedisWorkflowStateStore is not implemented yet.";
 
 // Local in-process adapter for WorkflowStateStore. Active state lives in
-// #active; archived state accumulates per thread in #archived. Both maps are
-// unbounded; the store is intended to be shared across controller instances
-// for the lifetime of a process.
+// #active for reuse across controller instances. Archiving is terminal cleanup:
+// completed state is deleted rather than retained in process memory.
 export class InMemoryWorkflowStateStore implements WorkflowStateStore {
   readonly #active = new Map<string, WorkflowState>();
-  readonly #archived = new Map<string, WorkflowState[]>();
 
   load(threadId: string): WorkflowState | undefined {
     return this.#active.get(threadId);
@@ -39,10 +37,7 @@ export class InMemoryWorkflowStateStore implements WorkflowStateStore {
     this.#active.set(threadId, state);
   }
 
-  archive(threadId: string, state: WorkflowState): void {
-    const bucket = this.#archived.get(threadId) ?? [];
-    bucket.push(state);
-    this.#archived.set(threadId, bucket);
+  archive(threadId: string, _state: WorkflowState): void {
     this.#active.delete(threadId);
   }
 }
