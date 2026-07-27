@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { InMemoryStore } from "@langchain/langgraph";
 
+import { createWorkflowState } from "./reducer.ts";
 import {
   createWorkflowControllerMiddleware,
   workflowCompleteExecutionTool,
@@ -9,6 +9,7 @@ import {
   workflowSubmitProductsTool,
   workflowSubmitReviewTool,
 } from "./runtime.ts";
+import { InMemoryWorkflowStateStore } from "./store.ts";
 
 const options = {
   maxClarificationRounds: 1,
@@ -640,28 +641,84 @@ describe("workflow controller middleware", () => {
     expect(wrapped.systemPrompt).toContain("Proceed with the required action now.");
   });
 
-  it("restores workflow state from the store without leaking between threads", async () => {
-    const store = new InMemoryStore();
-    const first = createWorkflowControllerMiddleware(options);
+  it("reuses workflow state across controllers sharing one store without leaking between threads", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    const first = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
     const beforeFirst = first.beforeAgent as Hook;
     await beforeFirst(
       { messages: [new HumanMessage("Request A")] },
-      { configurable: { thread_id: "a" }, store },
+      { configurable: { thread_id: "a" } },
     );
 
-    const second = createWorkflowControllerMiddleware(options);
+    const second = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
     const beforeSecond = second.beforeAgent as Hook;
     await beforeSecond(
       { messages: [new HumanMessage("Request A")] },
-      { configurable: { thread_id: "a" }, store },
+      { configurable: { thread_id: "a" } },
     );
     await beforeSecond(
       { messages: [new HumanMessage("Request B")] },
-      { configurable: { thread_id: "b" }, store },
+      { configurable: { thread_id: "b" } },
     );
 
     expect(second.getWorkflowState("a")?.originalRequest).toBe("Request A");
     expect(second.getWorkflowState("b")?.originalRequest).toBe("Request B");
+    expect(second.hasWorkflowState("a")).toBeTrue();
+    expect(second.hasWorkflowState("missing")).toBeFalse();
+  });
+
+  it("drains pending UI synchronously through the workflow state store", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    const first = createWorkflowControllerMiddleware({
+      ...options,
+      maxClarificationRounds: 2,
+      workflowStateStore: store,
+    });
+    const beforeAgent = first.beforeAgent as Hook;
+    await beforeAgent(
+      { messages: [new HumanMessage("Build an app")] },
+      { configurable: { thread_id: "ui" } },
+    );
+    await first.wrapToolCall?.(
+      request("ui", "clarifier", "STATUS: needs_clarification") as never,
+      (async () => new ToolMessage({ content: "ok", tool_call_id: "c" })) as never,
+    );
+    await first.wrapToolCall?.(
+      submission("ui", "workflow_submit_clarification", {
+        requestKind: "products",
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "platform", question: "Which platform should the app target?" }],
+        missingInformation: ["platform"],
+        answeredInformation: [],
+        reasoningSummary: "Platform determines implementation details.",
+      }) as never,
+      (async () => new ToolMessage({ content: "ok", tool_call_id: "s" })) as never,
+    );
+
+    expect(first.drainPendingUi("ui")).not.toHaveLength(0);
+    expect(store.load("ui")?.pendingClarificationUi).toBeUndefined();
+
+    const second = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
+    expect(second.drainPendingUi("ui")).toEqual([]);
+  });
+
+  it("archives a terminal state before starting the next request", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    store.save("archived", { ...createWorkflowState("Old request"), phase: "delivery_ready" });
+    const middleware = createWorkflowControllerMiddleware({
+      ...options,
+      workflowStateStore: store,
+    });
+    const beforeAgent = middleware.beforeAgent as Hook;
+
+    await beforeAgent(
+      { messages: [new HumanMessage("New request")] },
+      { configurable: { thread_id: "archived" } },
+    );
+
+    expect(store.load("archived")?.originalRequest).toBe("New request");
+    expect(middleware.hasWorkflowState("archived")).toBeTrue();
   });
 
   it("keeps state unchanged for invalid submissions and requires delegation first", async () => {

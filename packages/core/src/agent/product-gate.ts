@@ -1,5 +1,4 @@
 import { HumanMessage } from "@langchain/core/messages";
-import type { BaseStore } from "@langchain/langgraph";
 import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 import { z } from "zod";
 
@@ -16,7 +15,7 @@ export const productGateDecisionSchema = z
 type ProductGateDecision = { route: "casual" | "product" };
 
 type WorkflowStateReader = {
-  hasWorkflowState(id: string, store?: BaseStore): Promise<boolean>;
+  hasWorkflowState(id: string): boolean;
 };
 
 type ProductGateOptions = {
@@ -24,7 +23,6 @@ type ProductGateOptions = {
   casualModel: CreateDeepAgentParams["model"];
   classifierModel: StructuredTaskScopeModel;
   workflowController?: WorkflowStateReader;
-  stateStore?: BaseStore;
   casualAgent?: DeepAgent;
 };
 
@@ -78,12 +76,10 @@ async function shouldUseMainAgent(
   config: unknown,
   classifier: TaskScopeClassifier,
   workflowController?: WorkflowStateReader,
-  stateStore?: BaseStore,
 ): Promise<boolean> {
   const messages = inputMessages(input);
   if (extractLatestProductSet(messages)) return true;
-  if (await workflowController?.hasWorkflowState(threadIdFromConfig(config), stateStore))
-    return true;
+  if (workflowController?.hasWorkflowState(threadIdFromConfig(config))) return true;
 
   const request = latestUserText(messages);
   if (!request) return true;
@@ -122,7 +118,6 @@ export function createProductGateAgent(options: ProductGateOptions): DeepAgent {
             config,
             classifier,
             options.workflowController,
-            options.stateStore,
           ))
             ? options.mainAgent
             : casualAgent;
@@ -136,7 +131,6 @@ export function createProductGateAgent(options: ProductGateOptions): DeepAgent {
             config,
             classifier,
             options.workflowController,
-            options.stateStore,
           ))
             ? options.mainAgent
             : casualAgent;

@@ -1,7 +1,7 @@
 import { CompositeBackend, StateBackend, StoreBackend } from "deepagents";
 
 import { createUserMemoryBackend } from "../memory/index.ts";
-import { DEFAULT_MEMORY_ROOT } from "./constants.ts";
+import { DEFAULT_MEMORY_ROOT, DEFAULT_MEMORY_USER_ID } from "./constants.ts";
 import type { CreateCompositeBackendOptions } from "./types.ts";
 
 export function createDefaultCompositeBackend(
@@ -17,7 +17,7 @@ export function createDefaultCompositeBackend(
         })
       : createUserMemoryBackend({
           store: options.memoryStore,
-          userId: options.memoryUserId,
+          userId: options.memoryUserId ?? DEFAULT_MEMORY_USER_ID,
         }));
 
   return new CompositeBackend(defaultBackend, {

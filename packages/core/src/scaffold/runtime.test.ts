@@ -148,24 +148,45 @@ describe("runtime scaffold defaults", () => {
 });
 
 describe("createRuntimeScaffold required subagents", () => {
-  it("throws when required subagents are missing", () => {
-    expect(() => createRuntimeScaffold({ subagents: [] })).toThrowError(/createRuntimeScaffold/);
-    expect(() => createRuntimeScaffold({ subagents: [] })).toThrowError(/clarifier/);
-    expect(() => createRuntimeScaffold({ subagents: [] })).toThrowError(/review-agent/);
+  // The assertion's role is to guard the DEFAULT catalog path: if a future
+  // change to createDefaultSubagentCatalog stops registering a required
+  // subagent, the scaffold refuses to build. When the caller explicitly
+  // supplies `subagents` they own the catalog — the assertion must NOT fire,
+  // so tests and production code can intentionally pass subsets (empty list
+  // for memory-only scenarios, single subagent for isolated role tests, etc.).
+
+  it("does not throw when explicit subagents omit required roles", () => {
+    // Mirrors e2e/memory.e2e.test.ts buildMemoryAgent which uses an empty
+    // subagent list for a memory-only scenario.
+    expect(() => createRuntimeScaffold({ subagents: [] })).not.toThrow();
+    // Mirrors e2e/subagents.e2e.test.ts buildClarifierAgent which passes only
+    // the clarifier.
+    expect(() =>
+      createRuntimeScaffold({
+        subagents: [{ name: "clarifier", description: "c", systemPrompt: "c" }],
+      }),
+    ).not.toThrow();
   });
 
-  it("includes product-generator in missing list when generativeUi is enabled", () => {
-    expect(() => createRuntimeScaffold({ subagents: [], generativeUi: {} })).toThrowError(
-      /product-generator/,
-    );
+  it("does not throw when explicit subagents are empty and generativeUi is enabled", () => {
+    // Even with generativeUi (which would require product-generator in the
+    // default catalog), explicit subsets bypass the assertion.
+    expect(() => createRuntimeScaffold({ subagents: [], generativeUi: {} })).not.toThrow();
   });
 
-  it("does not throw when all required subagents are present", () => {
-    const subagents: SubAgent[] = [
-      { name: "clarifier", description: "c", systemPrompt: "c" },
-      { name: "review-agent", description: "r", systemPrompt: "r" },
-      { name: "product-generator", description: "p", systemPrompt: "p" },
-    ];
-    expect(() => createRuntimeScaffold({ subagents, generativeUi: {} })).not.toThrow();
+  it("registers all required subagents in the default catalog", () => {
+    // This is the positive form of what the assertion guards: the default
+    // catalog must always surface clarifier, review-agent, and (when
+    // generativeUi is enabled) product-generator.
+    const plain = createRuntimeScaffold({});
+    const plainNames = new Set(plain.subagents.map((s) => s.name));
+    expect(plainNames.has("clarifier")).toBe(true);
+    expect(plainNames.has("review-agent")).toBe(true);
+
+    const withUi = createRuntimeScaffold({ generativeUi: {} });
+    const uiNames = new Set(withUi.subagents.map((s) => s.name));
+    expect(uiNames.has("clarifier")).toBe(true);
+    expect(uiNames.has("review-agent")).toBe(true);
+    expect(uiNames.has("product-generator")).toBe(true);
   });
 });

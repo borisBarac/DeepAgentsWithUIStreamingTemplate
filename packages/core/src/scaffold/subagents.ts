@@ -48,6 +48,7 @@ export function createDefaultSubagentCatalog(
     : undefined;
   const pythonTool = createPythonSandboxTool({
     backend: options.pythonSandboxBackend ?? createDockerSandboxBackend(),
+    identity: options.sandboxIdentity,
   });
 
   const clarifier = mergeSubagent(

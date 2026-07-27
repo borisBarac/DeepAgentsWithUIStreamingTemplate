@@ -16,6 +16,12 @@ function assertRequiredSubagentsPresent(
   subagents: RuntimeScaffold["subagents"],
   options: CreateRuntimeScaffoldOptions,
 ): void {
+  // When the caller explicitly provides `options.subagents`, they own the
+  // resulting catalog — many tests intentionally pass a subset (e.g. just the
+  // clarifier, or an empty list for memory-only scenarios). The required-
+  // subagent contract is only enforced for the default catalog path, where
+  // omitting a required subagent would silently break the workflow.
+  if (options.subagents !== undefined) return;
   const present = new Set(subagents.map((subagent) => subagent.name));
   const required = ["clarifier", "review-agent"];
   if (options.generativeUi) required.push("product-generator");

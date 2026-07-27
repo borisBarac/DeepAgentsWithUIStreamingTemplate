@@ -6,6 +6,7 @@ import type { ModelRuntimeOptions } from "../models/index.ts";
 import type { LangSmithTracingOptions } from "../observability/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { CreateRuntimeScaffoldOptions } from "../scaffold/index.ts";
+import type { WorkflowStateStore } from "../workflow/index.ts";
 
 type DeepAgentScaffoldOptions = Pick<
   CreateDeepAgentParams,
@@ -59,4 +60,10 @@ export type CreateScaffoldedAgentOptions = Omit<
       CreateRuntimeScaffoldOptions,
       "researcher" | "analyst" | "reviewer" | "clarifier" | "imageDesigner"
     >;
+    /**
+     * Workflow state store shared across controller rebuilds. When omitted the
+     * controller allocates its own {@link InMemoryWorkflowStateStore}, which
+     * is scoped to a single controller instance.
+     */
+    workflowStateStore?: WorkflowStateStore;
   };

@@ -76,7 +76,7 @@ describe("product gate", () => {
       casualAgent: fakeAgent("casual", calls),
       casualModel: {} as never,
       classifierModel: classifierModel("casual", calls),
-      workflowController: { hasWorkflowState: async () => true },
+      workflowController: { hasWorkflowState: () => true },
     });
 
     await agent.streamEvents(

@@ -30,6 +30,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     permissionOptions,
     profile,
     promptLoader = DEFAULT_PROMPT_LOADER,
+    sandboxIdentity,
     subagents,
     subagentOverrides,
     systemPrompt,
@@ -37,6 +38,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     reviewOptions,
     generativeUi,
     store = new InMemoryStore(),
+    workflowStateStore,
     ...agentOptions
   } = options;
 
@@ -57,6 +59,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     permissions,
     permissionOptions,
     promptLoader,
+    sandboxIdentity,
     subagents,
     systemPrompt,
     ...subagentOverrides,
@@ -67,6 +70,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     questionsPerRound: scaffold.clarification.config.questionsPerRound,
     maxReviewCycles: scaffold.review.config.maxReviewCycles,
     productGenerationEnabled: scaffold.productGeneration?.enabled === true,
+    workflowStateStore,
   });
 
   const agent = createAgentFromRuntimeScaffold({
@@ -86,6 +90,5 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     casualModel: modelRuntime.getModelForCategory("fast"),
     classifierModel: modelRuntime.getModelForCategory("fast"),
     workflowController,
-    stateStore: store,
   }) as WorkflowUiAgent;
 }
