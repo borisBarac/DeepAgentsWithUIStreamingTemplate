@@ -4,8 +4,9 @@ Isolated Python execution for the Deep Agent runtime. Docker is the default
 implementation behind the `SandboxBackend` interface. Agent-facing LangChain
 tool definitions remain in `@deep-agent-template/core`.
 
-The current runtime is single-user. It does not provide multi-tenant isolation,
-network access, package installation, GPU support, or a policy engine.
+The runtime supports result correlation for multiple users. It does not provide
+per-tenant quotas, network access, package installation, GPU support, or a
+policy engine.
 
 ## Quick start
 
@@ -36,6 +37,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const pythonTool = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
+  singleUser: true,
 });
 
 const agent = createScaffoldedAgent({
@@ -55,6 +57,7 @@ reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`.
 | Backend | Factory | Isolation | Use case |
 |---|---|---|---|
 | `docker` | `createDockerSandboxBackend()` | container | **Default for untrusted code.** `--network none`, `--cap-drop ALL`, `--read-only` rootfs, non-root user, frozen `python:3.12-slim` image. Pass `containerName` to reuse a long-lived container started by `docker compose up`. |
+| `docker` | `createManagedDockerSandboxBackend()` | shared container | Starts one container when first used and runs commands with `docker exec`. It owns the container and workspace. Call `dispose()` during shutdown. |
 
 The backend honors the shared `describeSandboxBackend()` contract (in
 `backend-test-harness.ts`), which runs all acceptance cases against it.
@@ -75,13 +78,23 @@ runs a fresh container per execution (`docker run` mode). In `containerName`
 mode (reusing a compose-managed container via `docker exec`), per-execution
 CPU/memory limits are NOT enforced — the container's overall limits apply.
 
+The managed reuse mode also applies CPU and memory limits to the whole
+container. Resource profiles still control the timeout, output, and artifact
+limits for each execution. They do not change CPU or memory limits in this
+mode. Executions share the container user, PID namespace, resource limits, and
+`/tmp`.
+
+The managed backend accepts at most five active executions by default. It keeps
+up to 25 more executions in a FIFO queue. A full queue returns retryable
+`resource_exhausted`. Cancelling a queued request removes it from the queue.
+
 ## Result envelope
 
 Every execution — success or failure — returns a `SandboxResult`:
 
 ```ts
 {
-  executionId, status, exitCode,
+  executionId, identity, status, exitCode,
   startedAt, finishedAt, durationMs,
   stdout, stderr, stdoutTruncated, stderrTruncated,
   artifacts: [{ name, bytes }, ...],
@@ -105,6 +118,7 @@ results so the model can react.
 | `failed` | `validation_error` | bad request (unknown profile, bad artifact name, …) |
 | `timeout` | `timeout` | killed because the effective timeout elapsed |
 | `cancelled` | — | killed because the caller aborted via `AbortSignal` |
+| `internal_error` | `result_mismatch` | backend returned crossed or missing correlation fields |
 | `internal_error` | `job_start_failed` / `image_pull_failed` / `internal_error` | backend couldn't run |
 
 Spec §20 classes that are intentionally absent: `policy_denied`,
@@ -131,15 +145,12 @@ policy engine and no package install, and network is always `none`.
 ### What v1 does NOT enforce
 
 - No policy engine (spec §18). Profile selection is the only knob.
-- No multi-tenant isolation. Caller identity (`tenantId`/`userId`) is threaded
-  into `SandboxExecuteOptions` and surfaced in the structured log line and the
-  `sandbox.execute_python` trace span, so executions are attributable — but
-  filesystem isolation, concurrency limits, and per-tenant quotas are NOT
-  enforced. All executions still share one workspace root (`os.tmpdir()` by
-  default) and run as the same `nobody` user. This is intentional for the
-  anonymous-guest model: every user is a guest, code execution is ephemeral,
-  and guests cannot persist files or processes between turns. Rate limiting /
-  quotas are the gateway's responsibility.
+- Tool creation must choose `identity: { tenantId, userId }` or
+  `singleUser: true`. Backends echo identity. The tool rejects mismatched or
+  missing execution IDs and identities before output reaches the agent.
+- No per-tenant quotas or distributed coordination. Fresh-container executions
+  share one host workspace root but use separate execution directories and
+  containers. Compose container reuse is unsafe for concurrent users.
 - No outbound network at all (spec §9.1 only). `artifact-only`,
   `restricted-egress`, and `internet-enabled` modes are deferred.
 - No package install. Frozen runtime only (spec §8.1).
@@ -199,7 +210,8 @@ file + one test file. The tool layer never needs to change.
 
 4. **Export the factory** from `backends/index.ts`.
 
-That's it — `createPythonSandboxTool({ backend: createE2bSandboxBackend() })`
+That's it — `createPythonSandboxTool({ backend: createE2bSandboxBackend(),
+singleUser: true })`
 now works without any changes to the core tool package or runtime contracts.
 
 ## File layout

@@ -1,4 +1,10 @@
-import { createDockerSandboxBackend, InMemoryWorkflowStateStore } from "@deep-agent-template/core";
+import os from "node:os";
+import path from "node:path";
+import {
+  createManagedDockerSandboxBackend,
+  InMemoryWorkflowStateStore,
+  type ManagedDockerSandboxBackend,
+} from "@deep-agent-template/core";
 import { createScaffoldedAgent, type DeepAgent } from "@deep-agent-template/core/agent";
 import { catalogPrompt } from "@deep-agent-template/core/generative-ui";
 import {
@@ -28,11 +34,27 @@ async function seedUserMemory(store: GuestMemoryStore, userId: string): Promise<
 
 type SandboxIdentity = { readonly tenantId: string; readonly userId: string };
 
-// Identity-agnostic and env-independent: one Docker sandbox backend per process.
-// Constructing it is cheap (no daemon contact until execute), so it is safe to
-// create eagerly. Sharing it avoids rebuilding the tool/backend graph on every
-// agent turn.
-const sharedSandboxBackend = createDockerSandboxBackend();
+function positiveNumber(raw: string | undefined, fallback: number): number {
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+// Local Docker execution and this in-process queue must move to online workers
+// for production scaling, distributed admission control, and tenant isolation.
+const sandboxSuffix = `${process.pid}-${crypto.randomUUID()}`;
+const sharedSandboxBackend: ManagedDockerSandboxBackend = createManagedDockerSandboxBackend({
+  containerName: `web-app-sandbox-${sandboxSuffix}`,
+  workspaceRoot: path.join(os.tmpdir(), `web-app-sandbox-${sandboxSuffix}`),
+  cpus: positiveNumber(process.env.WEB_APP_SANDBOX_CPUS, 2.5),
+  memory: process.env.WEB_APP_SANDBOX_MEMORY?.trim() || "1280m",
+  maxConcurrency: 5,
+  queueCapacity: 25,
+});
+
+export async function disposeSandboxBackend(): Promise<void> {
+  await sharedSandboxBackend.dispose();
+}
 
 // ============================================================================
 // Guest memory store

@@ -34,6 +34,7 @@ describe.skipIf(!hasLiveLLMCredentials || !DOCKER_AVAILABLE)(
     it("uses deepseek-v4-flash to execute Python through the sandbox tool", async () => {
       const execute = createPythonSandboxTool({
         backend: createDockerSandboxBackend({ pythonImage: PYTHON_IMAGE }),
+        singleUser: true,
       });
       const agent = createScaffoldedAgent({
         modelRuntime: createDefaultModelRuntime(false),

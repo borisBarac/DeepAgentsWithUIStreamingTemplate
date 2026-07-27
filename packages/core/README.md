@@ -585,6 +585,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const pythonTool = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
+  singleUser: true,
 });
 
 const agent = createScaffoldedAgent({

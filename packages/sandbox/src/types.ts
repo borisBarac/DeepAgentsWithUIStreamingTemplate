@@ -60,6 +60,7 @@ export type SandboxFailureClass =
   | "artifact_read_failed"
   | "artifact_write_failed"
   | "resource_exhausted"
+  | "result_mismatch"
   | "internal_error";
 
 /**
@@ -111,6 +112,7 @@ export type SandboxRequest = {
  */
 export type SandboxResult = {
   readonly executionId: SandboxExecutionId;
+  readonly identity?: SandboxExecutionIdentity;
   readonly status: SandboxStatus;
   readonly exitCode: number | null;
   readonly startedAt: string;

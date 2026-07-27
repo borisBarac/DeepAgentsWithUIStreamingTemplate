@@ -8,8 +8,12 @@
 // "Ecmascript file had an error" warning for this file on every compile.
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  const { registerTelemetry } = await import("./src/server/telemetry/bootstrap.ts");
-  const { registerShutdownHandlers } = await import("./src/server/telemetry/shutdown.ts");
+  const [{ registerTelemetry }, { registerShutdownHandlers }, { disposeSandboxBackend }] =
+    await Promise.all([
+      import("./src/server/telemetry/bootstrap.ts"),
+      import("./src/server/telemetry/shutdown.ts"),
+      import("./src/server/agent-provider.ts"),
+    ]);
   registerTelemetry();
-  registerShutdownHandlers();
+  registerShutdownHandlers(disposeSandboxBackend);
 }

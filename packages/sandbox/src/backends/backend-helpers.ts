@@ -50,7 +50,7 @@ export type StartFailure = {
 /** Classification tuple used by `buildSyntheticResult`. */
 export type SyntheticClassification = {
   readonly status: SandboxResult["status"];
-  readonly failureClass: SandboxFailureClass;
+  readonly failureClass: SandboxFailureClass | undefined;
   readonly retryable: boolean;
 };
 
@@ -61,6 +61,7 @@ export type SyntheticClassification = {
  */
 export function buildSyntheticResult(args: {
   readonly executionId: string;
+  readonly identity?: SandboxExecuteOptions["identity"];
   readonly resourceProfile: SandboxRequest["resourceProfile"];
   readonly backend: string;
   readonly startedAt: Date;
@@ -70,6 +71,7 @@ export function buildSyntheticResult(args: {
   const message = args.error instanceof Error ? args.error.message : String(args.error);
   return buildResultEnvelope({
     executionId: args.executionId,
+    identity: args.identity,
     resourceProfile: args.resourceProfile ?? "sandbox-small",
     backend: args.backend,
     startedAt: args.startedAt,
@@ -124,6 +126,7 @@ export async function executeWithHandling(args: {
   } catch (error) {
     return buildSyntheticResult({
       executionId: args.execOptions.executionId,
+      identity: args.execOptions.identity,
       resourceProfile: args.request.resourceProfile ?? "sandbox-small",
       backend: args.backendName,
       startedAt,
@@ -144,6 +147,7 @@ export async function executeWithHandling(args: {
     const isValidation = error instanceof SandboxValidationError;
     return buildSyntheticResult({
       executionId: args.execOptions.executionId,
+      identity: args.execOptions.identity,
       resourceProfile: config.profile,
       backend: args.backendName,
       startedAt,
@@ -189,6 +193,7 @@ export async function runExecution(args: {
   } catch (error) {
     return buildSyntheticResult({
       executionId: execOptions.executionId,
+      identity: execOptions.identity,
       resourceProfile: config.profile,
       backend: backendName,
       startedAt,
@@ -302,6 +307,7 @@ export async function runExecution(args: {
 
   const result = buildResultEnvelope({
     executionId: execOptions.executionId,
+    identity: execOptions.identity,
     resourceProfile: config.profile,
     backend: backendName,
     startedAt,

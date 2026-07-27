@@ -28,6 +28,7 @@ function makeFakeBackend(capture: {
       capture.options = options;
       return {
         executionId: options.executionId,
+        identity: options.identity,
         status: "succeeded",
         exitCode: 0,
         startedAt: "2025-01-01T00:00:00.000Z",
@@ -80,14 +81,35 @@ describe("pythonSandboxInputSchema", () => {
 });
 
 describe("createPythonSandboxTool", () => {
+  it("requires exactly one runtime identity mode", () => {
+    expect(() =>
+      createPythonSandboxTool({
+        backend: makeFakeBackend({}),
+      } as never),
+    ).toThrow("requires exactly one");
+    expect(() =>
+      createPythonSandboxTool({
+        backend: makeFakeBackend({}),
+        identity: { tenantId: "acme", userId: "alice" },
+        singleUser: true,
+      } as never),
+    ).toThrow("requires exactly one");
+    expect(() =>
+      createPythonSandboxTool({
+        backend: makeFakeBackend({}),
+        identity: { tenantId: "", userId: "alice" },
+      }),
+    ).toThrow("requires non-empty");
+  });
+
   it("exposes the reserved `execute_python` name", () => {
-    const tool = createPythonSandboxTool({ backend: makeFakeBackend({}) });
+    const tool = createPythonSandboxTool({ backend: makeFakeBackend({}), singleUser: true });
     expect(tool.name).toBe("execute_python");
   });
 
   it("invokes the backend with code and a generated executionId", async () => {
     const capture: { request?: SandboxRequest; executionId?: string } = {};
-    const tool = createPythonSandboxTool({ backend: makeFakeBackend(capture) });
+    const tool = createPythonSandboxTool({ backend: makeFakeBackend(capture), singleUser: true });
     const result = await tool.invoke({ code: "print('hi')" });
     expect(capture.request?.code).toBe("print('hi')");
     expect(capture.request?.resourceProfile).toBe("sandbox-small");
@@ -100,6 +122,7 @@ describe("createPythonSandboxTool", () => {
     const capture: { request?: SandboxRequest } = {};
     const tool = createPythonSandboxTool({
       backend: makeFakeBackend(capture),
+      singleUser: true,
       defaultResourceProfile: "sandbox-large",
     });
     await tool.invoke({ code: "x" });
@@ -110,6 +133,7 @@ describe("createPythonSandboxTool", () => {
     const capture: { request?: SandboxRequest } = {};
     const tool = createPythonSandboxTool({
       backend: makeFakeBackend(capture),
+      singleUser: true,
       defaultResourceProfile: "sandbox-small",
     });
     await tool.invoke({ code: "x", resourceProfile: "sandbox-medium" });
@@ -128,7 +152,7 @@ describe("createPythonSandboxTool", () => {
 
   it("omits identity when none is configured", async () => {
     const capture: { options?: SandboxExecuteOptions } = {};
-    const tool = createPythonSandboxTool({ backend: makeFakeBackend(capture) });
+    const tool = createPythonSandboxTool({ backend: makeFakeBackend(capture), singleUser: true });
     await tool.invoke({ code: "x" });
     expect(capture.options?.identity).toBeUndefined();
   });
@@ -174,9 +198,100 @@ describe("createPythonSandboxTool", () => {
   });
 
   it("does not throw and still returns a result with no tracer provider registered", async () => {
-    const result = await createPythonSandboxTool({ backend: makeFakeBackend({}) }).invoke({
+    const result = await createPythonSandboxTool({
+      backend: makeFakeBackend({}),
+      singleUser: true,
+    }).invoke({ code: "x" });
+    expect(result.status).toBe("succeeded");
+  });
+
+  it("discards crossed correlation fields and output", async () => {
+    const backend = makeFakeBackend({});
+    backend.execute = async () => ({
+      executionId: "exec-bob",
+      identity: { tenantId: "other", userId: "bob" },
+      status: "succeeded",
+      exitCode: 0,
+      startedAt: "2025-01-01T00:00:00.000Z",
+      finishedAt: "2025-01-01T00:00:00.001Z",
+      durationMs: 1,
+      stdout: "BOB_SECRET",
+      stderr: "BOB_ERROR",
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      artifacts: [{ name: "bob.txt", bytes: new Uint8Array([66]) }],
+      retryable: false,
+      resourceProfile: "sandbox-small",
+      backend: "fake",
+    });
+    const result = await createPythonSandboxTool({
+      backend,
+      identity: { tenantId: "acme", userId: "alice" },
+    }).invoke({ code: "x" });
+
+    expect(result.status).toBe("internal_error");
+    expect(result.failureClass).toBe("result_mismatch");
+    expect(result.executionId).toMatch(/^exec-/);
+    expect(result.identity).toEqual({ tenantId: "acme", userId: "alice" });
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+    expect(result.artifacts).toEqual([]);
+    expect(JSON.stringify(result)).not.toContain("BOB");
+    expect(result.retryable).toBe(false);
+  });
+
+  it("rejects missing identity correlation fields", async () => {
+    const delegate = makeFakeBackend({});
+    const backend = makeFakeBackend({});
+    backend.execute = async (request, options) => ({
+      ...(await delegate.execute(request, options)),
+      identity: undefined,
+    });
+    const result = await createPythonSandboxTool({
+      backend,
+      identity: { tenantId: "acme", userId: "alice" },
+    }).invoke({ code: "x" });
+    expect(result.failureClass).toBe("result_mismatch");
+  });
+
+  it("rejects a missing execution ID correlation field", async () => {
+    const delegate = makeFakeBackend({});
+    const backend = makeFakeBackend({});
+    backend.execute = async (request, options) =>
+      ({
+        ...(await delegate.execute(request, options)),
+        executionId: undefined,
+      }) as unknown as SandboxResult;
+    const result = await createPythonSandboxTool({
+      backend,
+      identity: { tenantId: "acme", userId: "alice" },
+    }).invoke({ code: "x" });
+    expect(result.status).toBe("internal_error");
+    expect(result.failureClass).toBe("result_mismatch");
+    expect(result.executionId).toMatch(/^exec-/);
+  });
+
+  it("converts backend exceptions and lets the caller continue", async () => {
+    const delegate = makeFakeBackend({});
+    const backend = makeFakeBackend({});
+    let attempts = 0;
+    backend.execute = async (request, options) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("docker leaked secret details");
+      return delegate.execute(request, options);
+    };
+    const sandboxTool = createPythonSandboxTool({ backend, singleUser: true });
+    const result = await sandboxTool.invoke({
       code: "x",
     });
-    expect(result.status).toBe("succeeded");
+    expect(result.status).toBe("internal_error");
+    expect(result.failureClass).toBe("internal_error");
+    expect(result.failureMessage).toBe("Sandbox execution failed internally.");
+    expect(JSON.stringify(result)).not.toContain("leaked secret");
+    expect(result.retryable).toBe(true);
+
+    const continuedResult = await sandboxTool.invoke({ code: "print('continued')" });
+    expect(continuedResult.status).toBe("succeeded");
+    expect(attempts).toBe(2);
   });
 });

@@ -135,6 +135,7 @@ export function createDockerSandboxBackend(
         if (!dockerAvailable) {
           return buildSyntheticResult({
             executionId: execOptions.executionId,
+            identity: execOptions.identity,
             resourceProfile: config.profile,
             backend: backendName,
             startedAt: new Date(),
@@ -155,6 +156,7 @@ export function createDockerSandboxBackend(
           if (!containerRunning) {
             return buildSyntheticResult({
               executionId: execOptions.executionId,
+              identity: execOptions.identity,
               resourceProfile: config.profile,
               backend: backendName,
               startedAt: new Date(),

@@ -89,6 +89,7 @@ describe("index barrel exports", () => {
   it("re-exports sandbox tools and runtime compatibility exports", () => {
     expect(index.createPythonSandboxTool).toBe(sandbox.createPythonSandboxTool);
     expect(index.createDockerSandboxBackend).toBe(sandbox.createDockerSandboxBackend);
+    expect(index.createManagedDockerSandboxBackend).toBe(sandbox.createManagedDockerSandboxBackend);
     expect(index.SANDBOX_PROFILES).toBe(sandbox.SANDBOX_PROFILES);
   });
 

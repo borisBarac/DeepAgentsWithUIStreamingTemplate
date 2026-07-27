@@ -47,6 +47,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const executePython = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
+  singleUser: true,
   defaultResourceProfile: "sandbox-small",
 });
 
@@ -189,6 +190,36 @@ Stop the reused container when finished:
 ```bash
 docker compose down
 ```
+
+## Let the app manage one reused container
+
+Use `createManagedDockerSandboxBackend()` when one process should own the
+container and its host workspace:
+
+```ts
+const backend = createManagedDockerSandboxBackend({
+  containerName: "web-app-sandbox-1234",
+  workspaceRoot: "/tmp/web-app-sandbox-1234",
+  image: "python:3.12-slim",
+  cpus: 2.5,
+  memory: "1280m",
+  maxConcurrency: 5,
+  queueCapacity: 25,
+});
+```
+
+The backend starts the container on its first execution. It runs later
+executions with `docker exec`. Call `await backend.dispose()` during process
+shutdown to remove the container and workspace.
+
+The queue uses FIFO order. By default, five executions can run and 25 can wait.
+A full queue returns retryable `resource_exhausted`. Cancelling a waiting
+request removes it from the queue.
+
+Resource profiles still control each execution's timeout, output limit, and
+artifact limit. The `cpus` and `memory` options apply to the whole container.
+Concurrent executions share those limits, the container user, PID namespace,
+and `/tmp`.
 
 ## Change the Python image
 

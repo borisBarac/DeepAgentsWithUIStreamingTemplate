@@ -7,5 +7,6 @@ describe("sandbox package exports", () => {
     expect(index.DEFAULT_RESOURCE_PROFILE).toBe("sandbox-small");
     expect(index.SANDBOX_PROFILES["sandbox-large"].memoryLimitMb).toBe(1024);
     expect(typeof index.createDockerSandboxBackend).toBe("function");
+    expect(typeof index.createManagedDockerSandboxBackend).toBe("function");
   });
 });

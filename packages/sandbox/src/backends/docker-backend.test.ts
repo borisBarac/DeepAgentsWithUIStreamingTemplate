@@ -82,6 +82,36 @@ describe("docker availability flag", () => {
   });
 });
 
+describe("docker multi-user correlation", () => {
+  it.skipIf(!DOCKER_AVAILABLE)(
+    "keeps Alice and Bob correlated through one shared backend",
+    async () => {
+      const backend = createDockerSandboxBackend({ pythonImage: TEST_PYTHON_IMAGE });
+      const users = [
+        { identity: { tenantId: "tenant", userId: "alice" }, marker: "ALICE" },
+        { identity: { tenantId: "tenant", userId: "bob" }, marker: "BOB" },
+      ] as const;
+      const results = await Promise.all(
+        users.map(({ identity, marker }) =>
+          backend.execute(
+            { code: `print("${marker}")` },
+            { executionId: `exec-${identity.userId}`, identity },
+          ),
+        ),
+      );
+
+      for (const [index, user] of users.entries()) {
+        const result = results[index];
+        if (!result) throw new Error(`Missing result for ${user.identity.userId}`);
+        expect(result.executionId).toBe(`exec-${user.identity.userId}`);
+        expect(result.identity).toEqual(user.identity);
+        expect(result.stdout.trim()).toBe(user.marker);
+      }
+    },
+    60_000,
+  );
+});
+
 describe("createDockerSandboxBackend: containerName option", () => {
   it("throws when containerName is set without workDirRoot", () => {
     expect(() => createDockerSandboxBackend({ containerName: "python-sandbox" })).toThrowError(

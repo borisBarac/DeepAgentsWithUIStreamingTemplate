@@ -9,10 +9,13 @@
 export {
   CONTAINER_WORKSPACE_PATH,
   createDockerSandboxBackend,
+  createManagedDockerSandboxBackend,
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
   type DockerSandboxBackendOptions,
   ENTRYPOINT_FILENAME,
+  type ManagedDockerSandboxBackend,
+  type ManagedDockerSandboxBackendOptions,
   SANDBOX_PROFILES,
   type SandboxArtifact,
   type SandboxBackend,

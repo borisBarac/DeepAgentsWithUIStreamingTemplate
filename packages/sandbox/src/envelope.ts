@@ -161,6 +161,7 @@ export function classifyFailure(input: {
  */
 export function buildResultEnvelope(input: {
   readonly executionId: SandboxExecutionId;
+  readonly identity?: SandboxExecutionIdentity;
   readonly resourceProfile: SandboxResourceProfile;
   readonly backend: string;
   readonly startedAt: Date;
@@ -174,6 +175,7 @@ export function buildResultEnvelope(input: {
 }): SandboxResult {
   return {
     executionId: input.executionId,
+    identity: input.identity,
     status: input.classification.status,
     exitCode: input.exitCode,
     startedAt: input.startedAt.toISOString(),

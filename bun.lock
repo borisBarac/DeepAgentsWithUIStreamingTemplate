@@ -84,6 +84,7 @@
         "@storybook/addon-docs": "^10.5.3",
         "@storybook/addon-onboarding": "^10.5.3",
         "@storybook/nextjs": "^10.5.3",
+        "@storybook/react": "^10.5.3",
         "@types/node": "^24.0.0",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
