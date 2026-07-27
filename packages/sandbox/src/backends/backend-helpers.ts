@@ -326,6 +326,7 @@ export async function runExecution(args: {
       stdoutBytes: stdoutCollected.byteLength,
       stderrBytes: stderrCollected.byteLength,
       artifactCount: artifacts.length,
+      identity: execOptions.identity,
     }),
   );
 

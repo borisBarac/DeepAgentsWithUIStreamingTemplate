@@ -13,6 +13,16 @@
 export type SandboxExecutionId = string;
 
 /**
+ * Caller-supplied identity for attribution. Optional: backends use it for
+ * structured logging, tracing, and future per-tenant quotas. It is contextual
+ * metadata, NOT a security boundary — filesystem isolation is unchanged.
+ */
+export type SandboxExecutionIdentity = {
+  readonly tenantId: string;
+  readonly userId: string;
+};
+
+/**
  * Named resource profile. Maps to spec §6 (without the GPU profile, which is
  * out of scope for v1). Each backend interprets cpu/memory limits in its own
  * units; see {@link SandboxResourceProfileConfig}.
@@ -93,8 +103,7 @@ export type SandboxRequest = {
 };
 
 /**
- * Normalized result envelope returned by every backend. Matches spec §12
- * (minus the multi-tenant and tracing fields, which are out of scope for v1).
+ * Normalized result envelope returned by every backend. Matches spec §12.
  *
  * `stdout` and `stderr` are pre-truncated to the profile's `maxOutputBytes`;
  * the `*Truncated` flags indicate whether truncation occurred. Large outputs
@@ -132,10 +141,14 @@ export type SandboxBackendCapabilities = {
 /**
  * Options passed to {@link SandboxBackend.execute} per call.
  * Truly universal — no backend-specific symbols.
+ *
+ * `identity` and `traceContext` are optional contextual metadata for logging,
+ * tracing, and future per-tenant quotas. They do not change isolation.
  */
 export type SandboxExecuteOptions = {
   readonly executionId: SandboxExecutionId;
   readonly signal?: AbortSignal;
+  readonly identity?: SandboxExecutionIdentity;
 };
 
 /**

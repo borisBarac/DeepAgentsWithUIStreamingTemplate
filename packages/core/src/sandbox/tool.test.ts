@@ -1,11 +1,23 @@
 import { describe, expect, it } from "bun:test";
-
-import type { SandboxBackend, SandboxRequest, SandboxResult } from "@deep-agent-template/sandbox";
+import type {
+  SandboxBackend,
+  SandboxExecuteOptions,
+  SandboxRequest,
+  SandboxResult,
+} from "@deep-agent-template/sandbox";
+import { context, trace } from "@opentelemetry/api";
+import { AsyncLocalStorageContextManager } from "@opentelemetry/context-async-hooks";
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 import { createPythonSandboxTool, pythonSandboxInputSchema } from "./tool.ts";
 
 function makeFakeBackend(capture: {
   request?: SandboxRequest;
   executionId?: string;
+  options?: SandboxExecuteOptions;
 }): SandboxBackend {
   return {
     name: "fake",
@@ -13,6 +25,7 @@ function makeFakeBackend(capture: {
     async execute(request: SandboxRequest, options): Promise<SandboxResult> {
       capture.request = request;
       capture.executionId = options.executionId;
+      capture.options = options;
       return {
         executionId: options.executionId,
         status: "succeeded",
@@ -101,5 +114,69 @@ describe("createPythonSandboxTool", () => {
     });
     await tool.invoke({ code: "x", resourceProfile: "sandbox-medium" });
     expect(capture.request?.resourceProfile).toBe("sandbox-medium");
+  });
+
+  it("forwards caller identity into the backend execute options", async () => {
+    const capture: { options?: SandboxExecuteOptions } = {};
+    const tool = createPythonSandboxTool({
+      backend: makeFakeBackend(capture),
+      identity: { tenantId: "acme", userId: "alice" },
+    });
+    await tool.invoke({ code: "x" });
+    expect(capture.options?.identity).toEqual({ tenantId: "acme", userId: "alice" });
+  });
+
+  it("omits identity when none is configured", async () => {
+    const capture: { options?: SandboxExecuteOptions } = {};
+    const tool = createPythonSandboxTool({ backend: makeFakeBackend(capture) });
+    await tool.invoke({ code: "x" });
+    expect(capture.options?.identity).toBeUndefined();
+  });
+
+  it("emits a sandbox.execute_python span nested under the active parent", async () => {
+    const exporter = new InMemorySpanExporter();
+    const provider = new BasicTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    });
+    // A context manager is required for context.active() to propagate across
+    // the context.with boundary (the production web-app registers one via
+    // sdk-node; this test registers one directly).
+    const contextManager = new AsyncLocalStorageContextManager();
+    contextManager.enable();
+    trace.setGlobalTracerProvider(provider);
+    context.setGlobalContextManager(contextManager);
+    try {
+      const parent = trace.getTracer("test").startSpan("agent.run");
+      const parentSpanId = parent.spanContext().spanId;
+      await context.with(trace.setSpan(context.active(), parent), async () => {
+        const tool = createPythonSandboxTool({
+          backend: makeFakeBackend({}),
+          identity: { tenantId: "acme", userId: "alice" },
+        });
+        await tool.invoke({ code: "x", resourceProfile: "sandbox-medium" });
+      });
+      parent.end();
+
+      const spans = exporter.getFinishedSpans();
+      const sandboxSpan = spans.find((s) => s.name === "sandbox.execute_python");
+      expect(sandboxSpan).toBeDefined();
+      expect(sandboxSpan?.attributes["tenant.id"]).toBe("acme");
+      expect(sandboxSpan?.attributes["user.id"]).toBe("alice");
+      expect(sandboxSpan?.attributes["sandbox.resource_profile"]).toBe("sandbox-medium");
+      expect(sandboxSpan?.attributes["sandbox.status"]).toBe("succeeded");
+      // The sandbox span's parent must be the agent.run span we opened.
+      expect(sandboxSpan?.parentSpanContext?.spanId).toBe(parentSpanId);
+    } finally {
+      // Reset to no-op globals so this test's OTel setup doesn't leak.
+      context.disable();
+      trace.disable();
+    }
+  });
+
+  it("does not throw and still returns a result with no tracer provider registered", async () => {
+    const result = await createPythonSandboxTool({ backend: makeFakeBackend({}) }).invoke({
+      code: "x",
+    });
+    expect(result.status).toBe("succeeded");
   });
 });

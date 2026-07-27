@@ -104,18 +104,31 @@ export function getLangSmithClient(options: LangSmithClientOptions = {}): Client
 /**
  * Build the LangSmith filter DSL string for a subagent name.
  *
- * The filter syntax `eq(metadata.<key>, "<value>")` is server-side; both the
- * JS and Python SDKs accept it. If a future LangSmith backend revision stops
- * supporting the dotted form, fall back to
- * `has(metadata, '{"lc_agent_name":"<value>"}')` — same semantics, alternative
- * syntax documented in the Python deepagents subagents guide.
+ * Uses the `has(metadata, '{"lc_agent_name": "<value>"}')` form, exactly as
+ * documented in the Python deepagents subagents guide. The JSON dict argument
+ * is wrapped in **single quotes** because it contains double quotes; the
+ * LangSmith filter parser does not honor `\"` escapes inside double-quoted
+ * string literals, so wrapping in double quotes produces a parse error
+ * (HTTP 400 "unexpected character ... char 1" — the backslash).
+ *
+ * The previous `eq(metadata.lc_agent_name, "...")` dotted form was also
+ * rejected by the filter API ("Attribute metadata.lc_agent_name not
+ * accepted"). The `has()` form is the only documented syntax for matching
+ * nested metadata key-value pairs.
+ *
+ * If a future LangSmith backend revision stops accepting the `has()` form,
+ * restore the dotted `eq()` form.
+ *
+ * Subagent names are validated by deepagents at registration (kebab-case
+ * identifiers, no quotes), so single-quote wrapping is safe without escaping.
  */
 export function buildSubagentFilter(subagentName: string): string {
-  // Escape backslashes and double-quotes inside the name. Subagent names are
-  // validated by deepagents at registration (kebab-case identifier) so this
-  // is defense-in-depth rather than a realistic attack surface.
-  const escaped = subagentName.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-  return `eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "${escaped}")`;
+  // Subagent names are kebab-case identifiers — no single quotes, no
+  // backslashes, no double quotes — so the JSON value needs no escaping and
+  // the outer single-quoted filter literal is unambiguous. The shape mirrors
+  // the documented Python example verbatim:
+  //   has(metadata, '{"lc_agent_name": "<value>"}')
+  return `has(metadata, '{"${LC_AGENT_NAME_METADATA_KEY}": "${subagentName}"}')`;
 }
 
 /**

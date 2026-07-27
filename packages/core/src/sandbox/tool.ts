@@ -1,11 +1,13 @@
 import {
   DEFAULT_RESOURCE_PROFILE,
   type SandboxBackend,
+  type SandboxExecutionIdentity,
   type SandboxResourceProfile,
   type SandboxResult,
 } from "@deep-agent-template/sandbox";
 import type { StructuredTool } from "@langchain/core/tools";
 import { tool } from "@langchain/core/tools";
+import { context, SpanStatusCode, type Tracer, trace } from "@opentelemetry/api";
 import { z } from "zod";
 
 /**
@@ -48,7 +50,24 @@ export type PythonSandboxToolInput = z.infer<typeof pythonSandboxInputSchema>;
 export type CreatePythonSandboxToolOptions = {
   readonly backend: SandboxBackend;
   readonly defaultResourceProfile?: SandboxResourceProfile;
+  /**
+   * Optional caller identity stamped onto every execution's options, for
+   * audit logging and tracing. Contextual metadata only — not an isolation
+   * boundary.
+   */
+  readonly identity?: SandboxExecutionIdentity;
 };
+
+const SANDBOX_TRACER_NAME = "@deep-agent-template/core";
+let cachedTracer: Tracer | undefined;
+function tracer(): Tracer {
+  // getTracer is cheap and internally cached by the API; still, avoid repeated
+  // lookups on the hot path.
+  if (cachedTracer === undefined) {
+    cachedTracer = trace.getTracer(SANDBOX_TRACER_NAME);
+  }
+  return cachedTracer;
+}
 
 /**
  * Build the LangChain `execute_python` tool that runs Python via the provided
@@ -70,20 +89,51 @@ export type CreatePythonSandboxToolOptions = {
 export function createPythonSandboxTool(options: CreatePythonSandboxToolOptions): StructuredTool {
   const backend = options.backend;
   const defaultResourceProfile = options.defaultResourceProfile ?? DEFAULT_RESOURCE_PROFILE;
+  const identity = options.identity;
 
   return tool(
     async (input: PythonSandboxToolInput): Promise<SandboxResult> => {
       const executionId = `exec-${crypto.randomUUID()}`;
-      return backend.execute(
-        {
-          code: input.code,
-          stdin: input.stdin,
-          argv: input.argv,
-          resourceProfile: input.resourceProfile ?? defaultResourceProfile,
-          timeoutSeconds: input.timeoutSeconds,
-        },
-        { executionId },
-      );
+      // Emit a host-side span so execute_python appears in the OTel trace
+      // tree as a child of the enclosing agent.run span. With no SDK
+      // registered, the tracer is a no-op and this adds negligible overhead.
+      const span = tracer().startSpan("sandbox.execute_python");
+      span.setAttribute("sandbox.execution_id", executionId);
+      if (input.resourceProfile)
+        span.setAttribute("sandbox.resource_profile", input.resourceProfile);
+      if (identity) {
+        span.setAttribute("tenant.id", identity.tenantId);
+        span.setAttribute("user.id", identity.userId);
+      }
+      try {
+        const result = await context.with(trace.setSpan(context.active(), span), () =>
+          backend.execute(
+            {
+              code: input.code,
+              stdin: input.stdin,
+              argv: input.argv,
+              resourceProfile: input.resourceProfile ?? defaultResourceProfile,
+              timeoutSeconds: input.timeoutSeconds,
+            },
+            { executionId, identity },
+          ),
+        );
+        span.setAttribute("sandbox.status", result.status);
+        span.setAttribute("sandbox.exit_code", result.exitCode ?? -1);
+        span.setAttribute("sandbox.backend", result.backend);
+        if (result.status !== "succeeded") {
+          span.setStatus({ code: SpanStatusCode.ERROR, message: result.failureMessage });
+        } else {
+          span.setStatus({ code: SpanStatusCode.OK });
+        }
+        return result;
+      } catch (error) {
+        span.recordException(error instanceof Error ? error : new Error(String(error)));
+        span.setStatus({ code: SpanStatusCode.ERROR });
+        throw error;
+      } finally {
+        span.end();
+      }
     },
     {
       name: "execute_python",

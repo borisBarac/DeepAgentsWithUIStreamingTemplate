@@ -43,21 +43,30 @@ afterEach(() => {
 });
 
 describe("buildSubagentFilter", () => {
-  it("emits the eq(metadata.lc_agent_name, ...) DSL form", () => {
+  it("emits the has(metadata, ...) DSL form with single-quoted JSON", () => {
+    // The dotted eq(metadata.lc_agent_name, ...) form was rejected by the
+    // LangSmith filter API; the has() form is the documented replacement.
+    // The JSON dict argument is wrapped in single quotes because the filter
+    // parser does not honor \" escapes inside double-quoted literals.
     expect(buildSubagentFilter("researcher")).toBe(
-      `eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "researcher")`,
+      `has(metadata, '{"${LC_AGENT_NAME_METADATA_KEY}": "researcher"}')`,
     );
   });
 
   it("quotes the coordinator name identically", () => {
     expect(buildSubagentFilter("coordinator")).toBe(
-      `eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "coordinator")`,
+      `has(metadata, '{"${LC_AGENT_NAME_METADATA_KEY}": "coordinator"}')`,
     );
   });
 
-  it("escapes embedded double quotes and backslashes", () => {
-    expect(buildSubagentFilter('naive"\\name')).toBe(
-      `eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "naive\\"\\\\name")`,
+  it("assumes kebab-case identifiers and does not escape", () => {
+    // Subagent names are validated by deepagents at registration (kebab-case
+    // identifiers — no quotes, no backslashes). The single-quoted filter
+    // literal is therefore unambiguous without escaping. A hypothetical name
+    // containing a single quote would break the filter; that is the caller's
+    // contract to uphold, not this helper's.
+    expect(buildSubagentFilter("review-agent")).toBe(
+      `has(metadata, '{"${LC_AGENT_NAME_METADATA_KEY}": "review-agent"}')`,
     );
   });
 });
@@ -123,12 +132,17 @@ function fakeRun(overrides: Partial<Run> = {}): Run {
 }
 
 describe("listRunsBySubagent", () => {
+  // Shared expectation: the filter passed to client.listRuns matches what
+  // buildSubagentFilter emits. Building it from the production helper keeps
+  // these tests from drifting if the DSL form changes again.
+  const expectedFilter = (name = "researcher") => buildSubagentFilter(name);
+
   it("passes the lc_agent_name filter and projectName to listRuns", async () => {
     const { client, calls } = mockClient([fakeRun()]);
     const runs = await listRunsBySubagent({ ...baseOptions, __clientForTest: client });
     expect(runs).toHaveLength(1);
     expect(calls[0]?.projectName).toBe("deep-agent-template");
-    expect(calls[0]?.filter).toBe(`eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "researcher")`);
+    expect(calls[0]?.filter).toBe(expectedFilter());
     expect(calls[0]?.order).toBe("desc");
   });
 
@@ -137,7 +151,7 @@ describe("listRunsBySubagent", () => {
     const since = new Date("2026-01-01T00:00:00Z");
     await listRunsBySubagent({ ...baseOptions, since, __clientForTest: client });
     expect(calls[0]?.filter).toBe(
-      `and(eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "researcher"), gte(start_time, "${since.toISOString()}"))`,
+      `and(${expectedFilter()}, gte(start_time, "${since.toISOString()}"))`,
     );
   });
 
@@ -163,11 +177,13 @@ describe("listRunsBySubagent", () => {
 });
 
 describe("listTracesBySubagent", () => {
+  const expectedFilter = (name = "researcher") => buildSubagentFilter(name);
+
   it("restricts to root runs (isRoot: true)", async () => {
     const { client, calls } = mockClient([fakeRun()]);
     const traces = await listTracesBySubagent({ ...baseOptions, __clientForTest: client });
     expect(traces).toHaveLength(1);
     expect(calls[0]?.isRoot).toBe(true);
-    expect(calls[0]?.filter).toBe(`eq(metadata.${LC_AGENT_NAME_METADATA_KEY}, "researcher")`);
+    expect(calls[0]?.filter).toBe(expectedFilter());
   });
 });

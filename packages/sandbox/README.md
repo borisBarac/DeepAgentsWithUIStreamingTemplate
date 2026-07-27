@@ -131,8 +131,15 @@ policy engine and no package install, and network is always `none`.
 ### What v1 does NOT enforce
 
 - No policy engine (spec §18). Profile selection is the only knob.
-- No multi-tenant isolation. Single-user, matching the rest of this repo's
-  memory / filesystem assumptions.
+- No multi-tenant isolation. Caller identity (`tenantId`/`userId`) is threaded
+  into `SandboxExecuteOptions` and surfaced in the structured log line and the
+  `sandbox.execute_python` trace span, so executions are attributable — but
+  filesystem isolation, concurrency limits, and per-tenant quotas are NOT
+  enforced. All executions still share one workspace root (`os.tmpdir()` by
+  default) and run as the same `nobody` user. This is intentional for the
+  anonymous-guest model: every user is a guest, code execution is ephemeral,
+  and guests cannot persist files or processes between turns. Rate limiting /
+  quotas are the gateway's responsibility.
 - No outbound network at all (spec §9.1 only). `artifact-only`,
   `restricted-egress`, and `internet-enabled` modes are deferred.
 - No package install. Frozen runtime only (spec §8.1).

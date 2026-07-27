@@ -19,6 +19,7 @@ export {
   type SandboxBackendCapabilities,
   type SandboxExecuteOptions,
   type SandboxExecutionId,
+  type SandboxExecutionIdentity,
   type SandboxFailureClass,
   type SandboxRequest,
   type SandboxResourceProfile,
