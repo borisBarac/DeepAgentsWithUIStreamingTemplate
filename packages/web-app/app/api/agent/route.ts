@@ -1,97 +1,63 @@
-import { safeEmit } from "@deep-agent-template/core/generative-ui";
-import {
-  type AgentInputMessage,
-  createInteractionStream,
-  type InteractionStreamFailure,
-  type ModelUiOutput,
-  type StreamableAgent,
-  type UiUpdate,
-} from "@deep-agent-template/core/interaction-stream";
+import type { StreamableAgent, UiUpdate } from "@deep-agent-template/core/interaction-stream";
 import { NextResponse } from "next/server";
-import { createAgentProvider } from "../../../src/server/agent-provider.ts";
-import { createCurrentContext } from "../../../src/server/current-context.ts";
+
+import { createAgentForIdentity } from "../../../src/server/agent-provider.ts";
+import {
+  type AgentSource,
+  InlineAgentExecutor,
+} from "../../../src/server/agent-runtime/executor.ts";
+import { AgentRequestRunner } from "../../../src/server/agent-runtime/request-runner.ts";
+import { InMemorySessionStore } from "../../../src/server/agent-runtime/store.ts";
+import { GUEST_TENANT_ID, resolveGuestIdentity } from "../../../src/server/identity.ts";
 
 export const runtime = "nodejs";
 
-type Agent = StreamableAgent;
+type AgentFactory = (identity: { tenantId: string; userId: string }) => Promise<StreamableAgent>;
 
-const MAX_SESSIONS = 100;
-type SessionState = {
-  failure: InteractionStreamFailure | null;
-  history: unknown[];
-  structuredOutput: ModelUiOutput | null;
-};
+// Test seams: an injected agent or factory short-circuits per-run agent
+// creation. The factory is memoized as a singleton with retry-on-failure so the
+// existing contract tests keep their initialization semantics. When neither is
+// set, production creates a fresh user-scoped agent per turn.
+let injectedAgent: StreamableAgent | null = null;
+let injectedFactory: AgentFactory | null = null;
+let memoizedFactory: Promise<StreamableAgent> | null = null;
 
-const sessions = new Map<string, SessionState>();
-
-function getHistory(sessionId: string): unknown[] {
-  const history = sessions.get(sessionId);
-  if (!history) {
-    return [];
-  }
-  sessions.delete(sessionId);
-  sessions.set(sessionId, history);
-  return history.history;
-}
-
-function saveSession(sessionId: string, state: SessionState): void {
-  sessions.delete(sessionId);
-  sessions.set(sessionId, state);
-  while (sessions.size > MAX_SESSIONS) {
-    const oldest = sessions.keys().next().value;
-    if (oldest === undefined) break;
-    sessions.delete(oldest);
-  }
-}
-
-export function getSessionStateForTest(sessionId: string): SessionState | null {
-  return sessions.get(sessionId) ?? null;
-}
-
-type AgentFactory = () => Promise<Agent>;
-
-const MAX_ERROR_MESSAGE_LENGTH = 4_000;
-
-function errorMessage(error: unknown): string {
-  const message = (error instanceof Error ? error.message : String(error)).trim();
-  return [...(message || "Agent request failed.")].slice(0, MAX_ERROR_MESSAGE_LENGTH).join("");
-}
-
-let agentFactory: AgentFactory = createAgentProvider;
-let agentInitialization: Promise<Agent> | null = null;
-
-export function setAgentForTest(agent: Agent | null): void {
-  agentInitialization = agent === null ? null : Promise.resolve(agent);
+export function setAgentForTest(agent: StreamableAgent | null): void {
+  injectedAgent = agent;
+  memoizedFactory = null;
 }
 
 export function setAgentFactoryForTest(factory: AgentFactory | null): void {
-  agentFactory = factory ?? createAgentProvider;
-  agentInitialization = null;
+  injectedFactory = factory;
+  memoizedFactory = null;
 }
 
-function getAgent(): Promise<Agent> {
-  if (agentInitialization === null) {
-    const initialization = agentFactory();
-    agentInitialization = initialization;
-    void initialization.catch(() => {
-      if (agentInitialization === initialization) {
-        agentInitialization = null;
-      }
-    });
+const dynamicAgentSource: AgentSource = (identity) => {
+  if (injectedAgent !== null) return injectedAgent;
+  if (injectedFactory) {
+    if (memoizedFactory === null) {
+      const initialization = injectedFactory(identity);
+      memoizedFactory = initialization;
+      void initialization.catch(() => {
+        if (memoizedFactory === initialization) {
+          memoizedFactory = null;
+        }
+      });
+    }
+    return memoizedFactory;
   }
-  return agentInitialization;
-}
+  return createAgentForIdentity(identity);
+};
 
-function toInputMessages(history: unknown[], message: string): AgentInputMessage[] {
-  return [
-    ...(history as AgentInputMessage[]),
-    {
-      additional_kwargs: { transient_context: true },
-      content: createCurrentContext(),
-      role: "user",
-    },
-    { content: message, role: "user" },
-  ];
+const store = new InMemorySessionStore();
+const executor = new InlineAgentExecutor({ agentSource: dynamicAgentSource });
+const runner = new AgentRequestRunner({ executor, store });
+
+export function getSessionStateForTest(
+  sessionId: string,
+  guestId: string,
+): ReturnType<typeof store.loadSession> {
+  return store.loadSession({ tenantId: GUEST_TENANT_ID, userId: guestId }, sessionId);
 }
 
 const encoder = new TextEncoder();
@@ -135,43 +101,47 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let identity: { tenantId: string; userId: string };
+  try {
+    identity = resolveGuestIdentity(request);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 400 },
+    );
+  }
+  const abortController = new AbortController();
+  const handle = runner.run(
+    {
+      identity,
+      includeActivity: parsedRequest.includeSubagentActivity,
+      message: parsedRequest.message,
+      sessionId: parsedRequest.sessionId,
+    },
+    abortController.signal,
+  );
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const history = getHistory(parsedRequest.sessionId);
-      const messages = toInputMessages(history, parsedRequest.message);
       try {
-        const agent = await getAgent();
-        const interaction = createInteractionStream({
-          agent,
-          includeActivity: parsedRequest.includeSubagentActivity,
-          messages,
-          requireStructuredOutput: true,
-          sessionId: parsedRequest.sessionId,
-        });
-        void interaction.result.catch(() => undefined);
-
-        for await (const update of interaction.updates) {
+        for await (const update of handle.updates) {
           controller.enqueue(encodeUpdate(update));
         }
-
-        const result = await interaction.result;
-        saveSession(parsedRequest.sessionId, {
-          failure: result.failure,
-          history: result.history,
-          structuredOutput: result.structuredOutput,
-        });
-      } catch (error) {
-        const emitted = safeEmit(
-          {
-            type: "error",
-            message: errorMessage(error),
-          },
-          { strict: true },
-        );
-        if (emitted.ok) controller.enqueue(encodeUpdate(emitted.update));
+      } catch {
+        // Controller was closed/errored (e.g. client disconnect). The
+        // runner owns error-to-UI translation; nothing more to emit.
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by cancellation.
+        }
       }
+    },
+    cancel() {
+      // Stream disconnect: cancel execution and preserve the last committed
+      // session state.
+      abortController.abort();
     },
   });
 

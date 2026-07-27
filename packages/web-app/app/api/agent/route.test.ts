@@ -6,7 +6,45 @@ import {
   type UiUpdate,
 } from "@deep-agent-template/core/interaction-stream";
 
+import { GUEST_ID_HEADER } from "../../../src/server/identity.ts";
 import { POST } from "./route.ts";
+
+// Stable UUIDs used to keep tests deterministic. The agent-isolation tests at
+// the bottom of this file deliberately use two distinct ids; the rest can
+// share DEFAULT_GUEST_ID since they exercise agent behavior, not isolation.
+const DEFAULT_GUEST_ID = "00000000-0000-4000-8000-000000000001";
+const OTHER_GUEST_ID = "00000000-0000-4000-8000-000000000002";
+
+function agentRequest(
+  body: string,
+  options: { guestId?: string; includeSubagentActivity?: boolean } = {},
+): Request {
+  const payload = JSON.parse(body) as Record<string, unknown>;
+  const nextPayload: Record<string, unknown> = { ...payload };
+  if (options.includeSubagentActivity !== undefined) {
+    nextPayload.includeSubagentActivity = options.includeSubagentActivity;
+  }
+  return new Request("http://localhost/api/agent", {
+    body: JSON.stringify(nextPayload),
+    headers: {
+      "Content-Type": "application/json",
+      [GUEST_ID_HEADER]: options.guestId ?? DEFAULT_GUEST_ID,
+    },
+    method: "POST",
+  });
+}
+
+function guestAgentRequest(args: {
+  message: string;
+  sessionId: string;
+  guestId?: string;
+  includeSubagentActivity?: boolean;
+}): Request {
+  return agentRequest(JSON.stringify({ message: args.message, sessionId: args.sessionId }), {
+    guestId: args.guestId,
+    includeSubagentActivity: args.includeSubagentActivity,
+  });
+}
 
 type FakeStreamRun = {
   messages: AsyncIterable<{
@@ -350,20 +388,8 @@ describe("POST", () => {
     });
 
     const responses = await Promise.all([
-      POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "first", sessionId: "concurrent-init-1" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
-      ),
-      POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "second", sessionId: "concurrent-init-2" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
-      ),
+      POST(guestAgentRequest({ message: "first", sessionId: "concurrent-init-1" })),
+      POST(guestAgentRequest({ message: "second", sessionId: "concurrent-init-2" })),
     ]);
 
     expect(initializationCount).toBe(1);
@@ -395,22 +421,14 @@ describe("POST", () => {
     });
 
     const failedResponse = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "first", sessionId: "retry-init-1" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "first", sessionId: "retry-init-1" }),
     );
     await expect(readNdjson(failedResponse)).resolves.toEqual([
       { type: "error", message: "provider initialization failed" },
     ]);
 
     const recoveredResponse = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "second", sessionId: "retry-init-2" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "second", sessionId: "retry-init-2" }),
     );
     await expect(readNdjson(recoveredResponse)).resolves.toEqual([
       { type: "message", text: "recovered" },
@@ -431,17 +449,13 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "structured-session" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "structured-session" }),
     );
 
     await expect(readNdjson(response)).resolves.toEqual([
       { type: "message", text: "Structured result" },
     ]);
-    expect(route.getSessionStateForTest("structured-session")).toEqual({
+    expect(route.getSessionStateForTest("structured-session", DEFAULT_GUEST_ID)).toEqual({
       failure: null,
       history: [
         { content: "generate concepts", role: "user" },
@@ -470,22 +484,10 @@ describe("POST", () => {
     route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
 
     await readNdjson(
-      await POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "first", sessionId: "structured-continuation" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
-      ),
+      await POST(guestAgentRequest({ message: "first", sessionId: "structured-continuation" })),
     );
     await readNdjson(
-      await POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "second", sessionId: "structured-continuation" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
-      ),
+      await POST(guestAgentRequest({ message: "second", sessionId: "structured-continuation" })),
     );
 
     const committedFirstOutput = {
@@ -542,30 +544,16 @@ describe("POST", () => {
     route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
 
     const first = await readNdjson(
-      await POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "Create products", sessionId: "product-session" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
-      ),
+      await POST(guestAgentRequest({ message: "Create products", sessionId: "product-session" })),
     );
     const second = await readNdjson(
       await POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "Make them brighter", sessionId: "product-session" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
+        guestAgentRequest({ message: "Make them brighter", sessionId: "product-session" }),
       ),
     );
     const question = await readNdjson(
       await POST(
-        new Request("http://localhost/api/agent", {
-          body: JSON.stringify({ message: "How many are there?", sessionId: "product-session" }),
-          headers: { "Content-Type": "application/json" },
-          method: "POST",
-        }),
+        guestAgentRequest({ message: "How many are there?", sessionId: "product-session" }),
       ),
     );
 
@@ -589,11 +577,7 @@ describe("POST", () => {
     route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate", sessionId: "structured-failure-state" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate", sessionId: "structured-failure-state" }),
     );
 
     await expect(readNdjson(response)).resolves.toEqual([
@@ -602,7 +586,9 @@ describe("POST", () => {
         text: "I could not render that as an interactive UI, but I can try again with a simpler layout.",
       },
     ]);
-    expect(route.getSessionStateForTest("structured-failure-state")).toMatchObject({
+    expect(
+      route.getSessionStateForTest("structured-failure-state", DEFAULT_GUEST_ID),
+    ).toMatchObject({
       failure: { attempts: 2, code: "invalid_model_output" },
       structuredOutput: null,
     });
@@ -620,11 +606,7 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "chunked-buffered" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "chunked-buffered" }),
     );
 
     if (!response.body) {
@@ -655,14 +637,10 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({
-          includeSubagentActivity: true,
-          message: "generate concepts",
-          sessionId: "main-activity",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
+      guestAgentRequest({
+        includeSubagentActivity: true,
+        message: "generate concepts",
+        sessionId: "main-activity",
       }),
     );
 
@@ -726,11 +704,7 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "malformed-text" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "malformed-text" }),
     );
 
     await expect(readNdjson(response)).resolves.toEqual([
@@ -748,11 +722,7 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "empty-text" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "empty-text" }),
     );
 
     await expect(readNdjson(response)).resolves.toEqual([
@@ -769,11 +739,7 @@ describe("POST", () => {
     route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
 
     const firstResponse = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "fallback-history" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "fallback-history" }),
     );
 
     await expect(readNdjson(firstResponse)).resolves.toEqual([
@@ -783,13 +749,7 @@ describe("POST", () => {
       },
     ]);
 
-    await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "try again", sessionId: "fallback-history" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
-    );
+    await POST(guestAgentRequest({ message: "try again", sessionId: "fallback-history" }));
 
     expect(agent.inputs[1]?.messages).toEqual([
       { content: "generate concepts", role: "user" },
@@ -809,14 +769,10 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({
-          includeSubagentActivity: true,
-          message: "generate concepts",
-          sessionId: "subagent-activity",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
+      guestAgentRequest({
+        includeSubagentActivity: true,
+        message: "generate concepts",
+        sessionId: "subagent-activity",
       }),
     );
 
@@ -871,14 +827,10 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({
-          includeSubagentActivity: true,
-          message: "generate concepts",
-          sessionId: "repeated-subagent-activity",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
+      guestAgentRequest({
+        includeSubagentActivity: true,
+        message: "generate concepts",
+        sessionId: "repeated-subagent-activity",
       }),
     );
 
@@ -920,14 +872,10 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({
-          includeSubagentActivity: true,
-          message: "generate concepts",
-          sessionId: "live-activity",
-        }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
+      guestAgentRequest({
+        includeSubagentActivity: true,
+        message: "generate concepts",
+        sessionId: "live-activity",
       }),
     );
 
@@ -985,14 +933,110 @@ describe("POST", () => {
     );
 
     const response = await POST(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "generate concepts", sessionId: "no-activity" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
+      guestAgentRequest({ message: "generate concepts", sessionId: "no-activity" }),
     );
 
     const updates = await readNdjson(response);
     expect(updates).toEqual([{ type: "message", text: "done" }]);
+  });
+});
+
+describe("POST — guest identity", () => {
+  it("rejects requests without an x-guest-id header with a 400", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "hello", sessionId: "missing-guest" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/x-guest-id/i);
+  });
+
+  it("rejects requests with a malformed x-guest-id header with a 400", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "hello", sessionId: "bad-guest" }),
+        headers: { "Content-Type": "application/json", "x-guest-id": "not-a-uuid" },
+        method: "POST",
+      }),
+    );
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/UUID v4/i);
+  });
+
+  it("isolates session history across distinct guest ids", async () => {
+    const route = await import("./route.ts");
+    const agent = createInspectableStructuredAgent([
+      { version: 1, updates: [{ type: "message", text: "alice reply" }] },
+      { version: 1, updates: [{ type: "message", text: "bob reply" }] },
+    ]);
+    route.setAgentForTest(agent as unknown as Parameters<typeof route.setAgentForTest>[0]);
+
+    await readNdjson(
+      await POST(
+        guestAgentRequest({
+          guestId: DEFAULT_GUEST_ID,
+          message: "alice message",
+          sessionId: "shared-session-id",
+        }),
+      ),
+    );
+    await readNdjson(
+      await POST(
+        guestAgentRequest({
+          guestId: OTHER_GUEST_ID,
+          message: "bob message",
+          sessionId: "shared-session-id", // same sessionId, different guest
+        }),
+      ),
+    );
+
+    // Alice's second turn is empty (she had a fresh history) and Bob's first
+    // turn had no history — proving the two guests never shared session state
+    // despite the identical sessionId. Each turn's input starts with a
+    // transient `# Current Context` system message; assert only the user
+    // message that follows it.
+    expect(agent.inputs).toHaveLength(2);
+    const aliceInput = agent.inputs[0]?.messages ?? [];
+    const bobInput = agent.inputs[1]?.messages ?? [];
+    expect(
+      aliceInput.find((m) => m.role === "user" && m.content === "alice message"),
+    ).toBeDefined();
+    expect(bobInput.find((m) => m.role === "user" && m.content === "bob message")).toBeDefined();
+    // Neither guest saw the other's prior turn in their input.
+    expect(aliceInput.some((m) => typeof m.content === "string" && m.content.includes("bob"))).toBe(
+      false,
+    );
+    expect(bobInput.some((m) => typeof m.content === "string" && m.content.includes("alice"))).toBe(
+      false,
+    );
+
+    // Session store lookups for the two guests return distinct histories.
+    const aliceState = route.getSessionStateForTest("shared-session-id", DEFAULT_GUEST_ID);
+    const bobState = route.getSessionStateForTest("shared-session-id", OTHER_GUEST_ID);
+    expect(aliceState?.history).toEqual([
+      { content: "alice message", role: "user" },
+      {
+        content: JSON.stringify({
+          version: 1,
+          updates: [{ type: "message", text: "alice reply" }],
+        }),
+        role: "assistant",
+      },
+    ]);
+    expect(bobState?.history).toEqual([
+      { content: "bob message", role: "user" },
+      {
+        content: JSON.stringify({
+          version: 1,
+          updates: [{ type: "message", text: "bob reply" }],
+        }),
+        role: "assistant",
+      },
+    ]);
   });
 });

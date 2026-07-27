@@ -7,6 +7,14 @@ export type AgentHttpClientOptions = {
   includeActivity: boolean;
   message: string;
   sessionId: string;
+  /**
+   * Guest UUID v4 sent as the `x-guest-id` header so the server can isolate
+   * this CLI session's state from other guests. Optional: when omitted, a
+   * fresh UUID is minted per process invocation — meaning each CLI run is a
+   * brand-new guest with no history. Callers that want continuity across
+   * invocations should persist a UUID themselves and pass it here.
+   */
+  guestId?: string;
   signal?: AbortSignal;
 };
 
@@ -43,6 +51,8 @@ export async function streamAgentUpdates(
   handlers: AgentStreamHandlers,
 ): Promise<void> {
   const url = joinUrl(options.baseUrl, "/api/agent");
+  // Mint a guest id lazily so callers that supply their own pay no overhead.
+  const guestId = options.guestId ?? crypto.randomUUID();
   let response: Response;
   try {
     response = await fetch(url, {
@@ -51,7 +61,10 @@ export async function streamAgentUpdates(
         message: options.message,
         sessionId: options.sessionId,
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-guest-id": guestId,
+      },
       method: "POST",
       signal: options.signal,
     });
