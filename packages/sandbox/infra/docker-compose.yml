@@ -26,7 +26,7 @@ services:
     image: python:3.12-slim
     init: true
 
-    # --- Isolation (matches docker-backend.ts spawnDocker) ---
+    # --- Isolation (matches docker-sandbox-backend.ts spawnDocker) ---
     network_mode: "none"
     cap_drop:
       - ALL

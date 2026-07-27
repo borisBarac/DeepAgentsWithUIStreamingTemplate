@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { describeSandboxBackend } from "../backend-test-harness.ts";
-import { createDockerSandboxBackend } from "./docker-backend.ts";
+import { createDockerSandboxBackend } from "./docker-sandbox-backend.ts";
 
 const DOCKER_AVAILABLE = await checkDockerAvailable();
 const TEST_PYTHON_IMAGE = process.env.SANDBOX_TEST_PYTHON_IMAGE ?? "python:3.12-alpine";

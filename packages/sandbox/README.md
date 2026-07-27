@@ -164,7 +164,7 @@ file + one test file. The tool layer never needs to change.
 
 1. **Implement `SandboxBackend`** as a factory that delegates to the shared
    pipeline exported from `@deep-agent-template/sandbox/backend-helpers`.
-   The existing backend (`docker-backend.ts` at ~255 LOC) is the canonical
+   The existing backend (`docker-sandbox-backend.ts` at ~255 LOC) is the canonical
    reference — copy it as a starting point. Each backend only supplies:
 
    - `executeWithHandling({ backendName, request, execOptions, workDirRoot, run, ... })`
@@ -229,7 +229,7 @@ sandbox/
     backend-test-harness.ts  Shared backend acceptance suite
     backends/
       backend-helpers.ts     Shared execution pipeline
-      docker-backend.ts      Container isolation backend
+      docker-sandbox-backend.ts Container isolation backend
     *.test.ts                Unit + integration tests
 ```
 

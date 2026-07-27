@@ -10,7 +10,7 @@ import type {
   SandboxResult,
 } from "../types.ts";
 import { buildSyntheticResult } from "./backend-helpers.ts";
-import { createDockerSandboxBackend } from "./docker-backend.ts";
+import { createDockerSandboxBackend } from "./docker-sandbox-backend.ts";
 
 export type ManagedDockerSandboxBackendOptions = {
   readonly containerName: string;
