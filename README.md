@@ -25,6 +25,10 @@ Product requests create or update reviewed product batches. Casual messages go t
 
 ## Capabilities
 
+### Multi-user support
+- Anonymous-guest isolation via identity-scoped `(tenantId, userId, sessionId)` sessions, memory namespaces, and sandbox identity
+- One `AgentRequestRunner` per process; execution is in-process today (remote executors and multi-worker dispatch are future work behind the `AgentExecutor` seam)
+
 ### Supervisor-Specialist Agent Architecture
 - One-call factory (`createScaffoldedAgent()`) producing a fully wired multi-agent system
 - Specialist roles: `clarifier`, `researcher`, `analyst`, `review-agent`, `product-generator`, `image-designer`

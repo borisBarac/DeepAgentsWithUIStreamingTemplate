@@ -317,7 +317,7 @@ const result = await agent.invoke({
 });
 ```
 
-The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app provides a filesystem-backed store under `packages/web-app/.data/memory`, or the path set by `WEB_APP_MEMORY_DIR`.
+The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app uses a process-wide in-memory store scoped per guest (see `docs/memory-setup.md`).
 
 The default specialist subagents are intentionally isolated. They start with their own empty tool lists except for the built-in Python tool on `researcher` and `analyst`. Supplying `imageGenerationService` adds the `image-designer` specialist with its image-generation tool. Wire other specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
@@ -329,31 +329,31 @@ The default `clarifier` subagent is wired with the bundled `clarify-deeply` skil
 
 `/memory` is the durable long-term memory root, backed by `StoreBackend` through `CompositeBackend`. Short-term state (`/scratch`, `/plans`, `/reports`, `/artifacts`) stays on `StateBackend` and is not durable. The memory module (`packages/core/src/memory`) makes the memory product contract explicit and testable.
 
-V1 assumes a **single-user runtime**: each local agent or isolated server sandbox serves exactly one user and uses one stable single-user namespace.
+V1 assumes a **single namespace per runtime**: each local agent or isolated server sandbox serves one user at a time and uses one stable namespace.
 
 Default durable memory files:
 
 - `/memory/project-facts.md` — stable project and environment facts.
 - `/memory/user-preferences.md` — explicit preferences the user asked to remember.
 
-The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the seed helpers ship wording that defines what belongs in each file.
-
-Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edit_file`) — there is no hidden side channel. In v1, writes to the writable single-user memory files are auto-approved (see `createSingleUserMemoryPolicy`), and the caller can opt into additional `interruptOn` rules explicitly when needed. `resolveMemoryInterrupts(...)` is an explicit passthrough so memory auto-approval never silently changes interrupt policy.
+The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the policy exposes the `writableRoot` the agent may write to.
 
 ```ts
 import {
   createMemorySeedFiles,
-  createSingleUserMemoryNamespace,
-  createSingleUserMemoryPolicy,
+  createUserMemoryNamespace,
+  createMemoryPolicy,
   reviewMemoryContent,
 } from "@deep-agent-template/core";
 
 const seedFiles = createMemorySeedFiles();
-const namespace = createSingleUserMemoryNamespace();
-const policy = createSingleUserMemoryPolicy();
+const namespace = createUserMemoryNamespace("default");
+const policy = createMemoryPolicy();
 
 reviewMemoryContent("LLM_API_KEY=sk-...").allowed; // false
 ```
+
+Wire `createMemoryPolicyMiddleware(createMemoryPolicy())` into `createScaffoldedAgent`'s `middleware` to enforce the content review on `/memory` writes at runtime.
 
 Durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
 
