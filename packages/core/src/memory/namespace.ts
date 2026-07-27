@@ -1,5 +1,4 @@
 import { Buffer } from "node:buffer";
-import type { StoreBackendNamespaceFactory } from "deepagents";
 
 import {
   DEFAULT_MEMORY_FILE_PATHS,
@@ -15,7 +14,6 @@ export {
   DEFAULT_USER_PREFERENCES_PATH,
 };
 
-export const DEFAULT_SINGLE_USER_MEMORY_NAMESPACE = ["single-user"] as const;
 export const USER_MEMORY_NAMESPACE_ROOT = "users";
 export const USER_MEMORY_NAMESPACE_SUFFIX = "memory";
 
@@ -23,19 +21,9 @@ const SAFE_USER_ID_PATTERN = /^[-A-Za-z0-9._@+:~]+$/;
 const RAW_USER_ID_NAMESPACE_PATTERN = /^[-A-Za-z0-9_]+$/;
 const ENCODED_USER_ID_PREFIX = "encoded_";
 
-export type SingleUserMemoryNamespace = string[];
-
-export function createSingleUserMemoryNamespace(): SingleUserMemoryNamespace {
-  return [...DEFAULT_SINGLE_USER_MEMORY_NAMESPACE];
-}
-
 export type UserMemoryNamespace = string[];
 
-export function createUserMemoryNamespace(userId?: string): UserMemoryNamespace {
-  if (userId === undefined || userId === null || userId === "") {
-    return createSingleUserMemoryNamespace();
-  }
-
+export function createUserMemoryNamespace(userId: string): UserMemoryNamespace {
   if (!SAFE_USER_ID_PATTERN.test(userId)) {
     throw new Error(
       "userId may only contain letters, numbers, '-', '_', '.', '@', '+', ':', and '~'.",
@@ -55,10 +43,4 @@ function createUserMemoryNamespaceSegment(userId: string): string {
   }
 
   return `${ENCODED_USER_ID_PREFIX}${Buffer.from(userId, "utf8").toString("base64url")}`;
-}
-
-export type MemoryNamespaceInput = SingleUserMemoryNamespace | StoreBackendNamespaceFactory;
-
-export function resolveMemoryNamespace(namespace?: MemoryNamespaceInput): MemoryNamespaceInput {
-  return namespace ?? createSingleUserMemoryNamespace();
 }

@@ -10,33 +10,23 @@ export {
 } from "./factories.ts";
 export { FileSystemMemoryStore, type FileSystemMemoryStoreOptions } from "./filesystem-store.ts";
 export {
-  createSingleUserMemoryNamespace,
   createUserMemoryNamespace,
   DEFAULT_MEMORY_FILE_PATHS,
   DEFAULT_MEMORY_ROOT,
   DEFAULT_PROJECT_FACTS_PATH,
-  DEFAULT_SINGLE_USER_MEMORY_NAMESPACE,
   DEFAULT_USER_PREFERENCES_PATH,
-  type MemoryNamespaceInput,
-  resolveMemoryNamespace,
-  type SingleUserMemoryNamespace,
   USER_MEMORY_NAMESPACE_ROOT,
   USER_MEMORY_NAMESPACE_SUFFIX,
   type UserMemoryNamespace,
 } from "./namespace.ts";
 export {
-  createSingleUserMemoryPolicy,
-  DEFAULT_SENSITIVE_INTERRUPTS,
-  isMemoryWriteAutoApproved,
-  MEMORY_POLICY_WORDING,
-  type MemoryApprovalMode,
+  createMemoryPolicy,
   type MemoryContentCategory,
   type MemoryContentReview,
-  type MemorySensitiveInterrupt,
-  resolveMemoryInterrupts,
+  type MemoryPolicy,
   reviewMemoryContent,
-  type SingleUserMemoryPolicy,
 } from "./policy.ts";
+export { createMemoryPolicyMiddleware } from "./policy-middleware.ts";
 export {
   type CreateMemoryRepositoryOptions,
   type MemoryFileInfo,

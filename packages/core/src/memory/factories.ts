@@ -9,12 +9,12 @@ import { MemoryStoreBackend } from "./store-backend.ts";
 
 export type CreateMemoryRepositoryFactoryOptions = {
   store: BaseStore;
-  userId?: string;
+  userId: string;
 };
 
 export type CreateUserMemoryBackendOptions = {
   store?: BaseStore;
-  userId?: string;
+  userId: string;
 };
 
 export function createInMemoryMemoryStore(): InMemoryStore {

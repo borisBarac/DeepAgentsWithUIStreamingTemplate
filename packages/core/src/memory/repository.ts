@@ -19,7 +19,7 @@ export type MemorySearchResult = {
 
 export type CreateMemoryRepositoryOptions = {
   store: BaseStore;
-  userId?: string;
+  userId: string;
 };
 
 type MemoryStoreValue = {
