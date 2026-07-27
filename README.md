@@ -5,7 +5,8 @@
 - Should be forked and used as starting point of the new project
 
 ## Features in development
-- Memory for generated UI
+- MultiUser support (Session executor + workers + stream for connections) - DEV Branch
+- Horizontal scaling for workers
 - Support to use ImageGeneration in the GeneratedUI elements (example procut cart with a image of product)
 
 ## Description
@@ -16,7 +17,7 @@ Deep Agent Template gives you:
 
 - `createScaffoldedAgent()` with a supervisor, clarifier, researcher, analyst, reviewer, product-generator, and optional image-designer.
 - A workflow controller that owns clarification, execution, product generation, review, revision, delivery, and errors.
-- A validated A2UI catalogue, an NDJSON interaction stream, durable memory, LangSmith tracing, and a Docker Python sandbox.
+- A validated A2UI catalogue, an NDJSON interaction stream, durable memory, system tracing and metrics, agent tracing with LangSmith, and a Docker Python sandbox.
 - A Next.js workspace with chat, preview, and activity panes.
 
 [View the web app screenshot](IMG/web-app.jpg)
@@ -93,7 +94,13 @@ Product requests create or update reviewed product batches. Casual messages go t
 - Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`
 - Wired exclusively to the `researcher` subagent
 
-### LangSmith Observability
+### System Observability
+- OpenTelemetry traces for requests, agent runs, dispatch, workers, environments, and sandbox execution
+- Metrics for active runs, run outcomes, run duration, dispatch duration, environment duration, and stream events
+- W3C trace context propagation across worker boundaries
+- Metadata only. Prompts, messages, outputs, memory, UI payloads, and credentials are excluded
+
+### Agent Observability with LangSmith
 - Full tracing of model calls, tool invocations, agent runs
 - Per-subagent metadata for querying traces
 - Query helpers: `listRunsBySubagent()`, `listTracesBySubagent()`
@@ -134,7 +141,7 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
 - **Image Gen**: Replicate SDK
 - **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
-- **Observability**: LangSmith tracing
+- **Observability**: OpenTelemetry system tracing and metrics, plus LangSmith agent tracing
 - **Linting**: Biome 2.5
 - **Testing**: Bun test runner
 - **Storybook**: 10.5
@@ -185,7 +192,6 @@ bun run agent-cli --repl    # Interactive mode
 | `LANGSMITH_ENDPOINT` | Non-US region endpoint |
 | `USE_FAKE_IMAGE_PROVIDER` | `true` (default) for stub, `false` for Replicate |
 | `REPLICATE_API_TOKEN` | Required when using real image generation |
-| `WEB_APP_MEMORY_DIR` | Persistent memory path (defaults to `packages/web-app/.data/memory`) |
 
 ## Scripts
 
