@@ -20,6 +20,10 @@
     "typecheck": "tsc --noEmit",
     "prepare": "husky",
     "web-app": "bun --env-file=.env run --filter @deep-agent-template/web-app dev",
+    "worker": "bun --env-file=.env run --filter @deep-agent-template/web-app worker",
+    "worker:local": "REDIS_URL=redis://localhost:6379 WORKER_CONCURRENCY=1 bun --env-file=.env --watch run --filter @deep-agent-template/web-app worker",
+    "worker:pipe": "bun run --filter @deep-agent-template/web-app bin:worker",
+    "dev": "concurrently -n web,worker -c blue,magenta \"bun run web-app\" \"bun run worker:local\"",
     "agent-cli": "bun --env-file=.env packages/web-app/scripts/agent-cli.ts",
     "agent-cli:pipe": "bun run --filter @deep-agent-template/web-app bin:cli",
     "storybook": "bun run --filter @deep-agent-template/web-app storybook",
@@ -29,6 +33,7 @@
     "@ai-hero/sandcastle": "^0.9.0",
     "@biomejs/biome": "^2.5.0",
     "@types/bun": "^1.3.3",
+    "concurrently": "^10.0.4",
     "husky": "^9.1.7",
     "typescript": "^5.9.3"
   },

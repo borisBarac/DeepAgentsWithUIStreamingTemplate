@@ -1,98 +1,27 @@
-import { safeEmit } from "@deep-agent-template/core/generative-ui";
-import {
-  type AgentInputMessage,
-  createInteractionStream,
-  type InteractionStreamFailure,
-  type ModelUiOutput,
-  type StreamableAgent,
-  type UiUpdate,
-} from "@deep-agent-template/core/interaction-stream";
+import { randomUUID } from "node:crypto";
+
+import type { UiUpdate } from "@deep-agent-template/core/interaction-stream";
 import { NextResponse } from "next/server";
-import { createAgentProvider } from "../../../src/server/agent-provider.ts";
-import { createCurrentContext } from "../../../src/server/current-context.ts";
+
+import { injectTraceContext } from "../../../src/server/agent-runtime/telemetry.ts";
+import type {
+  AgentExecutionHandle,
+  AgentExecutor,
+  ExecutionEvent,
+  ExecutionIdentity,
+  ExecutionRequest,
+} from "../../../src/server/agent-runtime/types.ts";
+import {
+  buildBullMqAgentExecutor,
+  isSessionBusyError,
+} from "../../../src/server/worker/bullmq-executor.ts";
 
 export const runtime = "nodejs";
 
-type Agent = StreamableAgent;
-
-const MAX_SESSIONS = 100;
-type SessionState = {
-  failure: InteractionStreamFailure | null;
-  history: unknown[];
-  structuredOutput: ModelUiOutput | null;
+const SINGLE_USER_IDENTITY: ExecutionIdentity = {
+  tenantId: "single-user",
+  userId: "default",
 };
-
-const sessions = new Map<string, SessionState>();
-
-function getHistory(sessionId: string): unknown[] {
-  const history = sessions.get(sessionId);
-  if (!history) {
-    return [];
-  }
-  sessions.delete(sessionId);
-  sessions.set(sessionId, history);
-  return history.history;
-}
-
-function saveSession(sessionId: string, state: SessionState): void {
-  sessions.delete(sessionId);
-  sessions.set(sessionId, state);
-  while (sessions.size > MAX_SESSIONS) {
-    const oldest = sessions.keys().next().value;
-    if (oldest === undefined) break;
-    sessions.delete(oldest);
-  }
-}
-
-export function getSessionStateForTest(sessionId: string): SessionState | null {
-  return sessions.get(sessionId) ?? null;
-}
-
-type AgentFactory = () => Promise<Agent>;
-
-const MAX_ERROR_MESSAGE_LENGTH = 4_000;
-
-function errorMessage(error: unknown): string {
-  const message = (error instanceof Error ? error.message : String(error)).trim();
-  return [...(message || "Agent request failed.")].slice(0, MAX_ERROR_MESSAGE_LENGTH).join("");
-}
-
-let agentFactory: AgentFactory = createAgentProvider;
-let agentInitialization: Promise<Agent> | null = null;
-
-export function setAgentForTest(agent: Agent | null): void {
-  agentInitialization = agent === null ? null : Promise.resolve(agent);
-}
-
-export function setAgentFactoryForTest(factory: AgentFactory | null): void {
-  agentFactory = factory ?? createAgentProvider;
-  agentInitialization = null;
-}
-
-function getAgent(): Promise<Agent> {
-  if (agentInitialization === null) {
-    const initialization = agentFactory();
-    agentInitialization = initialization;
-    void initialization.catch(() => {
-      if (agentInitialization === initialization) {
-        agentInitialization = null;
-      }
-    });
-  }
-  return agentInitialization;
-}
-
-function toInputMessages(history: unknown[], message: string): AgentInputMessage[] {
-  return [
-    ...(history as AgentInputMessage[]),
-    {
-      additional_kwargs: { transient_context: true },
-      content: createCurrentContext(),
-      role: "user",
-    },
-    { content: message, role: "user" },
-  ];
-}
 
 const encoder = new TextEncoder();
 
@@ -124,54 +53,100 @@ function parseRequestBody(body: unknown): {
   };
 }
 
-export async function POST(request: Request): Promise<Response> {
-  let parsedRequest: { includeSubagentActivity: boolean; message: string; sessionId: string };
-  try {
-    parsedRequest = parseRequestBody(await request.json());
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: 400 },
-    );
-  }
+export function createAgentRequestHandler(
+  executor: AgentExecutor,
+): (request: Request) => Promise<Response> {
+  return async function handleAgentRequest(request: Request): Promise<Response> {
+    let parsedRequest: { includeSubagentActivity: boolean; message: string; sessionId: string };
+    try {
+      parsedRequest = parseRequestBody(await request.json());
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 400 },
+      );
+    }
 
+    const abortController = new AbortController();
+    const runId = randomUUID();
+    const messages: ExecutionRequest["messages"] = [
+      { content: parsedRequest.message, role: "user" },
+    ];
+
+    let handle: AgentExecutionHandle;
+    try {
+      handle = await executor.execute(
+        {
+          identity: SINGLE_USER_IDENTITY,
+          messages,
+          options: {
+            includeActivity: parsedRequest.includeSubagentActivity,
+            requireStructuredOutput: true,
+          },
+          runId,
+          sessionId: parsedRequest.sessionId,
+          traceContext: injectTraceContext(),
+        },
+        abortController.signal,
+      );
+    } catch (error) {
+      if (isSessionBusyError(error)) {
+        return NextResponse.json(
+          { error: "Session is busy.", activeRunId: error.activeRunId },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
+
+    return streamEvents(handle.events, abortController);
+  };
+}
+
+let cachedExecutor: AgentExecutor | null = null;
+
+async function getProductionExecutor(): Promise<AgentExecutor> {
+  if (cachedExecutor) return cachedExecutor;
+  const prefix = (process.env.REDIS_KEY_PREFIX ?? "dat:").trim();
+  const { getSharedRedis, getBullMqRedis } = await import("../../../src/server/redis/client.ts");
+  const [client, bullMqClient] = await Promise.all([getSharedRedis(), getBullMqRedis()]);
+  cachedExecutor = buildBullMqAgentExecutor({ bullMqClient, client, keyPrefix: prefix });
+  return cachedExecutor;
+}
+
+export function __setExecutorForTest(executor: AgentExecutor | null): void {
+  cachedExecutor = executor;
+}
+
+export async function POST(request: Request): Promise<Response> {
+  return createAgentRequestHandler(await getProductionExecutor())(request);
+}
+
+function streamUiUpdates(
+  updates: AsyncIterable<UiUpdate>,
+  abortController: AbortController,
+): Response {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const history = getHistory(parsedRequest.sessionId);
-      const messages = toInputMessages(history, parsedRequest.message);
       try {
-        const agent = await getAgent();
-        const interaction = createInteractionStream({
-          agent,
-          includeActivity: parsedRequest.includeSubagentActivity,
-          messages,
-          requireStructuredOutput: true,
-          sessionId: parsedRequest.sessionId,
-        });
-        void interaction.result.catch(() => undefined);
-
-        for await (const update of interaction.updates) {
+        for await (const update of updates) {
           controller.enqueue(encodeUpdate(update));
         }
-
-        const result = await interaction.result;
-        saveSession(parsedRequest.sessionId, {
-          failure: result.failure,
-          history: result.history,
-          structuredOutput: result.structuredOutput,
-        });
-      } catch (error) {
-        const emitted = safeEmit(
-          {
-            type: "error",
-            message: errorMessage(error),
-          },
-          { strict: true },
-        );
-        if (emitted.ok) controller.enqueue(encodeUpdate(emitted.update));
+      } catch {
+        // Controller was closed/errored (e.g. client disconnect).
       } finally {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          // Already closed by cancellation.
+        }
       }
+    },
+    cancel() {
+      abortController.abort();
     },
   });
 
@@ -181,4 +156,17 @@ export async function POST(request: Request): Promise<Response> {
       "Content-Type": "application/x-ndjson; charset=utf-8",
     },
   });
+}
+
+async function* filterUiUpdates(events: AsyncIterable<ExecutionEvent>): AsyncIterable<UiUpdate> {
+  for await (const event of events) {
+    if (event.kind === "ui") yield event.update;
+  }
+}
+
+function streamEvents(
+  events: AsyncIterable<ExecutionEvent>,
+  abortController: AbortController,
+): Response {
+  return streamUiUpdates(filterUiUpdates(events), abortController);
 }

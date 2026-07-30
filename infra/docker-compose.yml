@@ -1,0 +1,181 @@
+# Docker Compose — DeepAgentTemplate stack.
+#
+# Two profiles:
+#   (default)          → redis + linkloom + api + worker (the app stack)
+#   --profile sandbox  → python sandbox runtime for untrusted code
+#
+# Bring up the app stack from the repo root:
+#   docker compose --env-file .env -f infra/docker-compose.yml up --build
+
+x-app-base: &app-base
+  image: deep-agent-template:latest
+  build:
+    context: ..
+    dockerfile: packages/web-app/Dockerfile
+  env_file: [../.env]
+  init: true
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+  networks: [default]
+
+services:
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --save
+      - "60"
+      - "100"
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - noeviction
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    init: true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [default]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "${REDIS_CPU:-0.5}"
+          memory: "${REDIS_MEM:-512m}"
+
+  linkloom:
+    image: deep-agent-template-linkloom:latest
+    build:
+      context: ./docker/linkloom
+      dockerfile: Dockerfile
+    init: true
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [default]
+    ports:
+      - "${LINKLOOM_PORT:-3001}:3000"
+    environment:
+      - PAGE_LOAD_TIMEOUT=${PAGE_LOAD_TIMEOUT:-10000}
+      - FRAME_TIMEOUT=${FRAME_TIMEOUT:-5000}
+      - PDF_DOWNLOAD_TIMEOUT=${PDF_DOWNLOAD_TIMEOUT:-30000}
+      - PROXY_URL=${PROXY_URL:-}
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${LINKLOOM_CPU:-1.0}"
+          memory: "${LINKLOOM_MEM:-1g}"
+
+  api:
+    <<: *app-base
+    command:
+      - bun
+      - run
+      - --filter
+      - "@deep-agent-template/web-app"
+      - start
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    depends_on:
+      redis:
+        condition: service_healthy
+      linkloom:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPU:-1.0}"
+          memory: "${API_MEM:-1g}"
+
+  worker:
+    <<: *app-base
+    command:
+      - bun
+      - run
+      - scripts/worker.ts
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-5}
+    depends_on:
+      redis:
+        condition: service_healthy
+      linkloom:
+        condition: service_healthy
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
+      resources:
+        limits:
+          cpus: "${WORKER_CPU:-2.0}"
+          memory: "${WORKER_MEM:-2g}"
+
+  sandbox:
+    profiles: ["sandbox"]
+    container_name: python-sandbox
+    image: python:3.12-slim
+    init: true
+    network_mode: "none"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,mode=1777
+    user: "65534:65534"
+    working_dir: /workspace
+    volumes:
+      - ../.sandbox-workspace:/workspace:rw
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONIOENCODING: utf-8
+      RESOURCE_PROFILE: ${SANDBOX_PROFILE:-sandbox-small}
+      EXECUTION_ID: manual-run
+    deploy:
+      resources:
+        limits:
+          cpus: "${SANDBOX_CPU:-0.5}"
+          memory: "${SANDBOX_MEM:-256m}"
+    entrypoint: ["sleep", "infinity"]
+    command: []
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  redis-data:

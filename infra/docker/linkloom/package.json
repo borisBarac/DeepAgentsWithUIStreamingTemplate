@@ -1,0 +1,7 @@
+{
+  "name": "linkloom-container",
+  "private": true,
+  "dependencies": {
+    "@boris.barac/linkloom": "0.2.1"
+  }
+}
