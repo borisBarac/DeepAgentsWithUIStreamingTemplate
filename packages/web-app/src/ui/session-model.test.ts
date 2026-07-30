@@ -9,6 +9,7 @@ import {
   type DisplayMessage,
   finishAssistantMessage,
   formatQuestionAnswers,
+  historyToDisplayMessages,
   previewAssistantTextFromActivity,
   previewSubagentTextFromActivity,
   reduceMainAgentActivity,
@@ -818,5 +819,35 @@ describe("streaming assistant message state", () => {
         streaming: undefined,
       },
     ]);
+  });
+});
+
+describe("historyToDisplayMessages", () => {
+  it("returns an empty array for empty history", () => {
+    expect(historyToDisplayMessages([])).toEqual([]);
+  });
+
+  it("maps a user + assistant pair to display messages with unique ids", () => {
+    const result = historyToDisplayMessages([
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there" },
+    ]);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ role: "user", content: "Hello", id: expect.any(String) });
+    expect(result[1]).toEqual({ role: "assistant", content: "Hi there", id: expect.any(String) });
+    expect(result[0]?.id).not.toBe(result[1]?.id);
+  });
+
+  it("ignores malformed entries and keeps valid ones", () => {
+    expect(
+      historyToDisplayMessages([
+        { role: "user", content: "Keep" },
+        { role: "system", content: "Drop" },
+        { role: "assistant" },
+        null,
+        "not-an-object",
+        { role: "user", content: 42 },
+      ]),
+    ).toEqual([{ role: "user", content: "Keep", id: expect.any(String) }]);
   });
 });

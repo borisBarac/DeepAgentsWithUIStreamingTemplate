@@ -373,6 +373,23 @@ export function formatQuestionAnswers(
   return lines.length > 0 ? `Here are my answers:\n${lines.join("\n")}` : "";
 }
 
+/**
+ * Maps persisted agent history (AgentInputMessage[]) into DisplayMessage[]
+ * for UI rehydration. Each entry gets a fresh display id. Malformed entries
+ * (unknown role, non-string content, nulls) are silently skipped.
+ */
+export function historyToDisplayMessages(history: readonly unknown[]): DisplayMessage[] {
+  const messages: DisplayMessage[] = [];
+  for (const entry of history) {
+    if (!entry || typeof entry !== "object") continue;
+    const { role, content } = entry as { role?: unknown; content?: unknown };
+    if (role !== "user" && role !== "assistant") continue;
+    if (typeof content !== "string") continue;
+    messages.push({ content, id: createId(), role });
+  }
+  return messages;
+}
+
 export function appendUiSpec(
   current: readonly DisplayUiSpec[],
   spec: Spec,
