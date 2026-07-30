@@ -317,6 +317,21 @@ export function AgentWorkspace() {
   }, [requestTarget]);
 
   useEffect(() => {
+    if (!loading || requestTarget) {
+      return;
+    }
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.repeat) {
+        return;
+      }
+      event.preventDefault();
+      void stop();
+    };
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [loading, requestTarget, stop]);
+
+  useEffect(() => {
     if (!requestTarget) {
       return;
     }
@@ -448,7 +463,12 @@ export function AgentWorkspace() {
             )}
           </div>
           <p className="composer-hint">
-            <kbd>{SHORTCUT_KEY}</kbd>+<kbd>Enter</kbd> to send
+            <kbd>{SHORTCUT_KEY}</kbd>+<kbd>Enter</kbd> to send{loading ? " · " : null}
+            {loading ? (
+              <>
+                <kbd>Esc</kbd> to stop
+              </>
+            ) : null}
           </p>
         </form>
       </section>

@@ -152,6 +152,7 @@ export function useAgentChat(): AgentChat {
   const loadingRef = useRef(false);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const runIdRef = useRef<string | null>(null);
+  const cancellationRequestedRunIdRef = useRef<string | null>(null);
 
   const hasOpenQuestions = openQuestionIds.size > 0;
   const allOpenQuestionsAnswered = [...openQuestionIds].every((id) =>
@@ -188,6 +189,7 @@ export function useAgentChat(): AgentChat {
     loadingRef.current = true;
     const runId = crypto.randomUUID();
     runIdRef.current = runId;
+    cancellationRequestedRunIdRef.current = null;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
     setError(null);
     setInput("");
@@ -336,7 +338,10 @@ export function useAgentChat(): AgentChat {
 
   const stop = useCallback(async () => {
     const runId = runIdRef.current;
-    if (!runId || !loadingRef.current) return;
+    if (!runId || !loadingRef.current || cancellationRequestedRunIdRef.current === runId) {
+      return;
+    }
+    cancellationRequestedRunIdRef.current = runId;
     await stopActiveRun(runId, readerRef.current);
   }, []);
 
