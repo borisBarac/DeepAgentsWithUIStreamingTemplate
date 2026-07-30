@@ -13,7 +13,12 @@ import { RedisCancellation } from "../redis/cancellation.ts";
 import { RedisEventStream, type RunEventEnvelope } from "../redis/event-stream.ts";
 import { RedisRunStateStore } from "../redis/run-state.ts";
 import { type AcquireResult, RedisSessionLock } from "../redis/session-lock.ts";
-import { AGENT_TURN_QUEUE, bullMqQueuePrefix, encodeExecutionRequest } from "./serialization.ts";
+import {
+  AGENT_TURN_QUEUE,
+  bullMqQueuePrefix,
+  encodeExecutionRequest,
+  scopedJobId,
+} from "./serialization.ts";
 
 export type SessionBusyError = Error & { activeRunId: string; code: "session_busy" };
 
@@ -79,7 +84,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
         encodeExecutionRequest(request, acquire.fencingToken),
         {
           attempts: 1,
-          jobId: request.runId,
+          jobId: scopedJobId(request.identity, request.runId),
           removeOnComplete: true,
           removeOnFail: true,
         },
@@ -100,14 +105,15 @@ export class BullMqAgentExecutor implements AgentExecutor {
     return handle;
   }
 
-  async cancel(runId: string): Promise<CancellationResult> {
-    const state = await this.runState.get(runId);
+  async cancel(identity: ExecutionRequest["identity"], runId: string): Promise<CancellationResult> {
+    const state = await this.runState.get(runId, identity);
     if (!state) return { status: "unknown" };
     if (state.status === "completed" || state.status === "failed" || state.status === "cancelled") {
       return { status: "terminal" };
     }
-    if (await this.cancellation.isCancelled(runId)) return { status: "already_requested" };
-    await this.cancellation.cancel(runId);
+    if (await this.cancellation.isCancelled(identity, runId))
+      return { status: "already_requested" };
+    await this.cancellation.cancel(identity, runId);
     return { status: "requested" };
   }
 
@@ -128,7 +134,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
     acquire: Extract<AcquireResult, { acquired: true }>,
   ): Promise<ExecutionResult> {
     const onAbort = () => {
-      void this.cancellation.cancel(request.runId);
+      void this.cancellation.cancel(request.identity, request.runId);
     };
     signal.addEventListener("abort", onAbort, { once: true });
 
@@ -139,7 +145,13 @@ export class BullMqAgentExecutor implements AgentExecutor {
       while (resolved === null) {
         if (signal.aborted) break;
 
-        const batch = await this.eventStream.read(request.runId, afterId, 1_000, 100);
+        const batch = await this.eventStream.read(
+          request.identity,
+          request.runId,
+          afterId,
+          1_000,
+          100,
+        );
         for (const entry of batch) {
           afterId = entry.id;
           const event = envelopeToEvent(entry.envelope);
@@ -164,7 +176,13 @@ export class BullMqAgentExecutor implements AgentExecutor {
           holder.fencingToken === acquire.fencingToken;
 
         if (!stillOurs) {
-          const drain = await this.eventStream.read(request.runId, afterId, 250, 100);
+          const drain = await this.eventStream.read(
+            request.identity,
+            request.runId,
+            afterId,
+            250,
+            100,
+          );
           for (const entry of drain) {
             afterId = entry.id;
             const event = envelopeToEvent(entry.envelope);
@@ -185,7 +203,13 @@ export class BullMqAgentExecutor implements AgentExecutor {
       if (resolved === null) {
         const deadline = Date.now() + 500;
         while (resolved === null && Date.now() < deadline) {
-          const drain = await this.eventStream.read(request.runId, afterId, 250, 100);
+          const drain = await this.eventStream.read(
+            request.identity,
+            request.runId,
+            afterId,
+            250,
+            100,
+          );
           for (const entry of drain) {
             afterId = entry.id;
             const event = envelopeToEvent(entry.envelope);
@@ -224,8 +248,12 @@ export class BullMqAgentExecutor implements AgentExecutor {
       structuredOutput: null,
       finalText: "",
     };
-    await this.eventStream.publishError(request.runId, message).catch(() => undefined);
-    await this.runState.recordFailed(request.runId, message).catch(() => undefined);
+    await this.eventStream
+      .publishError(request.identity, request.runId, message)
+      .catch(() => undefined);
+    await this.runState
+      .recordFailed(request.runId, message, request.identity)
+      .catch(() => undefined);
     queue.push({ kind: "ui", update: { message, type: "error" } });
     queue.push({ kind: "result", result });
 
@@ -246,7 +274,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
     queue: EventRelayQueue,
     acquire: Extract<AcquireResult, { acquired: true }>,
   ): Promise<ExecutionResult> {
-    const state = await this.runState.get(request.runId);
+    const state = await this.runState.get(request.runId, request.identity);
     const status = state?.status ?? "failed";
     const outcome =
       status === "cancelled" ? "cancelled" : status === "completed" ? "success" : "error";

@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { FakeRedis } from "./fake-redis.ts";
 import { RedisRunStateStore } from "./run-state.ts";
 
+const ID = { tenantId: "t", userId: "u" };
+const OTHER = { tenantId: "t", userId: "other" };
+
 describe("RedisRunStateStore", () => {
   let client: FakeRedis;
 
@@ -23,7 +26,7 @@ describe("RedisRunStateStore", () => {
       startedAt: 100,
       status: "queued",
     });
-    const record = await store.get("r1");
+    const record = await store.get("r1", ID);
     expect(record).toMatchObject({
       runId: "r1",
       sessionId: "s1",
@@ -41,10 +44,10 @@ describe("RedisRunStateStore", () => {
       startedAt: 100,
       status: "queued",
     });
-    await store.recordRunning("r1");
-    await store.recordCompleted("r1");
+    await store.recordRunning("r1", ID);
+    await store.recordCompleted("r1", undefined, ID);
 
-    const record = await store.get("r1");
+    const record = await store.get("r1", ID);
     expect(record?.status).toBe("completed");
     expect(record?.finishedAt).toBeGreaterThan(0);
     expect(record?.identity).toEqual({ tenantId: "t", userId: "u" });
@@ -60,8 +63,8 @@ describe("RedisRunStateStore", () => {
       startedAt: 1,
       status: "queued",
     });
-    await store.recordFailed("r1", "boom");
-    const record = await store.get("r1");
+    await store.recordFailed("r1", "boom", ID);
+    const record = await store.get("r1", ID);
     expect(record?.status).toBe("failed");
     expect(record?.failureMessage).toBe("boom");
   });
@@ -75,8 +78,8 @@ describe("RedisRunStateStore", () => {
       startedAt: 1,
       status: "queued",
     });
-    await store.recordCancelled("r1");
-    const record = await store.get("r1");
+    await store.recordCancelled("r1", ID);
+    const record = await store.get("r1", ID);
     expect(record?.status).toBe("cancelled");
     expect(record?.identity).toEqual({ tenantId: "t", userId: "u" });
   });
@@ -102,9 +105,30 @@ describe("RedisRunStateStore", () => {
       startedAt: 1,
       status: "queued",
     });
-    await store.recordCompleted("r1");
-    expect((await store.get("r1"))?.status).toBe("completed");
-    expect((await store.get("r2"))?.status).toBe("queued");
+    await store.recordCompleted("r1", undefined, ID);
+    expect((await store.get("r1", ID))?.status).toBe("completed");
+    expect((await store.get("r2", ID))?.status).toBe("queued");
+  });
+
+  it("isolates identical run ids by identity", async () => {
+    const store = new RedisRunStateStore({ client: client.asRedis(), keyPrefix: "dat:" });
+    await store.recordQueued({
+      identity: ID,
+      runId: "shared",
+      sessionId: "s",
+      startedAt: 1,
+      status: "queued",
+    });
+    await store.recordQueued({
+      identity: OTHER,
+      runId: "shared",
+      sessionId: "s",
+      startedAt: 2,
+      status: "queued",
+    });
+    await store.recordCompleted("shared", undefined, ID);
+    expect((await store.get("shared", ID))?.status).toBe("completed");
+    expect((await store.get("shared", OTHER))?.status).toBe("queued");
   });
 });
 
@@ -169,7 +193,7 @@ describe("RedisRunStateStore out-of-order transitions", () => {
       startedAt: 100,
       status: "queued",
     });
-    const record = await store.get("r1");
+    const record = await store.get("r1", ID);
     expect(record).not.toBeNull();
     expect(record).toMatchObject({
       runId: "r1",

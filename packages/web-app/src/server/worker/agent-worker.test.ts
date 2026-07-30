@@ -126,11 +126,11 @@ describe("runWorkerJob", () => {
     });
 
     expect(result.outcome).toBe("error");
-    const events = await eventStream.read(request.runId, "0", 0, 50);
+    const events = await eventStream.read(request.identity, request.runId, "0", 0, 50);
     expect(events.some((event) => event.envelope.kind === "error")).toBe(true);
     expect(events.some((event) => event.envelope.kind === "result")).toBe(true);
     expect(events.some((event) => event.envelope.kind === "lifecycle")).toBe(false);
-    expect((await runState.get(request.runId))?.status).toBe("failed");
+    expect((await runState.get(request.runId, request.identity))?.status).toBe("failed");
     expect(
       await lock.currentHolder(
         request.identity.tenantId,
@@ -167,13 +167,13 @@ describe("runWorkerJob", () => {
     expect(loaded.version).toBeGreaterThan(0);
 
     // The UI event reached the stream.
-    const events = await eventStream.read(request.runId, "0", 0, 50);
+    const events = await eventStream.read(request.identity, request.runId, "0", 0, 50);
     const kinds = events.map((e) => e.envelope.kind);
     expect(kinds).toContain("ui");
     expect(kinds).toContain("result");
 
     // Run state was recorded as completed.
-    const state = await runState.get(request.runId);
+    const state = await runState.get(request.runId, request.identity);
     expect(state?.status).toBe("completed");
 
     // Lock was released.
@@ -217,7 +217,7 @@ describe("runWorkerJob", () => {
     const fencingToken = await acquireLock(request);
 
     // Cancel after the run starts.
-    setTimeout(() => void cancellation.cancel(request.runId), 5);
+    setTimeout(() => void cancellation.cancel(request.identity, request.runId), 5);
 
     const result = await runWorkerJob({
       cancellation,
@@ -236,7 +236,7 @@ describe("runWorkerJob", () => {
     expect(loaded.record?.history).toEqual([{ content: "prior", role: "user" }]);
 
     // Run state recorded as cancelled.
-    const state = await runState.get(request.runId);
+    const state = await runState.get(request.runId, request.identity);
     expect(state?.status).toBe("cancelled");
   });
 
@@ -276,12 +276,12 @@ describe("runWorkerJob", () => {
     // Prior state preserved (error never overwrites the history).
     expect(loaded.record?.history).toEqual([{ content: "prior", role: "user" }]);
     // Run state recorded as failed.
-    const state = await runState.get(request.runId);
+    const state = await runState.get(request.runId, request.identity);
     expect(state?.status).toBe("failed");
     // Error surfaces to the client as a UI error update (the TurnRunner
     // translates thrown agent-source errors into a UI error event rather than
     // a stream-level error envelope).
-    const events = await eventStream.read(request.runId, "0", 0, 50);
+    const events = await eventStream.read(request.identity, request.runId, "0", 0, 50);
     const errorUis = events.filter(
       (e) =>
         e.envelope.kind === "ui" &&
@@ -363,11 +363,11 @@ describe("runWorkerJob", () => {
     expect(loaded.record).toBeNull();
 
     // A stream error was published.
-    const events = await eventStream.read(request.runId, "0", 0, 50);
+    const events = await eventStream.read(request.identity, request.runId, "0", 0, 50);
     expect(events.some((e) => e.envelope.kind === "error")).toBe(true);
 
     // Run state recorded as cancelled.
-    const state = await runState.get(request.runId);
+    const state = await runState.get(request.runId, request.identity);
     expect(state?.status).toBe("cancelled");
   });
 
@@ -488,14 +488,20 @@ describe("runWorkerJob", () => {
 
     // The turn never ran: the scripted agent was not invoked (no UI events
     // from it in the stream, only the worker's error + result).
-    const events = await eventStream.read(originalRequest.runId, "0", 0, 50);
+    const events = await eventStream.read(
+      originalRequest.identity,
+      originalRequest.runId,
+      "0",
+      0,
+      50,
+    );
     expect(events.some((e) => e.envelope.kind === "error")).toBe(true);
     expect(events.some((e) => e.envelope.kind === "result")).toBe(true);
     // No UI events from the agent (it would have published {type:"message"}).
     expect(events.some((e) => e.envelope.kind === "ui")).toBe(false);
 
     // Run state recorded as failed.
-    const state = await runState.get(originalRequest.runId);
+    const state = await runState.get(originalRequest.runId, originalRequest.identity);
     expect(state?.status).toBe("failed");
 
     // The NEW owner's lock is untouched — the stale job did NOT release or

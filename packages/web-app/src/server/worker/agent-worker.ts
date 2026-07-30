@@ -151,9 +151,9 @@ export async function abortExpiredQueuedJob(options: {
   };
 
   try {
-    await eventStream.publishError(request.runId, QUEUE_WAIT_EXCEEDED_MESSAGE);
-    await eventStream.publishResult(request.runId, result);
-    await runState.recordFailed(request.runId, QUEUE_WAIT_EXCEEDED_MESSAGE);
+    await eventStream.publishError(request.identity, request.runId, QUEUE_WAIT_EXCEEDED_MESSAGE);
+    await eventStream.publishResult(request.identity, request.runId, result);
+    await runState.recordFailed(request.runId, QUEUE_WAIT_EXCEEDED_MESSAGE, request.identity);
     return result;
   } finally {
     await lock
@@ -205,9 +205,7 @@ export async function runWorkerJob(options: {
 
     if (!ownsLock) {
       workerSpan.addEvent("worker.stale_job", {
-        "lock.expectedRunId": request.runId,
         "lock.expectedToken": fencingToken,
-        "lock.actualRunId": holder?.runId ?? "(none)",
         "lock.actualToken": holder?.fencingToken ?? 0,
       });
       workerSpan.setStatus({ code: 1, message: STALE_JOB_MESSAGE });
@@ -218,9 +216,9 @@ export async function runWorkerJob(options: {
         structuredOutput: null,
         finalText: "",
       };
-      await eventStream.publishError(request.runId, STALE_JOB_MESSAGE);
-      await eventStream.publishResult(request.runId, result);
-      await runState.recordFailed(request.runId, STALE_JOB_MESSAGE);
+      await eventStream.publishError(request.identity, request.runId, STALE_JOB_MESSAGE);
+      await eventStream.publishResult(request.identity, request.runId, result);
+      await runState.recordFailed(request.runId, STALE_JOB_MESSAGE, request.identity);
       workerSpan.end();
       return result;
     }
@@ -231,6 +229,7 @@ export async function runWorkerJob(options: {
       onLost: () => {
         abortController.abort();
         void eventStream.publishError(
+          request.identity,
           request.runId,
           "Session lease lost; another worker may have taken over.",
         );
@@ -248,8 +247,8 @@ export async function runWorkerJob(options: {
       const messages = buildTurnMessages(history, userMessage);
       const workerRequest: ExecutionRequest = { ...request, messages };
 
-      await runState.recordRunning(request.runId);
-      await eventStream.publishLifecycle(request.runId, "started");
+      await runState.recordRunning(request.runId, request.identity);
+      await eventStream.publishLifecycle(request.identity, request.runId, "started");
 
       const handle = turnRunner.start(workerRequest, abortController.signal);
 
@@ -289,19 +288,20 @@ export async function runWorkerJob(options: {
         finalText: "",
       };
       if (result.outcome === "cancelled") {
-        await eventStream.publishLifecycle(request.runId, "cancelled");
+        await eventStream.publishLifecycle(request.identity, request.runId, "cancelled");
       } else {
         await eventStream.publishError(
+          request.identity,
           request.runId,
           error instanceof Error ? error.message : String(error),
         );
       }
-      await eventStream.publishResult(request.runId, result);
+      await eventStream.publishResult(request.identity, request.runId, result);
       await recordTerminalState(runState, request, result);
       return result;
     } finally {
       refresh.stop();
-      await eventStream.trim(request.runId).catch(() => undefined);
+      await eventStream.trim(request.identity, request.runId).catch(() => undefined);
       await lock
         .release(
           request.identity.tenantId,
@@ -323,7 +323,7 @@ async function relayEvents(options: {
   readonly abortController: AbortController;
 }): Promise<ExecutionResult | null> {
   const { cancellation, eventStream, events, request } = options;
-  const watch = cancellation.watch(request.runId, options.abortController.signal);
+  const watch = cancellation.watch(request.identity, request.runId, options.abortController.signal);
   let resolved: ExecutionResult | null = null;
 
   void watch.then((cancelled) => {
@@ -332,12 +332,12 @@ async function relayEvents(options: {
 
   for await (const event of events) {
     if (event.kind === "ui") {
-      await eventStream.publishUi(request.runId, event.update);
+      await eventStream.publishUi(request.identity, request.runId, event.update);
     } else if (event.kind === "lifecycle" && event.phase === "cancelled") {
-      await eventStream.publishLifecycle(request.runId, "cancelled");
+      await eventStream.publishLifecycle(request.identity, request.runId, "cancelled");
     } else if (event.kind === "result") {
       resolved = event.result;
-      await eventStream.publishResult(request.runId, event.result);
+      await eventStream.publishResult(request.identity, request.runId, event.result);
       return resolved;
     }
   }
@@ -353,7 +353,7 @@ async function commitOutcome(options: {
   readonly span: Span;
 }): Promise<void> {
   const { request, result, sessionStore, sessionVersion, runState, span } = options;
-  const started = (await runState.get(request.runId))?.startedAt ?? Date.now();
+  const started = (await runState.get(request.runId, request.identity))?.startedAt ?? Date.now();
   const preserve = result.outcome === "cancelled" || result.outcome === "error";
   if (preserve) {
     await sessionStore.recordRun(request.identity, request.sessionId, {
@@ -392,16 +392,16 @@ async function recordTerminalState(
 ): Promise<void> {
   switch (result.outcome) {
     case "success":
-      await runState.recordCompleted(request.runId);
+      await runState.recordCompleted(request.runId, undefined, request.identity);
       break;
     case "failure":
-      await runState.recordFailed(request.runId);
+      await runState.recordFailed(request.runId, undefined, request.identity);
       break;
     case "cancelled":
-      await runState.recordCancelled(request.runId);
+      await runState.recordCancelled(request.runId, request.identity);
       break;
     default:
-      await runState.recordFailed(request.runId);
+      await runState.recordFailed(request.runId, undefined, request.identity);
   }
 }
 

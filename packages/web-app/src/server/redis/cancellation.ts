@@ -1,4 +1,5 @@
 import type { Redis } from "ioredis";
+import type { ExecutionIdentity } from "../agent-runtime/types.ts";
 
 import { createRedisKeys, type RedisKeyspaces, resolveTtlConfig, type TtlConfig } from "./keys.ts";
 
@@ -24,23 +25,60 @@ export class RedisCancellation {
     this.#pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   }
 
-  async cancel(runId: string): Promise<void> {
-    await this.#client.set(this.#keys.cancellation(runId), "1", "EX", this.#ttl.cancellation);
+  async cancel(runId: string): Promise<void>;
+  async cancel(identity: ExecutionIdentity, runId: string): Promise<void>;
+  async cancel(first: string | ExecutionIdentity, second?: string): Promise<void> {
+    const identity = typeof first === "string" ? undefined : first;
+    const runId = typeof first === "string" ? first : second;
+    if (!runId) throw new Error("runId is required.");
+    const key = this.#keys.cancellation(runId, identity);
+    await (this.#client.set as unknown as (...args: unknown[]) => Promise<unknown>)(
+      key,
+      "1",
+      "EX",
+      this.#ttl.cancellation,
+      "NX",
+    );
   }
 
-  async isCancelled(runId: string): Promise<boolean> {
-    const value = await this.#client.get(this.#keys.cancellation(runId));
+  async isCancelled(runId: string): Promise<boolean>;
+  async isCancelled(identity: ExecutionIdentity, runId: string): Promise<boolean>;
+  async isCancelled(first: string | ExecutionIdentity, second?: string): Promise<boolean> {
+    const identity = typeof first === "string" ? undefined : first;
+    const runId = typeof first === "string" ? first : second;
+    if (!runId) throw new Error("runId is required.");
+    const value = await this.#client.get(
+      identity ? this.#keys.cancellation(runId, identity) : this.#keys.cancellation(runId),
+    );
     return value === "1";
   }
 
-  async clear(runId: string): Promise<void> {
-    await this.#client.del(this.#keys.cancellation(runId));
+  async clear(runId: string): Promise<void>;
+  async clear(identity: ExecutionIdentity, runId: string): Promise<void>;
+  async clear(first: string | ExecutionIdentity, second?: string): Promise<void> {
+    const identity = typeof first === "string" ? undefined : first;
+    const runId = typeof first === "string" ? first : second;
+    if (!runId) throw new Error("runId is required.");
+    await this.#client.del(
+      identity ? this.#keys.cancellation(runId, identity) : this.#keys.cancellation(runId),
+    );
   }
 
-  async watch(runId: string, signal: AbortSignal): Promise<boolean> {
+  async watch(runId: string, signal: AbortSignal): Promise<boolean>;
+  async watch(identity: ExecutionIdentity, runId: string, signal: AbortSignal): Promise<boolean>;
+  async watch(
+    first: string | ExecutionIdentity,
+    second: string | AbortSignal,
+    third?: AbortSignal,
+  ): Promise<boolean> {
+    const identity = typeof first === "string" ? undefined : first;
+    const runId = typeof first === "string" ? first : second;
+    const signal = typeof first === "string" ? (second as AbortSignal) : third;
+    if (typeof runId !== "string" || !signal) throw new Error("runId and signal are required.");
     if (signal.aborted) return false;
     while (true) {
-      if (await this.isCancelled(runId)) return true;
+      if (await (identity ? this.isCancelled(identity, runId) : this.isCancelled(runId)))
+        return true;
       if (signal.aborted) return false;
       await sleep(this.#pollIntervalMs, signal);
       if (signal.aborted) return false;

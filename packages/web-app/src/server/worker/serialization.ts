@@ -1,9 +1,17 @@
-import type { ExecutionRequest } from "../agent-runtime/types.ts";
+import { createHash } from "node:crypto";
+
+import type { ExecutionIdentity, ExecutionRequest } from "../agent-runtime/types.ts";
 
 export const AGENT_TURN_QUEUE = "agent-turns";
 
 export function bullMqQueuePrefix(keyPrefix: string): string {
   return keyPrefix.replace(/:+$/u, "");
+}
+
+export function scopedJobId(identity: ExecutionIdentity, runId: string): string {
+  return createHash("sha256")
+    .update(`${identity.tenantId}\u0000${identity.userId}\u0000${runId}`, "utf8")
+    .digest("hex");
 }
 
 export const EXECUTION_REQUEST_SCHEMA_VERSION = 2;

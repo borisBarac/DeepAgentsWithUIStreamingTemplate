@@ -8,22 +8,20 @@ import {
 } from "@langchain/langgraph";
 import type { Redis } from "ioredis";
 
+import { GUEST_STATE_TTL_SECONDS } from "../guest-identity.ts";
 import { MEMORY_ITEM_SCHEMA_VERSION, type MemoryItemRecord, RedisCodec } from "./codec.ts";
 import { createRedisKeys, hashNamespace, type RedisKeyspaces } from "./keys.ts";
 
-// Redis-backed BaseStore for durable single-user agent memory. Mirrors the
-// FileSystemMemoryStore contract but persists items in Redis so they survive
-// process restarts, multi-process deployments, and ephemeral filesystems.
+// Redis-backed BaseStore for guest-scoped agent memory. Mirrors the
+// FileSystemMemoryStore contract while persisting each guest namespace in Redis.
 //
 // Layout:
 //   {prefix}memory:item:{namespaceHash}:{keyHash}  -> JSON record (string)
 //   {prefix}memory:idx:{namespaceHash}             -> SET of keys (index)
 //   {prefix}memory:namespaces                      -> SET of namespace tuples
 //
-// Memory keys are NOT TTL'd. Durable agent memory must persist indefinitely;
-// silent expiry would cause the agent to forget user preferences and project
-// facts without any trace. Use explicit delete (via write_file/edit_file tools)
-// to remove entries.
+// Guest namespace metadata starts one absolute TTL. Item/index keys inherit the
+// remaining TTL; the global namespace registry is intentionally non-expiring.
 
 const itemCodec = new RedisCodec<MemoryItemRecord>(MEMORY_ITEM_SCHEMA_VERSION);
 
@@ -32,6 +30,7 @@ type StoreSearchItem = Item;
 export type RedisMemoryStoreOptions = {
   readonly client: Redis;
   readonly keyPrefix: string;
+  readonly namespaceTtlSeconds?: number;
 };
 
 function toStoredRecord(
@@ -90,11 +89,13 @@ function isMemoryItemRecord(value: unknown): value is MemoryItemRecord {
 export class RedisMemoryStore extends BaseStore {
   readonly #client: Redis;
   readonly #keys: RedisKeyspaces;
+  readonly #namespaceTtlSeconds: number;
 
   constructor(options: RedisMemoryStoreOptions) {
     super();
     this.#client = options.client;
     this.#keys = createRedisKeys(options.keyPrefix);
+    this.#namespaceTtlSeconds = options.namespaceTtlSeconds ?? GUEST_STATE_TTL_SECONDS;
   }
 
   override async batch<Op extends Operation[]>(operations: Op): Promise<OperationResults<Op>> {
@@ -131,6 +132,8 @@ export class RedisMemoryStore extends BaseStore {
 
   async #get(namespace: readonly string[], key: string): Promise<Item | null> {
     const namespaceHash = hashNamespace(namespace);
+    const remaining = await this.#namespaceTtl(namespaceHash, false);
+    if (remaining === null) return null;
     const itemKey = this.#keys.memoryItem(namespaceHash, key);
     const raw = await this.#client.get(itemKey);
     const record = decodeItem(raw);
@@ -155,12 +158,14 @@ export class RedisMemoryStore extends BaseStore {
     const record = toStoredRecord(namespace, op.key, op.value, existing);
     const encoded = itemCodec.encode(record);
     const namespaceTuple = JSON.stringify(namespace);
+    const remaining = await this.#namespaceTtl(namespaceHash, true);
+    if (remaining === null) return;
 
-    // No EX/TTL — durable memory persists until explicitly deleted.
     await this.#client
       .multi()
-      .set(itemKey, encoded)
+      .set(itemKey, encoded, "EX", remaining)
       .sadd(indexKey, op.key)
+      .expire(indexKey, remaining)
       .sadd(registryKey, namespaceTuple)
       .exec();
   }
@@ -212,12 +217,24 @@ export class RedisMemoryStore extends BaseStore {
           const namespace = parseNamespace(tuple);
           if (!namespace) return null;
           const namespaceHash = hashNamespace(namespace);
+          const remaining = await this.#namespaceTtl(namespaceHash, false);
+          if (remaining === null) {
+            await this.#pruneNamespace(namespaceHash, tuple);
+            return null;
+          }
           const keys = await this.#client.smembers(this.#keys.memoryNamespaceIndex(namespaceHash));
-          if (keys.length === 0) return null;
+          if (keys.length === 0) {
+            await this.#pruneNamespace(namespaceHash, tuple);
+            return null;
+          }
           const records = await this.#client.mget(
             ...keys.map((key) => this.#keys.memoryItem(namespaceHash, key)),
           );
-          return records.some((raw) => decodeItem(raw)) ? namespace : null;
+          if (!records.some((raw) => decodeItem(raw))) {
+            await this.#pruneNamespace(namespaceHash, tuple);
+            return null;
+          }
+          return namespace;
         }),
       )
     )
@@ -241,6 +258,33 @@ export class RedisMemoryStore extends BaseStore {
     return deduped
       .sort((a, b) => a.join(":").localeCompare(b.join(":")))
       .slice(op.offset, op.offset + op.limit);
+  }
+
+  async #namespaceTtl(namespaceHash: string, create: boolean): Promise<number | null> {
+    const expiryKey = this.#keys.memoryNamespaceExpiry(namespaceHash);
+    if (create) {
+      await (this.#client.set as unknown as (...args: unknown[]) => Promise<unknown>)(
+        expiryKey,
+        "1",
+        "EX",
+        this.#namespaceTtlSeconds,
+        "NX",
+      );
+    }
+    const pttl = await this.#client.pttl(expiryKey);
+    if (pttl <= 0) return null;
+    return Math.max(1, Math.ceil(pttl / 1_000));
+  }
+
+  async #pruneNamespace(namespaceHash: string, tuple: string): Promise<void> {
+    await this.#client
+      .multi()
+      .srem(this.#keys.memoryNamespaceRegistry(), tuple)
+      .del(
+        this.#keys.memoryNamespaceIndex(namespaceHash),
+        this.#keys.memoryNamespaceExpiry(namespaceHash),
+      )
+      .exec();
   }
 }
 

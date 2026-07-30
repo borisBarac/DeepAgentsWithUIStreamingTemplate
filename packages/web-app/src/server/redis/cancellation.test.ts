@@ -56,6 +56,15 @@ describe("RedisCancellation", () => {
     expect(await cancel.isCancelled("r2")).toBe(false);
   });
 
+  it("isolates identical run ids by identity", async () => {
+    const cancel = new RedisCancellation({ client: client.asRedis(), keyPrefix: "dat:" });
+    const alice = { tenantId: "guest", userId: "alice" };
+    const bob = { tenantId: "guest", userId: "bob" };
+    await cancel.cancel(alice, "shared");
+    expect(await cancel.isCancelled(alice, "shared")).toBe(true);
+    expect(await cancel.isCancelled(bob, "shared")).toBe(false);
+  });
+
   it("watch resolves true once the flag is set", async () => {
     const cancel = new RedisCancellation({
       client: client.asRedis(),

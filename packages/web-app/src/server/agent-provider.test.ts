@@ -12,6 +12,9 @@ import {
 import { FakeRedis } from "./redis/fake-redis.ts";
 import { RedisMemoryStore } from "./redis/redis-memory-store.ts";
 
+const TEST_IDENTITY = { tenantId: "guest", userId: "test-user" } as const;
+const TEST_MEMORY_USER_ID = "guest:test-user";
+
 type WriteFileTool = {
   invoke(input: { content: string; file_path: string }): Promise<unknown>;
 };
@@ -87,7 +90,7 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     await withEnv({}, async () => {
-      const agent = await createAgentProvider();
+      const agent = await createAgentProvider(TEST_IDENTITY);
       const systemPrompt = JSON.stringify(agent.options.systemPrompt);
 
       expect(agent).toBeTruthy();
@@ -103,7 +106,7 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     const agent = await withEnv({ WEB_APP_AGENT_PROVIDER_MODE: "simple" }, () =>
-      createAgentProvider(),
+      createAgentProvider(TEST_IDENTITY),
     );
     expect(agent).toBeTruthy();
     expect(typeof agent.invoke).toBe("function");
@@ -113,9 +116,9 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     await withEnv({}, async () => {
-      await createAgentProvider();
+      await createAgentProvider(TEST_IDENTITY);
 
-      const backend = createUserMemoryBackend({ store });
+      const backend = createUserMemoryBackend({ store, userId: TEST_MEMORY_USER_ID });
       const seeds = createMemorySeedFiles();
 
       for (const seed of seeds) {
@@ -130,7 +133,7 @@ describe("createAgentProvider", () => {
       }
 
       __resetAgentCacheForTest();
-      await createAgentProvider();
+      await createAgentProvider(TEST_IDENTITY);
 
       for (const seed of seeds) {
         await expect(backend.read(seed.path)).resolves.toMatchObject({
@@ -144,12 +147,12 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     await withEnv({}, async () => {
-      const backend = createUserMemoryBackend({ store });
+      const backend = createUserMemoryBackend({ store, userId: TEST_MEMORY_USER_ID });
       const [projectFacts] = createMemorySeedFiles();
       if (!projectFacts) throw new Error("expected project facts seed");
       await backend.write(projectFacts.path, "Existing project facts");
 
-      await Promise.all([createAgentProvider(), createAgentProvider()]);
+      await Promise.all([createAgentProvider(TEST_IDENTITY), createAgentProvider(TEST_IDENTITY)]);
 
       await expect(backend.read(projectFacts.path)).resolves.toMatchObject({
         content: "Existing project facts",
@@ -167,7 +170,7 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     await withEnv({}, async () => {
-      const agent = await createAgentProvider();
+      const agent = await createAgentProvider(TEST_IDENTITY);
       const writeFile = getWriteFileTool(agent);
       const virtualPath = "/memory/web-app-write-tool.md";
 
@@ -176,7 +179,7 @@ describe("createAgentProvider", () => {
         content: "web app write succeeded",
       });
 
-      const backend = createUserMemoryBackend({ store });
+      const backend = createUserMemoryBackend({ store, userId: TEST_MEMORY_USER_ID });
       await expect(backend.read(virtualPath)).resolves.toMatchObject({
         content: "web app write succeeded",
       });
@@ -187,7 +190,7 @@ describe("createAgentProvider", () => {
     const { store } = makeTestStore();
     __setMemoryStoreForTest(store);
     await withEnv({}, async () => {
-      const agent = await createAgentProvider();
+      const agent = await createAgentProvider(TEST_IDENTITY);
       const writeFile = getWriteFileTool(agent);
 
       await expect(
@@ -206,6 +209,31 @@ describe("createAgentProvider", () => {
       ).rejects.toThrow(
         "Error: permission denied for write on /home/user/kanban_board_research.md",
       );
+    });
+  });
+
+  it("isolates guest memory writes by identity", async () => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    const alice = { tenantId: "guest", userId: "alice" } as const;
+    const bob = { tenantId: "guest", userId: "bob" } as const;
+    await withEnv({}, async () => {
+      const aliceAgent = await createAgentProvider(alice);
+      const bobAgent = await createAgentProvider(bob);
+      await getWriteFileTool(aliceAgent).invoke({
+        file_path: "/memory/private.md",
+        content: "alice-only",
+      });
+
+      const aliceBackend = createUserMemoryBackend({ store, userId: "guest:alice" });
+      const bobBackend = createUserMemoryBackend({ store, userId: "guest:bob" });
+      await expect(aliceBackend.read("/memory/private.md")).resolves.toMatchObject({
+        content: "alice-only",
+      });
+      await expect(bobBackend.read("/memory/private.md")).resolves.toMatchObject({
+        error: "File '/memory/private.md' not found",
+      });
+      expect(bobAgent).toBeTruthy();
     });
   });
 });

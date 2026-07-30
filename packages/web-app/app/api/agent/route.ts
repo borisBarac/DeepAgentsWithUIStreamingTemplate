@@ -6,20 +6,15 @@ import type {
   AgentExecutionHandle,
   AgentExecutor,
   ExecutionEvent,
-  ExecutionIdentity,
   ExecutionRequest,
 } from "../../../src/server/agent-runtime/types.ts";
+import { applyGuestCookie, resolveGuestIdentity } from "../../../src/server/guest-identity.ts";
 import {
   buildBullMqAgentExecutor,
   isSessionBusyError,
 } from "../../../src/server/worker/bullmq-executor.ts";
 
 export const runtime = "nodejs";
-
-const SINGLE_USER_IDENTITY: ExecutionIdentity = {
-  tenantId: "single-user",
-  userId: "default",
-};
 
 const encoder = new TextEncoder();
 
@@ -76,6 +71,15 @@ export function createAgentRequestHandler(
     }
 
     const abortController = new AbortController();
+    let guestIdentity: ReturnType<typeof resolveGuestIdentity>;
+    try {
+      guestIdentity = resolveGuestIdentity(request);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
     const messages: ExecutionRequest["messages"] = [
       { content: parsedRequest.message, role: "user" },
     ];
@@ -84,7 +88,7 @@ export function createAgentRequestHandler(
     try {
       handle = await executor.execute(
         {
-          identity: SINGLE_USER_IDENTITY,
+          identity: guestIdentity.identity,
           messages,
           options: {
             includeActivity: parsedRequest.includeSubagentActivity,
@@ -98,19 +102,28 @@ export function createAgentRequestHandler(
       );
     } catch (error) {
       if (isSessionBusyError(error)) {
-        return NextResponse.json(
-          { error: "Session is busy.", activeRunId: error.activeRunId },
-          { status: 409 },
+        return applyGuestCookie(
+          NextResponse.json(
+            { error: "Session is busy.", activeRunId: error.activeRunId },
+            { status: 409 },
+          ),
+          guestIdentity.setCookie,
         );
       }
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : String(error) },
-        { status: 500 },
+      return applyGuestCookie(
+        NextResponse.json(
+          { error: error instanceof Error ? error.message : String(error) },
+          { status: 500 },
+        ),
+        guestIdentity.setCookie,
       );
     }
 
     const disconnect = connectDebugDisconnect(request.signal, abortController);
-    return streamEvents(handle.events, abortController, disconnect);
+    return applyGuestCookie(
+      streamEvents(handle.events, abortController, disconnect),
+      guestIdentity.setCookie,
+    );
   };
 }
 

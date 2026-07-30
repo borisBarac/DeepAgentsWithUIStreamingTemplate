@@ -74,10 +74,10 @@ describe("hashNamespace", () => {
 
 describe("TTL config", () => {
   it("returns documented defaults", () => {
-    expect(DEFAULT_TTL_SECONDS.session).toBe(60 * 60 * 12);
+    expect(DEFAULT_TTL_SECONDS.session).toBe(1_800);
     expect(DEFAULT_TTL_SECONDS.runMetadata).toBeGreaterThan(0);
-    expect(DEFAULT_TTL_SECONDS.runState).toBeLessThan(DEFAULT_TTL_SECONDS.session);
-    expect(DEFAULT_TTL_SECONDS.runStream).toBeLessThan(DEFAULT_TTL_SECONDS.session);
+    expect(DEFAULT_TTL_SECONDS.runState).toBe(DEFAULT_TTL_SECONDS.session);
+    expect(DEFAULT_TTL_SECONDS.runStream).toBe(DEFAULT_TTL_SECONDS.session);
     expect(DEFAULT_LOCK_LEASE_SECONDS).toBeGreaterThan(0);
   });
 

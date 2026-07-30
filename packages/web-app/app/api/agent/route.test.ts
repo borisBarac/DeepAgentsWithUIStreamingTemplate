@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { afterAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type {
   AgentExecutionHandle,
@@ -22,7 +22,21 @@ const SUCCESS_RESULT: ExecutionResult = {
   finalText: "",
 };
 
-function fakeExecutor(events: ExecutionEvent[]): AgentExecutor {
+const previousGuestSecret = process.env.GUEST_IDENTITY_SECRET;
+
+beforeEach(() => {
+  process.env.GUEST_IDENTITY_SECRET = "route-test-secret";
+});
+
+afterAll(() => {
+  if (previousGuestSecret === undefined) delete process.env.GUEST_IDENTITY_SECRET;
+  else process.env.GUEST_IDENTITY_SECRET = previousGuestSecret;
+});
+
+function fakeExecutor(
+  events: ExecutionEvent[],
+  onExecute?: (request: ExecutionRequest) => void,
+): AgentExecutor {
   const result: ExecutionResult =
     events.find((e) => e.kind === "result")?.kind === "result"
       ? (events.find((e) => e.kind === "result") as { result: ExecutionResult }).result
@@ -30,6 +44,7 @@ function fakeExecutor(events: ExecutionEvent[]): AgentExecutor {
 
   return {
     execute(_request: ExecutionRequest, _signal: AbortSignal): Promise<AgentExecutionHandle> {
+      onExecute?.(_request);
       const handle: AgentExecutionHandle = {
         events: {
           async *[Symbol.asyncIterator]() {
@@ -89,6 +104,53 @@ describe("createAgentRequestHandler", () => {
       }),
     );
     expect(response.status).toBe(400);
+  });
+
+  it("sets, reuses, and replaces the signed guest cookie", async () => {
+    const identities: string[] = [];
+    const handler = createAgentRequestHandler(
+      fakeExecutor([], (request) => identities.push(request.identity.userId)),
+    );
+    const init = {
+      body: JSON.stringify({
+        message: "hi",
+        runId: "r1",
+        sessionId: "same",
+        tenantId: "attacker",
+        userId: "attacker",
+      }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    } as const;
+    const first = await handler(new Request("http://localhost/api/agent", init));
+    await first.text();
+    const cookie = first.headers.get("Set-Cookie");
+    expect(cookie).toContain("guest_identity=");
+    expect(cookie).toContain("HttpOnly");
+    const cookieValue = cookie?.split(";")[0];
+    if (!cookieValue) throw new Error("expected guest cookie");
+
+    const second = await handler(
+      new Request("http://localhost/api/agent", {
+        ...init,
+        headers: { ...init.headers, cookie: cookieValue },
+      }),
+    );
+    await second.text();
+    expect(second.headers.get("Set-Cookie")).toBeNull();
+    expect(identities[1]).toBe(identities[0]);
+    expect(identities[0]).not.toBe("attacker");
+
+    const tampered = `${cookieValue.slice(0, -1)}${cookieValue.endsWith("a") ? "b" : "a"}`;
+    const third = await handler(
+      new Request("http://localhost/api/agent", {
+        ...init,
+        headers: { ...init.headers, cookie: tampered },
+      }),
+    );
+    await third.text();
+    expect(third.headers.get("Set-Cookie")).toContain("guest_identity=");
+    expect(identities[2]).not.toBe(identities[0]);
   });
 
   it("streams UI updates as NDJSON and hides lifecycle/result events", async () => {
@@ -266,8 +328,10 @@ describe("createAgentCancellationHandler", () => {
     [{ status: "terminal" }, 409],
   ] as const) {
     it(`returns ${expectedStatus} for ${result.status}`, async () => {
+      let identity: ExecutionRequest["identity"] | undefined;
       const executor: AgentExecutor = {
-        async cancel() {
+        async cancel(receivedIdentity) {
+          identity = receivedIdentity;
           return result;
         },
         async execute() {
@@ -283,6 +347,7 @@ describe("createAgentCancellationHandler", () => {
       );
       expect(response.status).toBe(expectedStatus);
       expect((await response.json()).status).toBe(result.status);
+      expect(identity).toEqual({ tenantId: "guest", userId: expect.any(String) });
     });
   }
 });

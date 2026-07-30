@@ -160,7 +160,7 @@ describe("RedisMemoryStore", () => {
     expect(filtered).toEqual([["t", "u", "mem"]]);
   });
 
-  it("does not set a TTL on memory item keys (durable storage)", async () => {
+  it("sets one absolute TTL across the guest memory namespace", async () => {
     const store = new RedisMemoryStore({ client: client.asRedis(), keyPrefix: "dat:" });
     await store.put(["t", "u", "mem"], "note", { content: "hello" });
     const namespaceHash = hashNamespace(["t", "u", "mem"]);
@@ -168,9 +168,30 @@ describe("RedisMemoryStore", () => {
     const itemKey = keys.memoryItem(namespaceHash, "note");
     const entry = client._raw(itemKey);
     expect(entry).toBeDefined();
-    expect(entry?.expiresAt).toBeUndefined();
-    expect(client._raw(keys.memoryNamespaceIndex(namespaceHash))?.expiresAt).toBeUndefined();
+    expect(entry?.expiresAt).toBeDefined();
+    expect(client._raw(keys.memoryNamespaceIndex(namespaceHash))?.expiresAt).toBeDefined();
+    expect(client._raw(keys.memoryNamespaceExpiry(namespaceHash))?.expiresAt).toBeDefined();
     expect(client._raw(keys.memoryNamespaceRegistry())?.expiresAt).toBeUndefined();
+  });
+
+  it("does not renew namespace expiry and starts fresh after expiry", async () => {
+    const store = new RedisMemoryStore({
+      client: client.asRedis(),
+      keyPrefix: "dat:",
+      namespaceTtlSeconds: 1,
+    });
+    const namespace = ["users", "guest:a", "memory"];
+    const namespaceHash = hashNamespace(namespace);
+    const keys = createRedisKeys("dat:");
+    await store.put(namespace, "first", { content: "one" });
+    const expiresAt = client._raw(keys.memoryNamespaceExpiry(namespaceHash))?.expiresAt;
+    await wait(10);
+    await store.put(namespace, "second", { content: "two" });
+    expect(client._raw(keys.memoryNamespaceExpiry(namespaceHash))?.expiresAt).toBe(expiresAt);
+    await wait(1_050);
+    expect(await store.get(namespace, "first")).toBeNull();
+    await store.put(namespace, "fresh", { content: "new" });
+    expect(await store.get(namespace, "fresh")).not.toBeNull();
   });
 
   it("isolates keys by keyPrefix", async () => {

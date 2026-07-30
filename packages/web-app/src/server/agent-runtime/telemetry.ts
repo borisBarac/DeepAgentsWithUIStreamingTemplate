@@ -74,10 +74,10 @@ export function setIdentityAttributes(
   sessionId: string,
   runId: string,
 ): void {
-  span.setAttribute("tenant.id", identity.tenantId);
-  span.setAttribute("user.id", identity.userId);
-  span.setAttribute("session.id", sessionId);
-  span.setAttribute("run.id", runId);
+  void identity;
+  void sessionId;
+  void runId;
+  span.setAttribute("identity.kind", "guest");
 }
 
 export function setOutcomeAttribute(span: Span, outcome: RunOutcome): void {

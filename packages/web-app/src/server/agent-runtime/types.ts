@@ -88,5 +88,5 @@ export type AgentExecutor = {
     request: ExecutionRequest,
     signal: AbortSignal,
   ): AgentExecutionHandle | Promise<AgentExecutionHandle>;
-  cancel(runId: string): Promise<CancellationResult>;
+  cancel(identity: ExecutionIdentity, runId: string): Promise<CancellationResult>;
 };

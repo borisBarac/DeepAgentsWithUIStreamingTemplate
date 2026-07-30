@@ -15,6 +15,7 @@ import { BullMqAgentExecutor, isSessionBusyError } from "./bullmq-executor.ts";
 import { AGENT_TURN_QUEUE, encodeExecutionRequest } from "./serialization.ts";
 
 const IDENTITY = { tenantId: "tenant-a", userId: "user-1" };
+const OTHER_IDENTITY = { tenantId: "tenant-a", userId: "user-2" };
 
 const SUCCESS_RESULT: ExecutionResult = {
   outcome: "success",
@@ -93,7 +94,7 @@ describe("BullMqAgentExecutor", () => {
     runId: string,
   ): Promise<void> {
     const resolved = await handle;
-    await eventStream.publishResult(runId, SUCCESS_RESULT);
+    await eventStream.publishResult(IDENTITY, runId, SUCCESS_RESULT);
     await resolved.result;
   }
 
@@ -115,7 +116,7 @@ describe("BullMqAgentExecutor", () => {
     expect(queue.adds).toHaveLength(0);
   });
 
-  it("enqueues with attempts=1 and jobId=runId", async () => {
+  it("enqueues with attempts=1 and an identity-scoped job id", async () => {
     const request = buildRequest({ runId: "fixed-run-id" });
     const handle = await executor.execute(request, new AbortController().signal);
 
@@ -124,7 +125,7 @@ describe("BullMqAgentExecutor", () => {
     if (!add) throw new Error("expected an enqueued job");
     expect(add.name).toBe(AGENT_TURN_QUEUE);
     expect(add.options.attempts).toBe(1);
-    expect(add.options.jobId).toBe("fixed-run-id");
+    expect(add.options.jobId).not.toBe("fixed-run-id");
     expect(add.data).toEqual(encodeExecutionRequest(request, 1));
 
     await terminate(handle, request.runId);
@@ -134,7 +135,7 @@ describe("BullMqAgentExecutor", () => {
     const request = buildRequest();
     const handle = await executor.execute(request, new AbortController().signal);
 
-    const state = await executor.runState.get(request.runId);
+    const state = await executor.runState.get(request.runId, request.identity);
     expect(state?.status).toBe("queued");
     expect(state?.identity).toEqual(IDENTITY);
 
@@ -145,9 +146,15 @@ describe("BullMqAgentExecutor", () => {
     const request = buildRequest();
     const handle = await executor.execute(request, new AbortController().signal);
 
-    await eventStream.publishUi(request.runId, { type: "message", text: "first" });
-    await eventStream.publishUi(request.runId, { type: "message", text: "second" });
-    await eventStream.publishResult(request.runId, SUCCESS_RESULT);
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "first",
+    });
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "second",
+    });
+    await eventStream.publishResult(request.identity, request.runId, SUCCESS_RESULT);
 
     const events = [];
     for await (const event of handle.events) {
@@ -171,12 +178,12 @@ describe("BullMqAgentExecutor", () => {
 
     controller.abort();
     await flushMicrotasks();
-    expect(await executor.cancellation.isCancelled(request.runId)).toBe(true);
+    expect(await executor.cancellation.isCancelled(request.identity, request.runId)).toBe(true);
 
     // Mark the run cancelled in Redis (as the worker would) before forcing a
     // terminal result so the synthesized outcome reflects the cancellation.
-    await executor.runState.recordCancelled(request.runId);
-    await eventStream.publishResult(request.runId, {
+    await executor.runState.recordCancelled(request.runId, request.identity);
+    await eventStream.publishResult(request.identity, request.runId, {
       outcome: "cancelled",
       failure: null,
       history: [],
@@ -192,12 +199,14 @@ describe("BullMqAgentExecutor", () => {
   it("requests cancellation once and reports terminal or unknown runs", async () => {
     const request = buildRequest();
     const handle = await executor.execute(request, new AbortController().signal);
-    expect(await executor.cancel(request.runId)).toEqual({ status: "requested" });
-    expect(await executor.cancel(request.runId)).toEqual({ status: "already_requested" });
-    await executor.runState.recordCancelled(request.runId);
-    expect(await executor.cancel(request.runId)).toEqual({ status: "terminal" });
-    expect(await executor.cancel("unknown-run")).toEqual({ status: "unknown" });
-    await eventStream.publishResult(request.runId, {
+    expect(await executor.cancel(request.identity, request.runId)).toEqual({ status: "requested" });
+    expect(await executor.cancel(request.identity, request.runId)).toEqual({
+      status: "already_requested",
+    });
+    await executor.runState.recordCancelled(request.runId, request.identity);
+    expect(await executor.cancel(request.identity, request.runId)).toEqual({ status: "terminal" });
+    expect(await executor.cancel(request.identity, "unknown-run")).toEqual({ status: "unknown" });
+    await eventStream.publishResult(request.identity, request.runId, {
       outcome: "cancelled",
       failure: null,
       history: [],
@@ -205,6 +214,16 @@ describe("BullMqAgentExecutor", () => {
       finalText: "",
     });
     await handle.result;
+  });
+
+  it("does not let another guest cancel an identical run id", async () => {
+    const request = buildRequest({ runId: "shared-run" });
+    const handle = await executor.execute(request, new AbortController().signal);
+
+    expect(await executor.cancel(OTHER_IDENTITY, request.runId)).toEqual({ status: "unknown" });
+    expect(await executor.cancellation.isCancelled(request.identity, request.runId)).toBe(false);
+
+    await terminate(handle, request.runId);
   });
 
   it("releases the lock when enqueue fails so the session is not wedged", async () => {
@@ -271,7 +290,7 @@ describe("BullMqAgentExecutor", () => {
     expect(events.some((e) => e.kind === "result")).toBe(true);
 
     // Run state was marked failed.
-    const state = await executor.runState.get(request.runId);
+    const state = await executor.runState.get(request.runId, request.identity);
     expect(state?.status).toBe("failed");
 
     // The takeover run still owns the lock (the executor did not release it).
@@ -290,9 +309,15 @@ describe("BullMqAgentExecutor", () => {
     // check fails — but the final drain re-reads the stream and must relay the
     // published UI + success result instead of synthesizing "Session lease
     // lost".
-    await eventStream.publishUi(request.runId, { type: "message", text: "first" });
-    await eventStream.publishUi(request.runId, { type: "message", text: "second" });
-    await eventStream.publishResult(request.runId, SUCCESS_RESULT);
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "first",
+    });
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "second",
+    });
+    await eventStream.publishResult(request.identity, request.runId, SUCCESS_RESULT);
 
     const lockKey = createRedisKeys("dat:").sessionLock(
       IDENTITY.tenantId,
@@ -337,7 +362,7 @@ describe("BullMqAgentExecutor", () => {
     // synthesis fallback resolves to outcome "error".
     controller.abort();
     await flushMicrotasks();
-    const runStateKey = createRedisKeys("dat:").runState(request.runId);
+    const runStateKey = createRedisKeys("dat:").runState(request.runId, request.identity);
     await client.del(runStateKey);
 
     const events: ExecutionEvent[] = [];

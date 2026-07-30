@@ -22,8 +22,12 @@ if current ~= expected then
   return 0
 end
 local next = current + 1
-redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
-redis.call('SET', KEYS[2], tostring(next), 'EX', ARGV[3])
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < 1 then ttl = redis.call('PTTL', KEYS[2]) end
+if ttl < 1 then ttl = tonumber(ARGV[3]) * 1000 end
+local seconds = math.max(1, math.ceil(ttl / 1000))
+redis.call('SET', KEYS[1], ARGV[2], 'EX', seconds)
+redis.call('SET', KEYS[2], tostring(next), 'EX', seconds)
 return 1
 `;
 
@@ -79,12 +83,18 @@ export class RedisSessionStore implements SessionStore {
 
   async recordRun(identity: ExecutionIdentity, sessionId: string, metadata: RunMetadata) {
     const runKey = this.#keys.runMetadata(identity.tenantId, identity.userId, sessionId);
-    await this.#client.set(runKey, runCodec.encode(metadata), "EX", this.#ttl.runMetadata);
+    const remaining = await this.#remainingTtl(runKey, this.#ttl.runMetadata);
+    await this.#client.set(runKey, runCodec.encode(metadata), "EX", remaining);
   }
 
   async lastRun(identity: ExecutionIdentity, sessionId: string): Promise<RunMetadata | null> {
     const runKey = this.#keys.runMetadata(identity.tenantId, identity.userId, sessionId);
     const raw = await this.#client.get(runKey);
     return runCodec.decode(raw);
+  }
+
+  async #remainingTtl(key: string, fallback: number): Promise<number> {
+    const pttl = await this.#client.pttl(key);
+    return pttl > 0 ? Math.max(1, Math.ceil(pttl / 1_000)) : fallback;
   }
 }

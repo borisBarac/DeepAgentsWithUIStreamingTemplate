@@ -22,9 +22,10 @@ async function resolveMemoryStore(): Promise<BaseStore> {
   return new RedisMemoryStore({ client, keyPrefix });
 }
 
-export async function createAgentProvider(): Promise<DeepAgent> {
+export async function createAgentProvider(identity: ExecutionIdentity): Promise<DeepAgent> {
   const store = await resolveMemoryStore();
-  const repository = createMemoryRepository({ store });
+  const memoryUserId = `guest:${identity.userId}`;
+  const repository = createMemoryRepository({ store, userId: memoryUserId });
 
   await Promise.all(
     createMemorySeedFiles().map(async (seed) => {
@@ -44,6 +45,7 @@ export async function createAgentProvider(): Promise<DeepAgent> {
     guardrails: false,
     imageGenerationService: createImageGenerationServiceFromEnv(),
     modelRuntime,
+    memoryUserId,
     ...(linkloom?.tools.length || sandbox?.tools.length
       ? { additionalResearcherTools: [...(linkloom?.tools ?? []), ...(sandbox?.tools ?? [])] }
       : {}),
@@ -117,23 +119,32 @@ export async function disposeSandboxConnection(): Promise<void> {
   await connection?.close().catch(() => {});
 }
 
-// Worker-callable factory. Single-user template: the identity is ignored —
-// every worker process serves the same single user. The agent is built once
-// and cached for the process lifetime so the tool/store graph is not rebuilt
-// on every turn.
-let cachedWorkerAgent: Promise<DeepAgent> | null = null;
+const MAX_CACHED_AGENTS = 100;
+const cachedWorkerAgents = new Map<string, Promise<DeepAgent>>();
 
-export async function createAgentForIdentity(_identity: ExecutionIdentity): Promise<DeepAgent> {
-  if (cachedWorkerAgent) return cachedWorkerAgent;
-  cachedWorkerAgent = createAgentProvider();
-  void cachedWorkerAgent.catch(() => {
-    cachedWorkerAgent = null;
+export async function createAgentForIdentity(identity: ExecutionIdentity): Promise<DeepAgent> {
+  const key = `${identity.tenantId}\u0000${identity.userId}`;
+  const cached = cachedWorkerAgents.get(key);
+  if (cached) {
+    cachedWorkerAgents.delete(key);
+    cachedWorkerAgents.set(key, cached);
+    return cached;
+  }
+  while (cachedWorkerAgents.size >= MAX_CACHED_AGENTS) {
+    const oldest = cachedWorkerAgents.keys().next().value as string | undefined;
+    if (!oldest) break;
+    cachedWorkerAgents.delete(oldest);
+  }
+  const agent = createAgentProvider(identity);
+  cachedWorkerAgents.set(key, agent);
+  void agent.catch(() => {
+    if (cachedWorkerAgents.get(key) === agent) cachedWorkerAgents.delete(key);
   });
-  return cachedWorkerAgent;
+  return agent;
 }
 
 export function __resetAgentCacheForTest(): void {
-  cachedWorkerAgent = null;
+  cachedWorkerAgents.clear();
 }
 
 // Test-only override for the memory store. Pass a BaseStore (e.g. a

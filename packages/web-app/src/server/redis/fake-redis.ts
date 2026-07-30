@@ -65,8 +65,8 @@ export class FakeRedis {
 
   async get(key: string): Promise<string | null> {
     this.checkLive();
-    const entry = this.#store.get(key);
-    if (!entry || entry.type !== "string") return null;
+    const entry = this.liveEntry(key);
+    if (entry?.type !== "string") return null;
     return entry.value;
   }
 
@@ -98,7 +98,7 @@ export class FakeRedis {
       }
     }
 
-    const existing = this.#store.get(key);
+    const existing = this.liveEntry(key);
     if (nx && existing) return null;
     if (xx && !existing) return null;
 
@@ -123,14 +123,14 @@ export class FakeRedis {
   async mget(...keys: string[]): Promise<(string | null)[]> {
     this.checkLive();
     return keys.map((key) => {
-      const entry = this.#store.get(key);
+      const entry = this.liveEntry(key);
       return entry && entry.type === "string" ? entry.value : null;
     });
   }
 
   async incr(key: string): Promise<number> {
     this.checkLive();
-    const existing = this.#store.get(key);
+    const existing = this.liveEntry(key);
     const current =
       existing && existing.type === "string" ? Number.parseInt(existing.value, 10) : 0;
     if (!Number.isFinite(current)) throw new Error("INC: value is not an integer.");
@@ -139,10 +139,19 @@ export class FakeRedis {
     return next;
   }
 
-  async expire(key: string, seconds: number): Promise<number> {
+  async pttl(key: string): Promise<number> {
     this.checkLive();
-    const entry = this.#store.get(key);
+    const entry = this.liveEntry(key);
+    if (!entry) return -2;
+    if (entry.expiresAt === undefined) return -1;
+    return Math.max(0, entry.expiresAt - Date.now());
+  }
+
+  async expire(key: string, seconds: number, ...rest: unknown[]): Promise<number> {
+    this.checkLive();
+    const entry = this.liveEntry(key);
     if (!entry) return 0;
+    if (rest.includes("NX") && entry.expiresAt !== undefined) return 0;
     entry.expiresAt = Date.now() + seconds * 1000;
     return 1;
   }
@@ -150,8 +159,8 @@ export class FakeRedis {
   async sadd(key: string, ...members: string[]): Promise<number> {
     this.checkLive();
     let added = 0;
-    let entry = this.#store.get(key);
-    if (!entry || entry.type !== "set") {
+    let entry = this.liveEntry(key);
+    if (entry?.type !== "set") {
       entry = { members: new Set<string>(), type: "set" };
       this.#store.set(key, entry);
     }
@@ -167,8 +176,8 @@ export class FakeRedis {
 
   async srem(key: string, ...members: string[]): Promise<number> {
     this.checkLive();
-    const entry = this.#store.get(key);
-    if (!entry || entry.type !== "set") return 0;
+    const entry = this.liveEntry(key);
+    if (entry?.type !== "set") return 0;
     let removed = 0;
     for (const m of members) {
       if (entry.members.delete(m)) removed++;
@@ -179,8 +188,8 @@ export class FakeRedis {
 
   async smembers(key: string): Promise<string[]> {
     this.checkLive();
-    const entry = this.#store.get(key);
-    if (!entry || entry.type !== "set") return [];
+    const entry = this.liveEntry(key);
+    if (entry?.type !== "set") return [];
     return [...entry.members];
   }
 
@@ -211,8 +220,8 @@ export class FakeRedis {
       fields.push(String(rest[i]));
     }
 
-    let entry = this.#store.get(key);
-    if (!entry || entry.type !== "stream") {
+    let entry = this.liveEntry(key);
+    if (entry?.type !== "stream") {
       entry = { entries: [], lastSeq: 0, lastTimestamp: 0, type: "stream" };
       this.#store.set(key, entry);
     }
@@ -275,8 +284,8 @@ export class FakeRedis {
       const key = keys[s];
       const afterId = ids[s];
       if (!key || afterId === undefined) continue;
-      const entry = this.#store.get(key);
-      if (!entry || entry.type !== "stream") continue;
+      const entry = this.liveEntry(key);
+      if (entry?.type !== "stream") continue;
       const matching: [string, string[]][] = [];
       for (const e of entry.entries) {
         if (compareStreamIds(e.id, afterId) <= 0) continue;
@@ -293,8 +302,8 @@ export class FakeRedis {
 
   async xlen(key: string): Promise<number> {
     this.checkLive();
-    const entry = this.#store.get(key);
-    if (!entry || entry.type !== "stream") return 0;
+    const entry = this.liveEntry(key);
+    if (entry?.type !== "stream") return 0;
     return entry.entries.length;
   }
 
@@ -302,8 +311,8 @@ export class FakeRedis {
     this.checkLive();
     if (strategy !== "MAXLEN") return 0;
     void approx;
-    const entry = this.#store.get(key);
-    if (!entry || entry.type !== "stream") return 0;
+    const entry = this.liveEntry(key);
+    if (entry?.type !== "stream") return 0;
     const before = entry.entries.length;
     if (entry.entries.length > count) {
       entry.entries.splice(0, entry.entries.length - count);
@@ -357,6 +366,15 @@ export class FakeRedis {
     }
     void this.#streamIdCounter++;
     return `${now}-${seq}`;
+  }
+
+  private liveEntry(key: string): KeyEntry | undefined {
+    const entry = this.#store.get(key);
+    if (entry?.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+      this.#store.delete(key);
+      return undefined;
+    }
+    return entry;
   }
 }
 
@@ -439,13 +457,13 @@ function runLuaSubset(
     const placeholderJson = argv[0];
     const lease = Number(argv[1] ?? 0);
     if (!placeholderJson) throw new Error("ACQUIRE_SCRIPT requires placeholder JSON.");
-    const existing = store.get(lockKey);
+    const existing = getLiveEntry(store, lockKey);
     if (existing && existing.type === "string") {
       return existing.value;
     }
     const ttl = lease ? Date.now() + lease * 1000 : undefined;
     store.set(lockKey, { expiresAt: ttl, type: "string", value: placeholderJson });
-    const ctrEntry = store.get(counterKey);
+    const ctrEntry = getLiveEntry(store, counterKey);
     const cur = ctrEntry && ctrEntry.type === "string" ? Number.parseInt(ctrEntry.value, 10) : 0;
     const token = cur + 1;
     store.set(counterKey, { type: "string", value: String(token) });
@@ -464,17 +482,26 @@ function runLuaSubset(
     const encoded = argv[1];
     if (encoded === undefined) throw new Error("COMMIT_SCRIPT requires encoded payload.");
     const ttl = Number(argv[2]);
-    const verRaw = store.get(versionKey);
+    const verRaw = getLiveEntry(store, versionKey);
     const current = verRaw && verRaw.type === "string" ? Number.parseInt(verRaw.value, 10) : 0;
     if (current !== expected) return 0;
     const next = current + 1;
+    const sessionEntry = getLiveEntry(store, sessionKey);
+    const versionEntry = getLiveEntry(store, versionKey);
+    const currentExpiry = sessionEntry?.expiresAt ?? versionEntry?.expiresAt;
+    const expiresAt =
+      currentExpiry && currentExpiry > Date.now()
+        ? currentExpiry
+        : ttl
+          ? Date.now() + ttl * 1000
+          : undefined;
     store.set(sessionKey, {
-      expiresAt: ttl ? Date.now() + ttl * 1000 : undefined,
+      expiresAt,
       type: "string",
       value: encoded,
     });
     store.set(versionKey, {
-      expiresAt: ttl ? Date.now() + ttl * 1000 : undefined,
+      expiresAt,
       type: "string",
       value: String(next),
     });
@@ -485,8 +512,8 @@ function runLuaSubset(
     if (!lockKey) throw new Error("RELEASE_SCRIPT requires lockKey.");
     const expected = argv[0];
     if (expected === undefined) throw new Error("RELEASE_SCRIPT requires expected token.");
-    const entry = store.get(lockKey);
-    if (!entry || entry.type !== "string") return 1;
+    const entry = getLiveEntry(store, lockKey);
+    if (entry?.type !== "string") return 1;
     try {
       const parsed = JSON.parse(entry.value) as { payload?: { fencingToken?: number } };
       if (String(parsed.payload?.fencingToken) === expected) {
@@ -499,4 +526,13 @@ function runLuaSubset(
     }
   }
   throw new Error(`FakeRedis has no interpreter for this Lua script:\n${source}`);
+}
+
+function getLiveEntry(store: Map<string, KeyEntry>, key: string): KeyEntry | undefined {
+  const entry = store.get(key);
+  if (entry?.expiresAt !== undefined && entry.expiresAt <= Date.now()) {
+    store.delete(key);
+    return undefined;
+  }
+  return entry;
 }

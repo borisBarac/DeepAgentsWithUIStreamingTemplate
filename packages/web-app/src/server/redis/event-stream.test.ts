@@ -33,6 +33,15 @@ describe("RedisEventStream", () => {
     expect(batch[1]?.envelope.update).toEqual({ type: "message", text: "second" });
   });
 
+  it("isolates identical run ids by identity", async () => {
+    const stream = new RedisEventStream({ client: client.asRedis(), keyPrefix: "dat:" });
+    const alice = { tenantId: "guest", userId: "alice" };
+    const bob = { tenantId: "guest", userId: "bob" };
+    await stream.publishUi(alice, "shared", { type: "message", text: "alice" });
+    expect(await stream.read(alice, "shared", "0", 0, 10)).toHaveLength(1);
+    expect(await stream.read(bob, "shared", "0", 0, 10)).toEqual([]);
+  });
+
   it("publishes a terminal result event and a lifecycle event", async () => {
     const stream = new RedisEventStream({ client: client.asRedis(), keyPrefix: "dat:" });
     await stream.publishLifecycle("r1", "started");

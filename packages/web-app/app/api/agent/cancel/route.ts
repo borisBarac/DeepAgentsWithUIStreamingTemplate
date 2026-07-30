@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { AgentExecutor } from "../../../../src/server/agent-runtime/types.ts";
+import { applyGuestCookie, resolveGuestIdentity } from "../../../../src/server/guest-identity.ts";
 import { __getExecutorForCancellation } from "../route.ts";
 
 function parseRunId(body: unknown): string {
@@ -23,9 +24,18 @@ export function createAgentCancellationHandler(
         { status: 400 },
       );
     }
-    const result = await executor.cancel(runId);
+    let guestIdentity: ReturnType<typeof resolveGuestIdentity>;
+    try {
+      guestIdentity = resolveGuestIdentity(request);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        { status: 500 },
+      );
+    }
+    const result = await executor.cancel(guestIdentity.identity, runId);
     const status = result.status === "unknown" ? 404 : result.status === "terminal" ? 409 : 202;
-    return NextResponse.json(result, { status });
+    return applyGuestCookie(NextResponse.json(result, { status }), guestIdentity.setCookie);
   };
 }
 

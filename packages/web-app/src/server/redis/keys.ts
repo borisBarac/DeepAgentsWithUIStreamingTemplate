@@ -15,26 +15,29 @@ export type RedisKeyspaces = {
   session(tenantId: string, userId: string, sessionId: string): string;
   sessionVersion(tenantId: string, userId: string, sessionId: string): string;
   runMetadata(tenantId: string, userId: string, sessionId: string): string;
-  runState(runId: string): string;
-  runStream(runId: string): string;
+  runState(runId: string, identity?: ExecutionIdentity): string;
+  runStream(runId: string, identity?: ExecutionIdentity): string;
   sessionLock(tenantId: string, userId: string, sessionId: string): string;
-  cancellation(runId: string): string;
+  cancellation(runId: string, identity?: ExecutionIdentity): string;
   memoryNamespaceIndex(namespaceHash: string): string;
   memoryItem(namespaceHash: string, key: string): string;
+  memoryNamespaceExpiry(namespaceHash: string): string;
   memoryNamespaceRegistry(): string;
 };
 
 export const DEFAULT_TTL_SECONDS = {
-  session: 60 * 60 * 12,
-  runMetadata: 60 * 60 * 24 * 7,
-  runState: 60 * 60,
-  runStream: 60 * 60,
-  cancellation: 60 * 60,
+  session: 1_800,
+  runMetadata: 1_800,
+  runState: 1_800,
+  runStream: 1_800,
+  cancellation: 1_800,
 } as const;
 
-export type TtlConfig = Partial<typeof DEFAULT_TTL_SECONDS>;
+export type TtlConfig = Partial<Record<keyof typeof DEFAULT_TTL_SECONDS, number>>;
 
-export function resolveTtlConfig(overrides?: TtlConfig): typeof DEFAULT_TTL_SECONDS {
+export function resolveTtlConfig(
+  overrides?: TtlConfig,
+): Record<keyof typeof DEFAULT_TTL_SECONDS, number> {
   return { ...DEFAULT_TTL_SECONDS, ...overrides };
 }
 
@@ -47,6 +50,8 @@ export function createRedisKeys(keyPrefix: string): RedisKeyspaces {
   const memoryBase = `${keyPrefix}memory:`;
   const locksBase = `${keyPrefix}lock:`;
   const cancelBase = `${keyPrefix}cancel:`;
+  const scopedRunKey = (base: string, runId: string, identity?: ExecutionIdentity) =>
+    identity ? `${base}${sha256Digest(identityMaterial(identity, runId))}` : `${base}${runId}`;
 
   return {
     runMetadata(tenantId, userId, sessionId) {
@@ -54,23 +59,26 @@ export function createRedisKeys(keyPrefix: string): RedisKeyspaces {
         identityMaterial({ tenantId, userId }, sessionId),
       )}`;
     },
-    runState(runId) {
-      return `${runsBase}state:${runId}`;
+    runState(runId, identity) {
+      return scopedRunKey(`${runsBase}state:`, runId, identity);
     },
-    runStream(runId) {
-      return `${streamsBase}${runId}`;
+    runStream(runId, identity) {
+      return scopedRunKey(streamsBase, runId, identity);
     },
     sessionLock(tenantId, userId, sessionId) {
       return `${locksBase}${sha256Digest(identityMaterial({ tenantId, userId }, sessionId))}`;
     },
-    cancellation(runId) {
-      return `${cancelBase}${runId}`;
+    cancellation(runId, identity) {
+      return scopedRunKey(cancelBase, runId, identity);
     },
     memoryNamespaceIndex(namespaceHash) {
       return `${memoryBase}idx:${namespaceHash}`;
     },
     memoryItem(namespaceHash, key) {
       return `${memoryBase}item:${namespaceHash}:${sha256Digest(key)}`;
+    },
+    memoryNamespaceExpiry(namespaceHash) {
+      return `${memoryBase}expiry:${namespaceHash}`;
     },
     memoryNamespaceRegistry() {
       return `${memoryBase}namespaces`;
