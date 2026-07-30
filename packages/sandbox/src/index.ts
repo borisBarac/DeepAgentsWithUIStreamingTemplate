@@ -5,7 +5,10 @@
  */
 export {
   createDockerSandboxBackend,
+  createManagedDockerSandboxBackend,
   type DockerSandboxBackendOptions,
+  type ManagedDockerSandboxBackend,
+  type ManagedDockerSandboxBackendOptions,
 } from "./backends/index.ts";
 export {
   CONTAINER_WORKSPACE_PATH,
@@ -21,6 +24,7 @@ export type {
   SandboxBackendCapabilities,
   SandboxExecuteOptions,
   SandboxExecutionId,
+  SandboxExecutionIdentity,
   SandboxFailureClass,
   SandboxRequest,
   SandboxResourceProfile,

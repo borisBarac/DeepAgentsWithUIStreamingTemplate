@@ -14,6 +14,8 @@ import type {
 } from "../types.ts";
 import {
   buildSyntheticResult,
+  DOCKER_ISOLATION_FLAGS,
+  dockerRm,
   executeWithHandling,
   runExecution,
   type SpawnResult,
@@ -60,7 +62,7 @@ export type DockerSandboxBackendOptions = {
    * workspaces are visible inside the container. It should also apply the
    * same isolation flags the `docker run` path applies (network none,
    * cap-drop ALL, read-only rootfs, user 65534:65534, …) — the project's
-   * `docker-compose.yml` is the reference configuration.
+   * `infra/docker-compose.yml` is the reference configuration.
    *
    * When `containerName` is set, `workDirRoot` is REQUIRED and MUST match
    * the host path bind-mounted to `/workspace` in the named container.
@@ -135,6 +137,7 @@ export function createDockerSandboxBackend(
         if (!dockerAvailable) {
           return buildSyntheticResult({
             executionId: execOptions.executionId,
+            identity: execOptions.identity,
             resourceProfile: config.profile,
             backend: backendName,
             startedAt: new Date(),
@@ -155,6 +158,7 @@ export function createDockerSandboxBackend(
           if (!containerRunning) {
             return buildSyntheticResult({
               executionId: execOptions.executionId,
+              identity: execOptions.identity,
               resourceProfile: config.profile,
               backend: backendName,
               startedAt: new Date(),
@@ -207,7 +211,7 @@ export function createDockerSandboxBackend(
       cleanup: reuseContainer
         ? undefined
         : async () => {
-            await killContainer(
+            await dockerRm(
               dockerBin,
               `sandbox-${sanitizeContainerSuffix(execOptions.executionId)}`,
             );
@@ -241,21 +245,11 @@ function spawnDocker(args: {
     containerName,
     // `-i` attaches the container's stdin so we can pipe request.stdin through.
     ...(request.stdin !== undefined ? ["-i"] : []),
-    "--network",
-    "none",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges",
-    "--read-only",
-    "--tmpfs",
-    "/tmp:rw,nosuid,nodev,size=64m,mode=1777",
+    ...DOCKER_ISOLATION_FLAGS,
     "--memory",
     `${config.memoryLimitMb}m`,
     "--cpus",
     config.cpuLimit,
-    "--user",
-    "65534:65534",
     "--workdir",
     CONTAINER_WORKSPACE_PATH,
     "--env",
@@ -285,7 +279,7 @@ function spawnDocker(args: {
 
   return {
     proc,
-    kill: () => killContainer(dockerBin, containerName),
+    kill: () => dockerRm(dockerBin, containerName),
   };
 }
 
@@ -474,19 +468,6 @@ async function checkContainerRunning(dockerBin: string, containerName: string): 
     return output.trim() === "true";
   } catch {
     return false;
-  }
-}
-
-async function killContainer(dockerBin: string, containerName: string): Promise<void> {
-  try {
-    const proc = Bun.spawn({
-      cmd: [dockerBin, "rm", "-f", containerName],
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    await proc.exited;
-  } catch {
-    // best-effort
   }
 }
 

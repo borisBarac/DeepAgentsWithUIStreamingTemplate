@@ -1,6 +1,7 @@
 import type {
   SandboxArtifact,
   SandboxExecutionId,
+  SandboxExecutionIdentity,
   SandboxFailureClass,
   SandboxResourceProfile,
   SandboxResult,
@@ -160,6 +161,7 @@ export function classifyFailure(input: {
  */
 export function buildResultEnvelope(input: {
   readonly executionId: SandboxExecutionId;
+  readonly identity?: SandboxExecutionIdentity;
   readonly resourceProfile: SandboxResourceProfile;
   readonly backend: string;
   readonly startedAt: Date;
@@ -173,6 +175,7 @@ export function buildResultEnvelope(input: {
 }): SandboxResult {
   return {
     executionId: input.executionId,
+    identity: input.identity,
     status: input.classification.status,
     exitCode: input.exitCode,
     startedAt: input.startedAt.toISOString(),
@@ -208,8 +211,9 @@ export function structuredLogLine(input: {
   readonly stdoutBytes: number;
   readonly stderrBytes: number;
   readonly artifactCount: number;
+  readonly identity?: SandboxExecutionIdentity;
 }): string {
-  const payload = {
+  const payload: Record<string, unknown> = {
     ts: new Date().toISOString(),
     component: "sandbox",
     executionId: input.executionId,
@@ -223,5 +227,9 @@ export function structuredLogLine(input: {
     stderrBytes: input.stderrBytes,
     artifactCount: input.artifactCount,
   };
+  if (input.identity) {
+    payload.tenantId = input.identity.tenantId;
+    payload.userId = input.identity.userId;
+  }
   return JSON.stringify(payload);
 }

@@ -1,7 +1,7 @@
 import type { SandboxResourceProfile, SandboxResourceProfileConfig } from "./types.ts";
 
 /**
- * Default Python runtime image used by the docker backend. Pinned to a slim
+ * Default Python runtime image used by the Docker sandbox backend. Pinned to a slim
  * minor tag for reproducibility (spec §7.2 — pin runtime dependencies).
  */
 export const DEFAULT_PYTHON_IMAGE = "python:3.12-slim";

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "bun:test";
 
 import { describeSandboxBackend } from "../backend-test-harness.ts";
-import { createDockerSandboxBackend } from "./docker-backend.ts";
+import { createDockerSandboxBackend } from "./docker-sandbox-backend.ts";
 
 const DOCKER_AVAILABLE = await checkDockerAvailable();
 const TEST_PYTHON_IMAGE = process.env.SANDBOX_TEST_PYTHON_IMAGE ?? "python:3.12-alpine";
 
 // Compose-mode integration test is opt-in. Set SANDBOX_TEST_COMPOSE_CONTAINER
-// to the name of a container started by `docker compose up` (e.g. the
-// `python-sandbox` service in the project's docker-compose.yml).
+// to the name of a container started by the project's
+// `docker compose --env-file .env -f infra/docker-compose.yml up` (e.g. the
+// `python-sandbox` service).
 const COMPOSE_CONTAINER = process.env.SANDBOX_TEST_COMPOSE_CONTAINER ?? "";
 const COMPOSE_WORKDIR_ROOT = process.env.SANDBOX_TEST_COMPOSE_WORKDIR_ROOT ?? "";
 const COMPOSE_READY =
@@ -80,6 +81,36 @@ describe("docker availability flag", () => {
   it.skipIf(!DOCKER_AVAILABLE)("is reported honestly by the suite", () => {
     expect(DOCKER_AVAILABLE).toBe(true);
   });
+});
+
+describe("docker multi-user correlation", () => {
+  it.skipIf(!DOCKER_AVAILABLE)(
+    "keeps Alice and Bob correlated through one shared backend",
+    async () => {
+      const backend = createDockerSandboxBackend({ pythonImage: TEST_PYTHON_IMAGE });
+      const users = [
+        { identity: { tenantId: "tenant", userId: "alice" }, marker: "ALICE" },
+        { identity: { tenantId: "tenant", userId: "bob" }, marker: "BOB" },
+      ] as const;
+      const results = await Promise.all(
+        users.map(({ identity, marker }) =>
+          backend.execute(
+            { code: `print("${marker}")` },
+            { executionId: `exec-${identity.userId}`, identity },
+          ),
+        ),
+      );
+
+      for (const [index, user] of users.entries()) {
+        const result = results[index];
+        if (!result) throw new Error(`Missing result for ${user.identity.userId}`);
+        expect(result.executionId).toBe(`exec-${user.identity.userId}`);
+        expect(result.identity).toEqual(user.identity);
+        expect(result.stdout.trim()).toBe(user.marker);
+      }
+    },
+    60_000,
+  );
 });
 
 describe("createDockerSandboxBackend: containerName option", () => {

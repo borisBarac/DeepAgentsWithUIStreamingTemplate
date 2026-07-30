@@ -12,4 +12,9 @@
 export {
   createDockerSandboxBackend,
   type DockerSandboxBackendOptions,
-} from "./docker-backend.ts";
+} from "./docker-sandbox-backend.ts";
+export {
+  createManagedDockerSandboxBackend,
+  type ManagedDockerSandboxBackend,
+  type ManagedDockerSandboxBackendOptions,
+} from "./managed-docker-backend.ts";
