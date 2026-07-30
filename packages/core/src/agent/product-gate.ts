@@ -1,11 +1,10 @@
-import { HumanMessage } from "@langchain/core/messages";
-import type { BaseStore } from "@langchain/langgraph";
 import { type CreateDeepAgentParams, createDeepAgent, type DeepAgent } from "deepagents";
 import { z } from "zod";
 
 import { createCasualScopeGuardrail } from "../guardrails/casual-scope.ts";
 import type { StructuredTaskScopeModel, TaskScopeClassifier } from "../guardrails/types.ts";
 import { extractLatestProductSet } from "../workflow/products.ts";
+import { latestHumanText, threadId } from "../workflow/runtime-helpers.ts";
 
 export const productGateDecisionSchema = z
   .object({
@@ -16,7 +15,7 @@ export const productGateDecisionSchema = z
 type ProductGateDecision = { route: "casual" | "product" };
 
 type WorkflowStateReader = {
-  hasWorkflowState(id: string, store?: BaseStore): Promise<boolean>;
+  hasWorkflowState(id: string): Promise<boolean>;
 };
 
 type ProductGateOptions = {
@@ -24,7 +23,6 @@ type ProductGateOptions = {
   casualModel: CreateDeepAgentParams["model"];
   classifierModel: StructuredTaskScopeModel;
   workflowController?: WorkflowStateReader;
-  stateStore?: BaseStore;
   casualAgent?: DeepAgent;
 };
 
@@ -39,38 +37,10 @@ Route greetings, small talk, and unrelated general questions to "casual".
 When unsure, route to "product".
 Example: {"route": "product"}`;
 
-function threadIdFromConfig(config: unknown): string {
-  return String(
-    (config as { configurable?: { thread_id?: unknown } } | undefined)?.configurable?.thread_id ??
-      "__default__",
-  );
-}
-
 function inputMessages(input: unknown): unknown[] {
   if (typeof input !== "object" || input === null) return [];
   const messages = (input as { messages?: unknown }).messages;
   return Array.isArray(messages) ? messages : [];
-}
-
-function latestUserText(messages: readonly unknown[]): string {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message instanceof HumanMessage) {
-      return typeof message.content === "string"
-        ? message.content
-        : JSON.stringify(message.content);
-    }
-    if (
-      typeof message === "object" &&
-      message !== null &&
-      "role" in message &&
-      (message as { role?: unknown }).role === "user"
-    ) {
-      const content = (message as { content?: unknown }).content;
-      return typeof content === "string" ? content : JSON.stringify(content ?? "");
-    }
-  }
-  return "";
 }
 
 async function shouldUseMainAgent(
@@ -78,14 +48,13 @@ async function shouldUseMainAgent(
   config: unknown,
   classifier: TaskScopeClassifier,
   workflowController?: WorkflowStateReader,
-  stateStore?: BaseStore,
 ): Promise<boolean> {
   const messages = inputMessages(input);
   if (extractLatestProductSet(messages)) return true;
-  if (await workflowController?.hasWorkflowState(threadIdFromConfig(config), stateStore))
+  if (workflowController && (await workflowController.hasWorkflowState(threadId(config))))
     return true;
 
-  const request = latestUserText(messages);
+  const request = latestHumanText(messages);
   if (!request) return true;
   try {
     const raw = await classifier.invoke([
@@ -122,7 +91,6 @@ export function createProductGateAgent(options: ProductGateOptions): DeepAgent {
             config,
             classifier,
             options.workflowController,
-            options.stateStore,
           ))
             ? options.mainAgent
             : casualAgent;
@@ -136,7 +104,6 @@ export function createProductGateAgent(options: ProductGateOptions): DeepAgent {
             config,
             classifier,
             options.workflowController,
-            options.stateStore,
           ))
             ? options.mainAgent
             : casualAgent;

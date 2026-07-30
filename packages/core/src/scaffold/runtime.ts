@@ -16,6 +16,15 @@ function assertRequiredSubagentsPresent(
   subagents: RuntimeScaffold["subagents"],
   options: CreateRuntimeScaffoldOptions,
 ): void {
+  // The workflow controller requires clarifier, review-agent (and
+  // product-generator when generativeUi is on). Enforce that contract for ANY
+  // catalog, including an explicit `subagents` array — a caller that supplies a
+  // subset would otherwise build successfully and then fail at runtime when the
+  // controller retries the missing role. Callers that intentionally want a
+  // partial catalog (isolated tests, memory-only agents) opt out via
+  // `workflowEnabled: false`, which skips validation AND signals the agent
+  // factory not to install the controller.
+  if (options.workflowEnabled === false) return;
   const present = new Set(subagents.map((subagent) => subagent.name));
   const required = ["clarifier", "review-agent"];
   if (options.generativeUi) required.push("product-generator");

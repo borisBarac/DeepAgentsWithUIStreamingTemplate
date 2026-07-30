@@ -139,25 +139,29 @@ describe("createScaffoldedAgent", () => {
     expect(
       JSON.stringify(await tools.read.invoke({ file_path: "/memory/kanban_board_research.md" })),
     ).toContain("complete");
-    await expect(
+    await expectFilesystemDenied(
       tools.write.invoke({
         file_path: "/home/user/kanban_board_research.md",
         content: "no",
       }),
-    ).rejects.toThrow("Error: permission denied for write on /home/user/kanban_board_research.md");
-    await expect(
+      "Error: permission denied for write on /home/user/kanban_board_research.md",
+    );
+    await expectFilesystemDenied(
       tools.edit.invoke({
         file_path: "/home/user/kanban_board_research.md",
         old_string: "draft",
         new_string: "complete",
       }),
-    ).rejects.toThrow("Error: permission denied for write on /home/user/kanban_board_research.md");
-    await expect(
+      "Error: permission denied for write on /home/user/kanban_board_research.md",
+    );
+    await expectFilesystemDenied(
       tools.read.invoke({ file_path: "/home/user/kanban_board_research.md" }),
-    ).rejects.toThrow("Error: permission denied for read on /home/user/kanban_board_research.md");
-    await expect(
+      "Error: permission denied for read on /home/user/kanban_board_research.md",
+    );
+    await expectFilesystemDenied(
       tools.write.invoke({ file_path: "/skills/forbidden.md", content: "no" }),
-    ).rejects.toThrow("Error: permission denied for write on /skills/forbidden.md");
+      "Error: permission denied for write on /skills/forbidden.md",
+    );
   });
 
   it("creates the default scaffold without an image designer when image generation is not configured", () => {
@@ -189,6 +193,46 @@ describe("createScaffoldedAgent", () => {
         responseFormat: providerStrategy(z.object({ answer: z.string() })),
       }),
     ).toThrow("cannot combine generativeUi with a custom responseFormat");
+  });
+
+  it("throws when explicit subagents omit a required workflow role", () => {
+    // Without an opt-out, an incomplete explicit catalog fails fast at build
+    // time instead of erroring at runtime when the controller retries the
+    // missing role.
+    expect(() =>
+      createScaffoldedAgent({
+        modelRuntime: createTestModelRuntime(),
+        subagents: [{ name: "clarifier", description: "c", systemPrompt: "c" }],
+      }),
+    ).toThrow("missing required subagent(s): review-agent");
+  });
+
+  it("builds an incomplete explicit catalog when the workflow is disabled", () => {
+    // The opt-out is meant for isolated/memory-only/test scenarios: no
+    // validation, and the workflow controller middleware is not installed.
+    const agent = createScaffoldedAgent({
+      guardrails: false,
+      modelRuntime: createTestModelRuntime(),
+      subagents: [{ name: "clarifier", description: "c", systemPrompt: "c" }],
+      workflowEnabled: false,
+    });
+
+    expect(typeof agent.invoke).toBe("function");
+    expect(agent.options.middleware?.some((entry) => entry.name === "workflowController")).toBe(
+      false,
+    );
+  });
+
+  it("installs the workflow controller middleware by default", () => {
+    const agent = createScaffoldedAgent({
+      guardrails: false,
+      imageGenerationService: testImageGenerationService,
+      modelRuntime: createTestModelRuntime(),
+    });
+
+    expect(agent.options.middleware?.some((entry) => entry.name === "workflowController")).toBe(
+      true,
+    );
   });
 });
 
@@ -226,4 +270,11 @@ function getFilesystemTools(agent: ReturnType<typeof createScaffoldedAgent>) {
     throw new Error("Filesystem tools were not registered on the scaffolded agent.");
   }
   return { read, write, edit };
+}
+
+async function expectFilesystemDenied(result: Promise<unknown>, message: string): Promise<void> {
+  expect(await result).toMatchObject({
+    content: message,
+    status: "error",
+  });
 }

@@ -16,7 +16,7 @@ export const DEFAULT_CASUAL_REFUSAL =
 
 export const casualScopeDecisionSchema = z.object({
   allow: z.boolean(),
-  reason: z.string(),
+  reason: z.string().default(""),
 });
 
 export type CasualScopeDecision = z.infer<typeof casualScopeDecisionSchema>;

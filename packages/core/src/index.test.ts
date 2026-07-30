@@ -27,6 +27,7 @@ describe("index barrel exports", () => {
   it("re-exports Linkloom MCP helpers from the MCP module", () => {
     expect(index.connectLinkloomResearchTools).toBe(mcp.connectLinkloomResearchTools);
     expect(index.createLinkloomMcpClient).toBe(mcp.createLinkloomMcpClient);
+    expect(index.DEFAULT_LINKLOOM_MCP_URL).toBe(mcp.DEFAULT_LINKLOOM_MCP_URL);
     expect(index.LINKLOOM_MCP_TOOL_NAMES).toBe(mcp.LINKLOOM_MCP_TOOL_NAMES);
   });
 
@@ -89,6 +90,7 @@ describe("index barrel exports", () => {
   it("re-exports sandbox tools and runtime compatibility exports", () => {
     expect(index.createPythonSandboxTool).toBe(sandbox.createPythonSandboxTool);
     expect(index.createDockerSandboxBackend).toBe(sandbox.createDockerSandboxBackend);
+    expect(index.createManagedDockerSandboxBackend).toBe(sandbox.createManagedDockerSandboxBackend);
     expect(index.SANDBOX_PROFILES).toBe(sandbox.SANDBOX_PROFILES);
   });
 

@@ -13,7 +13,7 @@ export const DEFAULT_SAFETY_REFUSAL =
 export const safetyDecisionSchema = z.object({
   flagged: z.boolean(),
   categories: z.array(z.string()).default([]),
-  reason: z.string(),
+  reason: z.string().default(""),
 });
 
 export type SafetyDecision = z.infer<typeof safetyDecisionSchema>;

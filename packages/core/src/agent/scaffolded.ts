@@ -2,7 +2,10 @@ import { InMemoryStore } from "@langchain/langgraph";
 import type { DeepAgent } from "deepagents";
 import { DEFAULT_PROMPT_LOADER } from "../prompts/index.ts";
 import { createRuntimeScaffold } from "../scaffold/index.ts";
-import { createWorkflowControllerMiddleware } from "../workflow/index.ts";
+import {
+  BaseStoreWorkflowStateStore,
+  createWorkflowControllerMiddleware,
+} from "../workflow/index.ts";
 import { createProductGateAgent } from "./product-gate.ts";
 import type { WorkflowUiAgent } from "./runtime.ts";
 import { createAgentFromRuntimeScaffold } from "./runtime.ts";
@@ -30,13 +33,17 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     permissionOptions,
     profile,
     promptLoader = DEFAULT_PROMPT_LOADER,
+    sandboxIdentity,
     subagents,
     subagentOverrides,
     systemPrompt,
     clarificationOptions,
     reviewOptions,
     generativeUi,
+    additionalResearcherTools,
     store = new InMemoryStore(),
+    workflowStateStore = new BaseStoreWorkflowStateStore(store),
+    workflowEnabled,
     ...agentOptions
   } = options;
 
@@ -57,17 +64,24 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     permissions,
     permissionOptions,
     promptLoader,
+    sandboxIdentity,
     subagents,
     systemPrompt,
+    workflowEnabled,
+    ...(additionalResearcherTools ? { additionalResearcherTools } : {}),
     ...subagentOverrides,
   });
 
-  const workflowController = createWorkflowControllerMiddleware({
-    maxClarificationRounds: scaffold.clarification.config.maxRounds,
-    questionsPerRound: scaffold.clarification.config.questionsPerRound,
-    maxReviewCycles: scaffold.review.config.maxReviewCycles,
-    productGenerationEnabled: scaffold.productGeneration?.enabled === true,
-  });
+  const workflowEnabledFlag = workflowEnabled !== false;
+  const workflowController = workflowEnabledFlag
+    ? createWorkflowControllerMiddleware({
+        maxClarificationRounds: scaffold.clarification.config.maxRounds,
+        questionsPerRound: scaffold.clarification.config.questionsPerRound,
+        maxReviewCycles: scaffold.review.config.maxReviewCycles,
+        productGenerationEnabled: scaffold.productGeneration?.enabled === true,
+        workflowStateStore,
+      })
+    : undefined;
 
   const agent = createAgentFromRuntimeScaffold({
     factoryName: "createScaffoldedAgent",
@@ -76,7 +90,9 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     guardrails,
     langSmith,
     profile,
-    middleware: [workflowController, ...(middleware ?? [])],
+    middleware: workflowController
+      ? [workflowController, ...(middleware ?? [])]
+      : (middleware ?? []),
     store,
     agentOptions,
   });
@@ -86,6 +102,5 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     casualModel: modelRuntime.getModelForCategory("fast"),
     classifierModel: modelRuntime.getModelForCategory("fast"),
     workflowController,
-    stateStore: store,
   }) as WorkflowUiAgent;
 }

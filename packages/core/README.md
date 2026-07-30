@@ -238,10 +238,10 @@ reference unknown categories, and assignments for unsupported roles.
 
 ## Linkloom MCP research tools
 
-Linkloom runs as a local stdio MCP server. Connect it before creating the scaffolded agent, pass the
-loaded LangChain tools through `additionalResearcherTools`, and dispose of the connection when the
-agent is no longer needed. The connection is an `AsyncDisposable`, so `await using` closes it
-deterministically at the end of the enclosing scope:
+Linkloom runs as a separate streamable-HTTP MCP service. Connect it before creating the scaffolded
+agent, pass the loaded LangChain tools through `additionalResearcherTools`, and dispose of the
+connection when the agent is no longer needed. The connection is an `AsyncDisposable`, so
+`await using` closes it deterministically at the end of the enclosing scope:
 
 ```ts
 import {
@@ -276,24 +276,13 @@ garbage-collected without an explicit disposal; finalizer delivery is best-effor
 spec, so prefer explicit disposal (`await using` or `close()`) whenever the connection has a clear
 owner scope.
 
-The helper resolves the installed `@boris.barac/linkloom` package and launches its MCP entry point
-with Bun. It exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`,
-`extract_links`, and `extract_tables` only to the researcher. The existing `execute_python` tool
-remains available.
-
-The child process inherits the application's environment by default; any `env` passed to
-`connectLinkloomResearchTools(...)` is merged on top of `process.env` rather than replacing it, so
-inherited variables such as `HOME` and the LangSmith tracing variables still reach the server.
-Linkloom supports `PAGE_LOAD_TIMEOUT`, `FRAME_TIMEOUT`, `PDF_DOWNLOAD_TIMEOUT`, and `PROXY_URL`; its
-scraping tools do not require an API key. Pass `command`, `args`, `cwd`, `env`, restart settings, or
-a tool timeout to `connectLinkloomResearchTools(...)` when the default process configuration is
-unsuitable.
-
-The Linkloom `scrape` and `render_page` tools drive a Camoufox browser engine, whose install location
-`createAppConfig()` publishes to `process.env.CAMOUFOX_INSTALL_DIR` (default `~/.cache/camoufox`;
-install it with `bun run setup`). `connectLinkloomResearchTools(...)` propagates that location to the
-child: pass `camoufoxInstallDir` explicitly, or set `CAMOUFOX_INSTALL_DIR` in the environment, and the
-value reaches the spawned server.
+The helper connects over streamable HTTP and exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`,
+`render_page`, `extract_links`, `extract_tables`, and `search_web` only to the researcher. The
+existing `execute_python` tool remains available. `connectLinkloomResearchTools(...)` connects to the
+URL in `LINKLOOM_MCP_URL` (default `http://localhost:3001/mcp`); pass `{ url }` to override it, or
+`{ defaultToolTimeout }` to cap individual tool calls. The browser engine (Camoufox) and its tuning
+(`PAGE_LOAD_TIMEOUT`, `FRAME_TIMEOUT`, `PDF_DOWNLOAD_TIMEOUT`, `PROXY_URL`) live in the dedicated
+Linkloom container, not the application image.
 
 ## Usage
 
@@ -317,7 +306,7 @@ const result = await agent.invoke({
 });
 ```
 
-The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app provides a filesystem-backed store under `packages/web-app/.data/memory`, or the path set by `WEB_APP_MEMORY_DIR`.
+The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app uses a process-wide in-memory store scoped per guest (see `docs/memory-setup.md`).
 
 The default specialist subagents are intentionally isolated. They start with their own empty tool lists except for the built-in Python tool on `researcher` and `analyst`. Supplying `imageGenerationService` adds the `image-designer` specialist with its image-generation tool. Wire other specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
@@ -329,31 +318,31 @@ The default `clarifier` subagent is wired with the bundled `clarify-deeply` skil
 
 `/memory` is the durable long-term memory root, backed by `StoreBackend` through `CompositeBackend`. Short-term state (`/scratch`, `/plans`, `/reports`, `/artifacts`) stays on `StateBackend` and is not durable. The memory module (`packages/core/src/memory`) makes the memory product contract explicit and testable.
 
-V1 assumes a **single-user runtime**: each local agent or isolated server sandbox serves exactly one user and uses one stable single-user namespace.
+V1 assumes a **single namespace per runtime**: each local agent or isolated server sandbox serves one user at a time and uses one stable namespace.
 
 Default durable memory files:
 
 - `/memory/project-facts.md` — stable project and environment facts.
 - `/memory/user-preferences.md` — explicit preferences the user asked to remember.
 
-The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the seed helpers ship wording that defines what belongs in each file.
-
-Durable writes continue to use Deep Agents filesystem tools (`write_file` / `edit_file`) — there is no hidden side channel. In v1, writes to the writable single-user memory files are auto-approved (see `createSingleUserMemoryPolicy`), and the caller can opt into additional `interruptOn` rules explicitly when needed. `resolveMemoryInterrupts(...)` is an explicit passthrough so memory auto-approval never silently changes interrupt policy.
+The allowed durable content is **explicit user preferences and stable project facts only**. The agent must not automatically persist inferred preferences, credentials, arbitrary observations, or transient task details. `reviewMemoryContent(...)` flags those categories, and the policy exposes the `writableRoot` the agent may write to.
 
 ```ts
 import {
   createMemorySeedFiles,
-  createSingleUserMemoryNamespace,
-  createSingleUserMemoryPolicy,
+  createUserMemoryNamespace,
+  createMemoryPolicy,
   reviewMemoryContent,
 } from "@deep-agent-template/core";
 
 const seedFiles = createMemorySeedFiles();
-const namespace = createSingleUserMemoryNamespace();
-const policy = createSingleUserMemoryPolicy();
+const namespace = createUserMemoryNamespace("default");
+const policy = createMemoryPolicy();
 
 reviewMemoryContent("LLM_API_KEY=sk-...").allowed; // false
 ```
+
+Wire `createMemoryPolicyMiddleware(createMemoryPolicy())` into `createScaffoldedAgent`'s `middleware` to enforce the content review on `/memory` writes at runtime.
 
 Durable memory remains an explicit agent action. Skills remain procedural memory under `/skills`, separate from `/memory`.
 
@@ -585,6 +574,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const pythonTool = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
+  singleUser: true,
 });
 
 const agent = createScaffoldedAgent({

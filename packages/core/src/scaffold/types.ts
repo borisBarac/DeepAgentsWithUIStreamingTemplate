@@ -13,7 +13,7 @@ import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig } from "../review/index.ts";
-import type { SandboxBackend } from "../sandbox/index.ts";
+import type { SandboxBackend, SandboxExecutionIdentity } from "../sandbox/index.ts";
 
 export type SpecialistRole =
   | "researcher"
@@ -61,6 +61,7 @@ export type CreateDefaultSubagentCatalogOptions = {
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
   pythonSandboxBackend?: SandboxBackend;
+  sandboxIdentity?: SandboxExecutionIdentity;
   generativeUi?: GenerativeUiOptions;
   researcher?: DefaultSubagentOverride;
   analyst?: DefaultSubagentOverride;
@@ -119,4 +120,14 @@ export type CreateRuntimeScaffoldOptions = CreateDefaultSubagentCatalogOptions &
   promptLoader?: PromptLoader;
   subagents?: CreateDeepAgentParams["subagents"];
   systemPrompt?: string;
+  /**
+   * Whether the resulting agent drives the multi-phase workflow controller.
+   * Defaults to `true`: the required-subagent contract (clarifier,
+   * review-agent, and product-generator when generativeUi is on) is enforced
+   * for any catalog, including an explicit `subagents` array. Set to `false`
+   * for isolated/memory-only/test scenarios that intentionally supply a
+   * subset — validation is skipped AND the agent must not install the workflow
+   * controller middleware.
+   */
+  workflowEnabled?: boolean;
 };

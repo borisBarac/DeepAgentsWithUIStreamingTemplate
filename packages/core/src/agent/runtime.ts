@@ -16,6 +16,7 @@ import {
   registerAgentProfile,
 } from "../profiles/index.ts";
 import type { RuntimeScaffold } from "../scaffold/index.ts";
+import { threadId } from "../workflow/runtime-helpers.ts";
 import { DEFAULT_AGENT_NAME } from "./constants.ts";
 
 type AgentPassthroughOptions = Pick<
@@ -57,15 +58,8 @@ export type WorkflowUiAgent = DeepAgent & {
   streamWorkEvents: DeepAgent["streamEvents"];
 };
 
-function threadIdFromConfig(config: unknown): string {
-  return String(
-    (config as { configurable?: { thread_id?: unknown } } | undefined)?.configurable?.thread_id ??
-      "__default__",
-  );
-}
-
 type WorkflowController = {
-  drainPendingUi(id: string): unknown[];
+  drainPendingUi(id: string): Promise<unknown[]>;
 };
 
 function findWorkflowController(
@@ -81,11 +75,11 @@ function findWorkflowController(
   return candidate as WorkflowController | undefined;
 }
 
-function drainToStructuredResponse(
+async function drainToStructuredResponse(
   controller: WorkflowController | undefined,
   sessionId: string,
-): ModelUiOutput | undefined {
-  const updates = controller?.drainPendingUi(sessionId) ?? [];
+): Promise<ModelUiOutput | undefined> {
+  const updates = (await controller?.drainPendingUi(sessionId)) ?? [];
   if (updates.length === 0) return undefined;
   const candidate: ModelUiOutput = { version: 1, updates: updates as ModelUiOutput["updates"] };
   return normalizeModelUiOutput(candidate) ?? undefined;
@@ -113,9 +107,9 @@ function createWorkflowUiAdapter(
   adapter.streamWorkEvents = streamWorkEvents;
   adapter.invoke = (async (input: unknown, config?: unknown) => {
     const workResult = await invokeWork(input as never, config as never);
-    const structuredResponse = drainToStructuredResponse(
+    const structuredResponse = await drainToStructuredResponse(
       workflowController,
-      threadIdFromConfig(config),
+      threadId(config),
     );
     return appendStructuredResponse(workResult, structuredResponse);
   }) as DeepAgent["invoke"];
@@ -128,10 +122,10 @@ function createWorkflowUiAdapter(
       return streamWorkEvents(input as never, config as never);
     }
     const run = await streamWorkEvents(input as never, config as never);
-    const output = Promise.resolve(run.output).then((workResult) => {
-      const structuredResponse = drainToStructuredResponse(
+    const output = Promise.resolve(run.output).then(async (workResult) => {
+      const structuredResponse = await drainToStructuredResponse(
         workflowController,
-        threadIdFromConfig(config),
+        threadId(config),
       );
       return appendStructuredResponse(workResult, structuredResponse);
     });

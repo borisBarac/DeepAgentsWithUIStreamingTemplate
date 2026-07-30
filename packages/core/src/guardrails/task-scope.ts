@@ -18,7 +18,7 @@ export const taskScopeDecisionSchema = z.object({
   inScope: z.boolean(),
   missingContext: z.array(z.string()).default([]),
   violatedRules: z.array(z.string()).default([]),
-  reason: z.string(),
+  reason: z.string().default(""),
 });
 
 export type TaskScopeDecision = z.infer<typeof taskScopeDecisionSchema>;
