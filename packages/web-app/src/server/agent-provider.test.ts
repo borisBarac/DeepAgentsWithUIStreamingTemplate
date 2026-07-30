@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -9,7 +9,7 @@ import {
   createUserMemoryBackend,
 } from "@deep-agent-template/core/memory";
 
-import { createAgentProvider } from "./agent-provider.ts";
+import { __setLinkloomConnectionForTest, createAgentProvider } from "./agent-provider.ts";
 
 type WriteFileTool = {
   invoke(input: { content: string; file_path: string }): Promise<unknown>;
@@ -84,6 +84,8 @@ function getWriteFileTool(agent: Awaited<ReturnType<typeof createAgentProvider>>
 }
 
 describe("createAgentProvider", () => {
+  beforeEach(() => __setLinkloomConnectionForTest(null));
+
   it("returns the advanced scaffolded agent by default", async () => {
     await withTempMemory({}, async (rootDir) => {
       const agent = await createAgentProvider();

@@ -1,5 +1,8 @@
 import path from "node:path";
-
+import {
+  connectLinkloomResearchTools,
+  type LinkloomResearchConnection,
+} from "@deep-agent-template/core";
 import { createScaffoldedAgent, type DeepAgent } from "@deep-agent-template/core/agent";
 import { catalogPrompt } from "@deep-agent-template/core/generative-ui";
 import {
@@ -41,13 +44,52 @@ export async function createAgentProvider(): Promise<DeepAgent> {
     }),
   );
   const modelRuntime = createModelRuntimeFromEnv({});
+  const linkloom = await resolveLinkloomConnection();
 
   return createScaffoldedAgent({
     generativeUi: { catalogPrompt },
     guardrails: false,
     imageGenerationService: createImageGenerationServiceFromEnv(),
     modelRuntime,
+    ...(linkloom?.tools.length ? { additionalResearcherTools: linkloom.tools } : {}),
     store,
+  });
+}
+
+// ============================================================================
+// Linkloom MCP research tools
+// ============================================================================
+//
+// One streamable-HTTP Linkloom connection per process. The tools are injected
+// into the researcher subagent of every built agent via additionalResearcherTools.
+// The connection is established lazily on first agent build and memoized: a
+// failed attempt is cached as `null` so the process runs degraded (no Linkloom
+// tools) for its lifetime, and retry happens on the next process restart.
+let linkloomConnectionPromise: Promise<LinkloomResearchConnection | null> | null = null;
+
+async function resolveLinkloomConnection(): Promise<LinkloomResearchConnection | null> {
+  if (linkloomConnectionPromise) return linkloomConnectionPromise;
+  linkloomConnectionPromise = (async () => {
+    try {
+      return await connectLinkloomResearchTools();
+    } catch (error) {
+      console.error(
+        "[agent-provider] Linkloom MCP unavailable; starting without Linkloom tools.",
+        error,
+      );
+      return null;
+    }
+  })();
+  return linkloomConnectionPromise;
+}
+
+export async function disposeLinkloomConnection(): Promise<void> {
+  const pending = linkloomConnectionPromise;
+  linkloomConnectionPromise = null;
+  if (!pending) return;
+  const connection = await pending.catch(() => null);
+  await connection?.close().catch(() => {
+    // Best-effort during shutdown.
   });
 }
 
@@ -72,4 +114,12 @@ export async function disposeSandboxBackend(): Promise<void> {}
 
 export function __resetAgentCacheForTest(): void {
   cachedWorkerAgent = null;
+}
+
+// Inject a Linkloom connection (or `null` for degraded mode) for tests, or pass
+// `undefined` to restore lazy production resolution on the next build.
+export function __setLinkloomConnectionForTest(
+  connection: LinkloomResearchConnection | null | undefined,
+): void {
+  linkloomConnectionPromise = connection === undefined ? null : Promise.resolve(connection);
 }

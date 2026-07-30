@@ -238,10 +238,10 @@ reference unknown categories, and assignments for unsupported roles.
 
 ## Linkloom MCP research tools
 
-Linkloom runs as a local stdio MCP server. Connect it before creating the scaffolded agent, pass the
-loaded LangChain tools through `additionalResearcherTools`, and dispose of the connection when the
-agent is no longer needed. The connection is an `AsyncDisposable`, so `await using` closes it
-deterministically at the end of the enclosing scope:
+Linkloom runs as a separate streamable-HTTP MCP service. Connect it before creating the scaffolded
+agent, pass the loaded LangChain tools through `additionalResearcherTools`, and dispose of the
+connection when the agent is no longer needed. The connection is an `AsyncDisposable`, so
+`await using` closes it deterministically at the end of the enclosing scope:
 
 ```ts
 import {
@@ -276,24 +276,13 @@ garbage-collected without an explicit disposal; finalizer delivery is best-effor
 spec, so prefer explicit disposal (`await using` or `close()`) whenever the connection has a clear
 owner scope.
 
-The helper resolves the installed `@boris.barac/linkloom` package and launches its MCP entry point
-with Bun. It exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`,
-`extract_links`, and `extract_tables` only to the researcher. The existing `execute_python` tool
-remains available.
-
-The child process inherits the application's environment by default; any `env` passed to
-`connectLinkloomResearchTools(...)` is merged on top of `process.env` rather than replacing it, so
-inherited variables such as `HOME` and the LangSmith tracing variables still reach the server.
-Linkloom supports `PAGE_LOAD_TIMEOUT`, `FRAME_TIMEOUT`, `PDF_DOWNLOAD_TIMEOUT`, and `PROXY_URL`; its
-scraping tools do not require an API key. Pass `command`, `args`, `cwd`, `env`, restart settings, or
-a tool timeout to `connectLinkloomResearchTools(...)` when the default process configuration is
-unsuitable.
-
-The Linkloom `scrape` and `render_page` tools drive a Camoufox browser engine, whose install location
-`createAppConfig()` publishes to `process.env.CAMOUFOX_INSTALL_DIR` (default `~/.cache/camoufox`;
-install it with `bun run setup`). `connectLinkloomResearchTools(...)` propagates that location to the
-child: pass `camoufoxInstallDir` explicitly, or set `CAMOUFOX_INSTALL_DIR` in the environment, and the
-value reaches the spawned server.
+The helper connects over streamable HTTP and exposes `scrape`, `html_to_markdown`, `pdf_to_markdown`,
+`render_page`, `extract_links`, `extract_tables`, and `search_web` only to the researcher. The
+existing `execute_python` tool remains available. `connectLinkloomResearchTools(...)` connects to the
+URL in `LINKLOOM_MCP_URL` (default `http://localhost:3001/mcp`); pass `{ url }` to override it, or
+`{ defaultToolTimeout }` to cap individual tool calls. The browser engine (Camoufox) and its tuning
+(`PAGE_LOAD_TIMEOUT`, `FRAME_TIMEOUT`, `PDF_DOWNLOAD_TIMEOUT`, `PROXY_URL`) live in the dedicated
+Linkloom container, not the application image.
 
 ## Usage
 

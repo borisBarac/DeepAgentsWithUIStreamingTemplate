@@ -90,9 +90,9 @@ Product requests create or update reviewed product batches. Casual messages go t
 - `generate_image` tool wired to `image-designer` subagent
 
 ### Web Scraping (Linkloom MCP)
-- Camoufox browser via MCP server
-- Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`
-- Wired exclusively to the `researcher` subagent
+- Streamable-HTTP MCP service (dedicated container)
+- Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`, `search_web`
+- Wired exclusively to the `researcher` subagent via the BullMQ worker
 
 ### System Observability
 - OpenTelemetry traces for requests, agent runs, dispatch, workers, environments, and sandbox execution
@@ -138,7 +138,7 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **Web**: Next.js 16 (App Router), React 19
 - **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
 - **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
-- **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
+- **Web Scraping**: `@boris.barac/linkloom` 0.2.1 MCP server (streamable-HTTP, dedicated container)
 - **Image Gen**: Replicate SDK
 - **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
 - **Observability**: OpenTelemetry system tracing and metrics, plus LangSmith agent tracing

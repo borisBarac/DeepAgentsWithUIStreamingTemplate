@@ -22,7 +22,7 @@
   },
   "types": "./src/index.ts",
   "dependencies": {
-    "@boris.barac/linkloom": "^0.1.5",
+    "@boris.barac/linkloom": "0.2.1",
     "@deep-agent-template/image-gen": "workspace:*",
     "@deep-agent-template/sandbox": "workspace:*",
     "@json-render/core": "^0.4.0",

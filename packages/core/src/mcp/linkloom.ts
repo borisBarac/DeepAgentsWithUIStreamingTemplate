@@ -1,9 +1,8 @@
 /// <reference lib="esnext.disposable" />
-import { fileURLToPath } from "node:url";
 import {
   type ClientConfig,
   MultiServerMCPClient,
-  type StdioConnection,
+  type StreamableHTTPConnection,
 } from "@langchain/mcp-adapters";
 
 export const LINKLOOM_MCP_SERVER_NAME = "linkloom";
@@ -17,15 +16,17 @@ export const LINKLOOM_MCP_TOOL_NAMES = [
   "search_web",
 ] as const;
 
-export type LinkloomMcpOptions = Pick<
-  StdioConnection,
-  "args" | "command" | "cwd" | "defaultToolTimeout" | "env" | "restart" | "stderr"
-> & {
-  camoufoxInstallDir?: string;
+export const DEFAULT_LINKLOOM_MCP_URL = "http://localhost:3001/mcp";
+export const DEFAULT_LINKLOOM_MCP_DISCOVERY_TIMEOUT = 10_000;
+
+export type LinkloomMcpOptions = {
+  url?: string;
+  defaultToolTimeout?: number;
+  discoveryTimeout?: number;
 };
 
 export type LinkloomResearchConnection = {
-  client: MultiServerMCPClient;
+  client: Pick<MultiServerMCPClient, "close">;
   tools: Awaited<ReturnType<MultiServerMCPClient["getTools"]>>;
   close: () => Promise<void>;
   [Symbol.asyncDispose](): Promise<void>;
@@ -33,38 +34,18 @@ export type LinkloomResearchConnection = {
 
 const linkloomFinalizer = new FinalizationRegistry((held: { close: () => Promise<void> }) => {
   void held.close().catch(() => {
-    // Best-effort: a GC callback cannot surface errors, and a stdio child is
-    // reaped when the parent's pipe breaks regardless.
+    // Best-effort: a GC callback cannot surface errors, and the remote HTTP
+    // server reaps idle sessions on its own schedule regardless.
   });
 });
-
-function resolveLinkloomMcpEntry(): string {
-  const packageEntry = import.meta.resolve("@boris.barac/linkloom");
-  return fileURLToPath(new URL("./src/mcp.ts", packageEntry));
-}
 
 export function createLinkloomMcpClient(
   options: Partial<LinkloomMcpOptions> = {},
 ): MultiServerMCPClient {
-  const camoufoxInstallDir = options.camoufoxInstallDir ?? process.env.CAMOUFOX_INSTALL_DIR;
-
-  const mergedEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === "string") mergedEnv[key] = value;
-  }
-  if (options.env) Object.assign(mergedEnv, options.env);
-  if (camoufoxInstallDir) {
-    mergedEnv.CAMOUFOX_INSTALL_DIR = camoufoxInstallDir;
-  }
-
-  const connection: StdioConnection = {
-    transport: "stdio",
-    command: options.command ?? "bun",
-    args: options.args ?? [resolveLinkloomMcpEntry()],
-    env: mergedEnv,
-    ...(options.cwd ? { cwd: options.cwd } : {}),
-    ...(options.stderr ? { stderr: options.stderr } : {}),
-    ...(options.restart ? { restart: options.restart } : {}),
+  const url = options.url ?? process.env.LINKLOOM_MCP_URL ?? DEFAULT_LINKLOOM_MCP_URL;
+  const connection: StreamableHTTPConnection = {
+    transport: "http",
+    url,
     ...(options.defaultToolTimeout !== undefined
       ? { defaultToolTimeout: options.defaultToolTimeout }
       : {}),
@@ -81,7 +62,7 @@ export function createLinkloomMcpClient(
 }
 
 export function createLinkloomConnection(
-  client: MultiServerMCPClient,
+  client: Pick<MultiServerMCPClient, "close">,
   tools: Awaited<ReturnType<MultiServerMCPClient["getTools"]>>,
 ): LinkloomResearchConnection {
   let closed = false;
@@ -104,15 +85,31 @@ export function createLinkloomConnection(
 export async function connectLinkloomResearchTools(
   options: Partial<LinkloomMcpOptions> = {},
 ): Promise<LinkloomResearchConnection> {
+  const discoveryTimeout = options.discoveryTimeout ?? DEFAULT_LINKLOOM_MCP_DISCOVERY_TIMEOUT;
   const client = createLinkloomMcpClient(options);
 
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const discoveryTimeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(
+      () => reject(new Error(`Linkloom MCP tool discovery timed out after ${discoveryTimeout}ms`)),
+      discoveryTimeout,
+    );
+  });
+
+  const discoveryPromise = client.getTools();
   try {
-    const tools = await client.getTools(LINKLOOM_MCP_SERVER_NAME);
+    const tools = await Promise.race([discoveryPromise, discoveryTimeoutPromise]);
     return createLinkloomConnection(client, tools);
   } catch (error) {
     await client.close().catch(() => {
-      // Swallow teardown failures so the original connect error is surfaced.
+      // Swallow teardown failures so the original discovery error is surfaced.
     });
     throw error;
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    // The abandoned discovery promise can settle later (e.g. once the remote
+    // closes the socket). Attach a no-op rejection handler so it never surfaces
+    // as an unhandled rejection after the timeout/connection error wins.
+    void discoveryPromise.catch(() => {});
   }
 }
