@@ -10,12 +10,19 @@ export {
 export { createWorkflowState, reduceWorkflowState, resolveWorkflowDecision } from "./reducer.ts";
 export {
   createWorkflowControllerMiddleware,
+  productBatchSchema,
+  productItemSchema,
   WorkflowRuntimeError,
   workflowCompleteExecutionTool,
   workflowSubmitClarificationTool,
   workflowSubmitProductsTool,
   workflowSubmitReviewTool,
 } from "./runtime.ts";
+export {
+  BaseStoreWorkflowStateStore,
+  InMemoryWorkflowStateStore,
+  type WorkflowStateStore,
+} from "./store.ts";
 export type {
   WorkflowControllerOptions,
   WorkflowDecision,

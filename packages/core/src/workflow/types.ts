@@ -2,6 +2,7 @@ import type { ClarificationResult, ClarificationState } from "../clarification/i
 import type { QuestionUpdate, UiSpecUpdate } from "../generative-ui/index.ts";
 import type { ReviewReport } from "../review/index.ts";
 import type { ExistingProductSet, ProductBatch, ProductMode } from "./products.ts";
+import type { WorkflowStateStore } from "./store.ts";
 
 export type WorkflowPhase =
   | "clarification"
@@ -99,4 +100,5 @@ export type WorkflowControllerOptions = {
   maxReviewCycles: number;
   controllerRetryLimit?: number;
   productGenerationEnabled?: boolean;
+  workflowStateStore?: WorkflowStateStore;
 };

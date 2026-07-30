@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
-import { InMemoryStore } from "@langchain/langgraph";
 
+import { createWorkflowState } from "./reducer.ts";
 import {
   createWorkflowControllerMiddleware,
   workflowCompleteExecutionTool,
@@ -9,6 +9,7 @@ import {
   workflowSubmitProductsTool,
   workflowSubmitReviewTool,
 } from "./runtime.ts";
+import { InMemoryWorkflowStateStore } from "./store.ts";
 
 const options = {
   maxClarificationRounds: 1,
@@ -133,7 +134,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e" })) as never,
     );
-    expect(middleware.getWorkflowState("products")).toMatchObject({
+    expect(await middleware.getWorkflowState("products")).toMatchObject({
       phase: "product_generation",
       productMode: "update",
       targetProductCount: 2,
@@ -159,7 +160,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "p" })) as never,
     );
-    expect(middleware.getWorkflowState("products")).toMatchObject({
+    expect(await middleware.getWorkflowState("products")).toMatchObject({
       phase: "review",
       generatedProducts: { mode: "update", gridRoot: "catalog", products },
     });
@@ -205,7 +206,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e" })) as never,
     );
-    expect(middleware.getWorkflowState("products-json")?.phase).toBe("product_generation");
+    expect((await middleware.getWorkflowState("products-json"))?.phase).toBe("product_generation");
 
     const jsonBatch = {
       mode: "create",
@@ -228,8 +229,8 @@ describe("workflow controller middleware", () => {
     )) as ToolMessage;
     expect(String(rawJsonResponse.content)).toContain("subagent_returned_json");
     expect(String(rawJsonResponse.content)).toContain("prose");
-    expect(middleware.getWorkflowState("products-json")?.completedSubagent).toBeUndefined();
-    expect(middleware.getWorkflowState("products-json")?.phase).toBe("product_generation");
+    expect((await middleware.getWorkflowState("products-json"))?.completedSubagent).toBeUndefined();
+    expect((await middleware.getWorkflowState("products-json"))?.phase).toBe("product_generation");
 
     // Case 2: fenced ```json code block.
     const fencedDelegation = rawRequest(
@@ -242,7 +243,7 @@ describe("workflow controller middleware", () => {
       fencedDelegation.handler as never,
     )) as ToolMessage;
     expect(String(fencedResponse.content)).toContain("subagent_returned_json");
-    expect(middleware.getWorkflowState("products-json")?.completedSubagent).toBeUndefined();
+    expect((await middleware.getWorkflowState("products-json"))?.completedSubagent).toBeUndefined();
 
     // Case 3: prose reply is accepted and unlocks typed submission.
     const proseDelegation = rawRequest(
@@ -261,7 +262,7 @@ describe("workflow controller middleware", () => {
       ].join("\n"),
     );
     await middleware.wrapToolCall?.(proseDelegation as never, proseDelegation.handler as never);
-    expect(middleware.getWorkflowState("products-json")?.completedSubagent).toBe(
+    expect((await middleware.getWorkflowState("products-json"))?.completedSubagent).toBe(
       "product-generator",
     );
     const products = [
@@ -276,7 +277,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "p" })) as never,
     );
-    expect(middleware.getWorkflowState("products-json")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("products-json"))?.phase).toBe("review");
   });
 
   it("derives create defaults and explicit update counts from session history", async () => {
@@ -289,7 +290,7 @@ describe("workflow controller middleware", () => {
       { messages: [new HumanMessage("Create products")] },
       { configurable: { thread_id: "create-context" } },
     );
-    expect(middleware.getWorkflowState("create-context")).toMatchObject({
+    expect(await middleware.getWorkflowState("create-context")).toMatchObject({
       productMode: "create",
       targetProductCount: 3,
       existingProducts: null,
@@ -317,7 +318,7 @@ describe("workflow controller middleware", () => {
       },
       { configurable: { thread_id: "update-count" } },
     );
-    expect(middleware.getWorkflowState("update-count")).toMatchObject({
+    expect(await middleware.getWorkflowState("update-count")).toMatchObject({
       productMode: "update",
       targetProductCount: 4,
       existingProducts: { gridRoot: "products" },
@@ -338,7 +339,7 @@ describe("workflow controller middleware", () => {
         (async () => new ToolMessage({ content: "ok", tool_call_id: name })) as never,
       )) as ToolMessage;
       expect(String(result.content)).toContain("invalid_workflow_phase");
-      expect(middleware.getWorkflowState("wrong-phase")?.phase).toBe("clarification");
+      expect((await middleware.getWorkflowState("wrong-phase"))?.phase).toBe("clarification");
     }
   });
 
@@ -440,7 +441,7 @@ describe("workflow controller middleware", () => {
     ].join("\n");
     const clarification = request("flow", "clarifier", clarifierProse);
     await middleware.wrapToolCall?.(clarification as never, clarification.handler as never);
-    expect(middleware.getWorkflowState("flow")?.completedSubagent).toBe("clarifier");
+    expect((await middleware.getWorkflowState("flow"))?.completedSubagent).toBe("clarifier");
 
     // MainAgent translates prose into typed args.
     const clarifySubmission = submission("flow", "workflow_submit_clarification", {
@@ -456,7 +457,7 @@ describe("workflow controller middleware", () => {
       clarifySubmission as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "clarify" })) as never,
     );
-    expect(middleware.getWorkflowState("flow")?.phase).toBe("execution");
+    expect((await middleware.getWorkflowState("flow"))?.phase).toBe("execution");
 
     const complete = submission("flow", "workflow_complete_execution", {
       candidateFinalResponse: "Done",
@@ -468,7 +469,7 @@ describe("workflow controller middleware", () => {
       complete as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "complete" })) as never,
     );
-    expect(middleware.getWorkflowState("flow")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("flow"))?.phase).toBe("review");
 
     // Reviewer returns prose with the stable labeled fields contract.
     const reviewerProse = [
@@ -497,7 +498,7 @@ describe("workflow controller middleware", () => {
       reviewSubmission as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "review" })) as never,
     );
-    expect(middleware.getWorkflowState("flow")?.phase).toBe("delivery_ready");
+    expect((await middleware.getWorkflowState("flow"))?.phase).toBe("delivery_ready");
   });
 
   it("loops back to revision when reviewer prose asks for changes", async () => {
@@ -530,7 +531,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e" })) as never,
     );
-    expect(middleware.getWorkflowState("rev")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("rev"))?.phase).toBe("review");
 
     // Reviewer returns changes_required in prose.
     const revisionProse = [
@@ -556,7 +557,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "r" })) as never,
     );
-    expect(middleware.getWorkflowState("rev")?.phase).toBe("revision");
+    expect((await middleware.getWorkflowState("rev"))?.phase).toBe("revision");
 
     // Re-execute after revision feedback, then re-review and approve.
     await middleware.wrapToolCall?.(
@@ -568,7 +569,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e2" })) as never,
     );
-    expect(middleware.getWorkflowState("rev")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("rev"))?.phase).toBe("review");
     const approval = request("rev", "review-agent", "STATUS: approved\nSCORE: 92");
     await middleware.wrapToolCall?.(approval as never, approval.handler as never);
     await middleware.wrapToolCall?.(
@@ -583,7 +584,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "r2" })) as never,
     );
-    expect(middleware.getWorkflowState("rev")?.phase).toBe("delivery_ready");
+    expect((await middleware.getWorkflowState("rev"))?.phase).toBe("delivery_ready");
   });
 
   it("does not tell the model to avoid finalizing early during delivery_ready", async () => {
@@ -630,7 +631,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "r" })) as never,
     );
-    expect(middleware.getWorkflowState("deliver")?.phase).toBe("delivery_ready");
+    expect((await middleware.getWorkflowState("deliver"))?.phase).toBe("delivery_ready");
 
     const wrapped = (await middleware.wrapModelCall?.(
       { systemPrompt: "BASE", runtime: { configurable: { thread_id: "deliver" } } } as never,
@@ -640,28 +641,84 @@ describe("workflow controller middleware", () => {
     expect(wrapped.systemPrompt).toContain("Proceed with the required action now.");
   });
 
-  it("restores workflow state from the store without leaking between threads", async () => {
-    const store = new InMemoryStore();
-    const first = createWorkflowControllerMiddleware(options);
+  it("reuses workflow state across controllers sharing one store without leaking between threads", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    const first = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
     const beforeFirst = first.beforeAgent as Hook;
     await beforeFirst(
       { messages: [new HumanMessage("Request A")] },
-      { configurable: { thread_id: "a" }, store },
+      { configurable: { thread_id: "a" } },
     );
 
-    const second = createWorkflowControllerMiddleware(options);
+    const second = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
     const beforeSecond = second.beforeAgent as Hook;
     await beforeSecond(
       { messages: [new HumanMessage("Request A")] },
-      { configurable: { thread_id: "a" }, store },
+      { configurable: { thread_id: "a" } },
     );
     await beforeSecond(
       { messages: [new HumanMessage("Request B")] },
-      { configurable: { thread_id: "b" }, store },
+      { configurable: { thread_id: "b" } },
     );
 
-    expect(second.getWorkflowState("a")?.originalRequest).toBe("Request A");
-    expect(second.getWorkflowState("b")?.originalRequest).toBe("Request B");
+    expect((await second.getWorkflowState("a"))?.originalRequest).toBe("Request A");
+    expect((await second.getWorkflowState("b"))?.originalRequest).toBe("Request B");
+    expect(await second.hasWorkflowState("a")).toBeTrue();
+    expect(await second.hasWorkflowState("missing")).toBeFalse();
+  });
+
+  it("drains pending UI synchronously through the workflow state store", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    const first = createWorkflowControllerMiddleware({
+      ...options,
+      maxClarificationRounds: 2,
+      workflowStateStore: store,
+    });
+    const beforeAgent = first.beforeAgent as Hook;
+    await beforeAgent(
+      { messages: [new HumanMessage("Build an app")] },
+      { configurable: { thread_id: "ui" } },
+    );
+    await first.wrapToolCall?.(
+      request("ui", "clarifier", "STATUS: needs_clarification") as never,
+      (async () => new ToolMessage({ content: "ok", tool_call_id: "c" })) as never,
+    );
+    await first.wrapToolCall?.(
+      submission("ui", "workflow_submit_clarification", {
+        requestKind: "products",
+        status: "needs_clarification",
+        readyToProceed: false,
+        questions: [{ id: "platform", question: "Which platform should the app target?" }],
+        missingInformation: ["platform"],
+        answeredInformation: [],
+        reasoningSummary: "Platform determines implementation details.",
+      }) as never,
+      (async () => new ToolMessage({ content: "ok", tool_call_id: "s" })) as never,
+    );
+
+    expect(await first.drainPendingUi("ui")).not.toHaveLength(0);
+    expect((await store.load("ui"))?.pendingClarificationUi).toBeUndefined();
+
+    const second = createWorkflowControllerMiddleware({ ...options, workflowStateStore: store });
+    expect(await second.drainPendingUi("ui")).toEqual([]);
+  });
+
+  it("archives a terminal state before starting the next request", async () => {
+    const store = new InMemoryWorkflowStateStore();
+    store.save("archived", { ...createWorkflowState("Old request"), phase: "delivery_ready" });
+    const middleware = createWorkflowControllerMiddleware({
+      ...options,
+      workflowStateStore: store,
+    });
+    const beforeAgent = middleware.beforeAgent as Hook;
+
+    await beforeAgent(
+      { messages: [new HumanMessage("New request")] },
+      { configurable: { thread_id: "archived" } },
+    );
+
+    expect((await store.load("archived"))?.originalRequest).toBe("New request");
+    expect(await middleware.hasWorkflowState("archived")).toBeTrue();
   });
 
   it("keeps state unchanged for invalid submissions and requires delegation first", async () => {
@@ -678,7 +735,7 @@ describe("workflow controller middleware", () => {
       (async () => new ToolMessage({ content: "ok", tool_call_id: "bad" })) as never,
     )) as ToolMessage;
     expect(String(beforeDelegation.content)).toContain("required_subagent_not_completed");
-    expect(middleware.getWorkflowState("bad")?.phase).toBe("clarification");
+    expect((await middleware.getWorkflowState("bad"))?.phase).toBe("clarification");
 
     const clarification = request("bad", "clarifier", "Use JSON if helpful, but prose is valid.");
     await middleware.wrapToolCall?.(clarification as never, clarification.handler as never);
@@ -687,8 +744,8 @@ describe("workflow controller middleware", () => {
       (async () => new ToolMessage({ content: "ok", tool_call_id: "bad" })) as never,
     )) as ToolMessage;
     expect(String(invalid.content)).toContain("invalid_clarification_result");
-    expect(middleware.getWorkflowState("bad")?.phase).toBe("clarification");
-    expect(middleware.getWorkflowState("bad")?.completedSubagent).toBe("clarifier");
+    expect((await middleware.getWorkflowState("bad"))?.phase).toBe("clarification");
+    expect((await middleware.getWorkflowState("bad"))?.completedSubagent).toBe("clarifier");
   });
 
   it("rejects malformed review submissions without changing workflow state", async () => {
@@ -722,7 +779,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e" })) as never,
     );
-    expect(middleware.getWorkflowState("bad-review")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("bad-review"))?.phase).toBe("review");
 
     // Submission before review-agent delegation must be rejected.
     const premature = submission("bad-review", "workflow_submit_review", {
@@ -734,7 +791,7 @@ describe("workflow controller middleware", () => {
       (async () => new ToolMessage({ content: "ok", tool_call_id: "p" })) as never,
     )) as ToolMessage;
     expect(String(prematureResponse.content)).toContain("required_subagent_not_completed");
-    expect(middleware.getWorkflowState("bad-review")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("bad-review"))?.phase).toBe("review");
 
     // Now run review-agent, then submit malformed args.
     const review = request("bad-review", "review-agent", "STATUS: approved");
@@ -748,8 +805,10 @@ describe("workflow controller middleware", () => {
       (async () => new ToolMessage({ content: "ok", tool_call_id: "m" })) as never,
     )) as ToolMessage;
     expect(String(invalid.content)).toContain("invalid_review_report");
-    expect(middleware.getWorkflowState("bad-review")?.phase).toBe("review");
-    expect(middleware.getWorkflowState("bad-review")?.completedSubagent).toBe("review-agent");
+    expect((await middleware.getWorkflowState("bad-review"))?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("bad-review"))?.completedSubagent).toBe(
+      "review-agent",
+    );
   });
 
   describe("clarification entry", () => {
@@ -763,7 +822,7 @@ describe("workflow controller middleware", () => {
         { configurable: { thread_id: "fresh" } } as never,
       );
 
-      const state = middleware.getWorkflowState("fresh");
+      const state = await middleware.getWorkflowState("fresh");
       expect(state?.phase).toBe("clarification");
       expect(state?.clarification).toBeNull();
       expect(state?.clarificationResult).toBeUndefined();
@@ -795,7 +854,7 @@ describe("workflow controller middleware", () => {
         (async () => new ToolMessage({ content: "ok", tool_call_id: "s" })) as never,
       );
 
-      const state = middleware.getWorkflowState("trivial");
+      const state = await middleware.getWorkflowState("trivial");
       expect(state?.phase).toBe("execution");
       expect(state?.clarificationResult?.status).toBe("ready_to_proceed");
       expect(state?.clarificationResult?.questions).toEqual([]);
@@ -833,7 +892,7 @@ describe("workflow controller middleware", () => {
         (async () => new ToolMessage({ content: "ok", tool_call_id: "s" })) as never,
       );
 
-      const state = middleware.getWorkflowState("ambiguous");
+      const state = await middleware.getWorkflowState("ambiguous");
       expect(state?.phase).toBe("waiting_for_user");
       expect(state?.clarification?.openQuestions).toHaveLength(2);
     });
@@ -858,10 +917,12 @@ describe("workflow controller middleware", () => {
       fenced.handler as never,
     )) as ToolMessage;
     expect(String(fencedResponse.content)).toContain("subagent_returned_json");
-    expect(middleware.getWorkflowState("clarifier-json")?.completedSubagent).toBeUndefined();
-    expect(middleware.getWorkflowState("clarifier-json")?.phase).toBe("clarification");
+    expect(
+      (await middleware.getWorkflowState("clarifier-json"))?.completedSubagent,
+    ).toBeUndefined();
+    expect((await middleware.getWorkflowState("clarifier-json"))?.phase).toBe("clarification");
     // The JSON rejection must consume one controller retry attempt.
-    expect(middleware.getWorkflowState("clarifier-json")?.controllerRetryCount).toBe(1);
+    expect((await middleware.getWorkflowState("clarifier-json"))?.controllerRetryCount).toBe(1);
 
     // Prose reply unlocks the typed submission tool.
     const prose = rawRequest(
@@ -877,7 +938,9 @@ describe("workflow controller middleware", () => {
       ].join("\n"),
     );
     await middleware.wrapToolCall?.(prose as never, prose.handler as never);
-    expect(middleware.getWorkflowState("clarifier-json")?.completedSubagent).toBe("clarifier");
+    expect((await middleware.getWorkflowState("clarifier-json"))?.completedSubagent).toBe(
+      "clarifier",
+    );
     await middleware.wrapToolCall?.(
       submission("clarifier-json", "workflow_submit_clarification", {
         requestKind: "products",
@@ -891,8 +954,8 @@ describe("workflow controller middleware", () => {
       (async () => new ToolMessage({ content: "ok", tool_call_id: "s" })) as never,
     );
     // Transitioning out of clarification resets the retry counter.
-    expect(middleware.getWorkflowState("clarifier-json")?.phase).toBe("execution");
-    expect(middleware.getWorkflowState("clarifier-json")?.controllerRetryCount).toBe(0);
+    expect((await middleware.getWorkflowState("clarifier-json"))?.phase).toBe("execution");
+    expect((await middleware.getWorkflowState("clarifier-json"))?.controllerRetryCount).toBe(0);
   });
 
   it("rejects JSON-shaped review-agent replies and requires prose", async () => {
@@ -927,7 +990,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "e" })) as never,
     );
-    expect(middleware.getWorkflowState("reviewer-json")?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("reviewer-json"))?.phase).toBe("review");
 
     // Leading-brace JSON object from review-agent.
     const rawJson = rawRequest(
@@ -940,9 +1003,9 @@ describe("workflow controller middleware", () => {
       rawJson.handler as never,
     )) as ToolMessage;
     expect(String(rawJsonResponse.content)).toContain("subagent_returned_json");
-    expect(middleware.getWorkflowState("reviewer-json")?.completedSubagent).toBeUndefined();
-    expect(middleware.getWorkflowState("reviewer-json")?.phase).toBe("review");
-    expect(middleware.getWorkflowState("reviewer-json")?.controllerRetryCount).toBe(1);
+    expect((await middleware.getWorkflowState("reviewer-json"))?.completedSubagent).toBeUndefined();
+    expect((await middleware.getWorkflowState("reviewer-json"))?.phase).toBe("review");
+    expect((await middleware.getWorkflowState("reviewer-json"))?.controllerRetryCount).toBe(1);
 
     // Prose reply unlocks the typed submission tool.
     const prose = rawRequest(
@@ -959,7 +1022,9 @@ describe("workflow controller middleware", () => {
       ].join("\n"),
     );
     await middleware.wrapToolCall?.(prose as never, prose.handler as never);
-    expect(middleware.getWorkflowState("reviewer-json")?.completedSubagent).toBe("review-agent");
+    expect((await middleware.getWorkflowState("reviewer-json"))?.completedSubagent).toBe(
+      "review-agent",
+    );
     await middleware.wrapToolCall?.(
       submission("reviewer-json", "workflow_submit_review", {
         status: "approved",
@@ -972,7 +1037,7 @@ describe("workflow controller middleware", () => {
       }) as never,
       (async () => new ToolMessage({ content: "ok", tool_call_id: "r" })) as never,
     );
-    expect(middleware.getWorkflowState("reviewer-json")?.phase).toBe("delivery_ready");
+    expect((await middleware.getWorkflowState("reviewer-json"))?.phase).toBe("delivery_ready");
   });
 
   it("bounds repeated JSON rejections by the controller retry limit", async () => {
@@ -998,7 +1063,9 @@ describe("workflow controller middleware", () => {
         call.handler as never,
       )) as ToolMessage;
       expect(String(response.content)).toContain("subagent_returned_json");
-      expect(middleware.getWorkflowState("json-budget")?.controllerRetryCount).toBe(attempt + 1);
+      expect((await middleware.getWorkflowState("json-budget"))?.controllerRetryCount).toBe(
+        attempt + 1,
+      );
     }
 
     await expect(
@@ -1007,7 +1074,7 @@ describe("workflow controller middleware", () => {
         await middleware.wrapToolCall?.(call as never, call.handler as never);
       })(),
     ).rejects.toThrow(/could not complete this task/);
-    expect(middleware.getWorkflowState("json-budget")?.phase).toBe("error");
+    expect((await middleware.getWorkflowState("json-budget"))?.phase).toBe("error");
   });
 
   it("ticks the controller retry budget on wrong-subagent delegation", async () => {
@@ -1024,8 +1091,8 @@ describe("workflow controller middleware", () => {
       wrong.handler as never,
     )) as ToolMessage;
     expect(String(response.content)).toContain("wrong_subagent");
-    expect(middleware.getWorkflowState("wrong-sub")?.controllerRetryCount).toBe(1);
-    expect(middleware.getWorkflowState("wrong-sub")?.phase).toBe("clarification");
+    expect((await middleware.getWorkflowState("wrong-sub"))?.controllerRetryCount).toBe(1);
+    expect((await middleware.getWorkflowState("wrong-sub"))?.phase).toBe("clarification");
   });
 
   it("bounds repeated wrong-subagent delegations by the controller retry limit", async () => {
@@ -1044,7 +1111,9 @@ describe("workflow controller middleware", () => {
         call.handler as never,
       )) as ToolMessage;
       expect(String(response.content)).toContain("wrong_subagent");
-      expect(middleware.getWorkflowState("wrong-budget")?.controllerRetryCount).toBe(attempt + 1);
+      expect((await middleware.getWorkflowState("wrong-budget"))?.controllerRetryCount).toBe(
+        attempt + 1,
+      );
     }
 
     await expect(
@@ -1053,7 +1122,7 @@ describe("workflow controller middleware", () => {
         await middleware.wrapToolCall?.(call as never, call.handler as never);
       })(),
     ).rejects.toThrow(/could not complete this task/);
-    expect(middleware.getWorkflowState("wrong-budget")?.phase).toBe("error");
+    expect((await middleware.getWorkflowState("wrong-budget"))?.phase).toBe("error");
   });
 
   it("leaves the workflow phase unchanged on a non-exhausting wrong-subagent delegation", async () => {
@@ -1063,12 +1132,12 @@ describe("workflow controller middleware", () => {
       { messages: [new HumanMessage("Build a kanban board")] } as never,
       { configurable: { thread_id: "wrong-phase" } } as never,
     );
-    const beforePhase = middleware.getWorkflowState("wrong-phase")?.phase;
+    const beforePhase = (await middleware.getWorkflowState("wrong-phase"))?.phase;
 
     const wrong = request("wrong-phase", "review-agent", "STATUS: ignored");
     await middleware.wrapToolCall?.(wrong as never, wrong.handler as never);
 
-    expect(middleware.getWorkflowState("wrong-phase")?.phase).toBe(beforePhase);
-    expect(middleware.getWorkflowState("wrong-phase")?.phase).not.toBe("error");
+    expect((await middleware.getWorkflowState("wrong-phase"))?.phase).toBe(beforePhase);
+    expect((await middleware.getWorkflowState("wrong-phase"))?.phase).not.toBe("error");
   });
 });
