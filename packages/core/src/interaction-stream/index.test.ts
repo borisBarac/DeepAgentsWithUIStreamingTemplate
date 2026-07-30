@@ -263,6 +263,98 @@ function createRepeatedSameNameSubagentAgent(): FakeAgent {
   };
 }
 
+function createManySubagentAgent(count: number): FakeAgent {
+  const text = '{"type":"message","text":"done"}\n';
+  const subagents = Array.from({ length: count }, (_, index) => ({
+    name: "researcher",
+    subagentName: `worker-${index}`,
+    taskInput: `Task ${index}`,
+    messages: asyncIterableFrom([
+      {
+        text: asyncIterableFrom([`chunk-${index}`]),
+      },
+    ]),
+    output: Promise.resolve({}),
+  }));
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom([text]),
+          },
+        ]),
+        subagents: asyncIterableFrom(subagents),
+        output: Promise.resolve({
+          messages: [{ content: text, role: "assistant" }],
+        }),
+      };
+    },
+  };
+}
+
+function createNeverSettlingOutputSubagentAgent(): FakeAgent {
+  const text = '{"type":"message","text":"done"}\n';
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom([text]),
+          },
+        ]),
+        subagents: asyncIterableFrom([
+          {
+            name: "researcher",
+            taskInput: "Find supporting facts",
+            messages: asyncIterableFrom([
+              {
+                text: asyncIterableFrom(["Searching"]),
+              },
+            ]),
+            output: createDeferred<unknown>().promise,
+          },
+        ]),
+        output: Promise.resolve({
+          messages: [{ content: text, role: "assistant" }],
+        }),
+      };
+    },
+  };
+}
+
+function createRejectingOutputSubagentAgent(): FakeAgent {
+  const text = '{"type":"message","text":"done"}\n';
+  const rejectingOutput = Promise.reject(new Error("subagent output failed"));
+  rejectingOutput.catch(() => {});
+  return {
+    async streamEvents() {
+      return {
+        messages: asyncIterableFrom([
+          {
+            text: asyncIterableFrom([text]),
+          },
+        ]),
+        subagents: asyncIterableFrom([
+          {
+            name: "researcher",
+            taskInput: "Find supporting facts",
+            messages: asyncIterableFrom([
+              {
+                text: asyncIterableFrom(["Searching"]),
+              },
+            ]),
+            output: rejectingOutput,
+          },
+        ]),
+        output: Promise.resolve({
+          messages: [{ content: text, role: "assistant" }],
+        }),
+      };
+    },
+  };
+}
+
 async function collectUpdates(agent: FakeAgent, includeActivity = false): Promise<UiUpdate[]> {
   const interaction = createInteractionStream({
     agent: asStreamable(agent),
@@ -840,6 +932,102 @@ describe("createInteractionStream", () => {
     await expect(collectUpdates(createSubagentStreamingAgent())).resolves.toEqual([
       { type: "message", text: "done" },
     ]);
+  });
+
+  it("surfaces activity for every subagent when count exceeds the drain concurrency cap", async () => {
+    const count = 12;
+    const updates = await collectUpdates(createManySubagentAgent(count), true);
+    const subagentUpdates = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "subagent_activity" }> =>
+        update.type === "subagent_activity",
+    );
+    const ids = [...new Set(subagentUpdates.map((update) => update.subagentRunId))];
+
+    expect(ids).toHaveLength(count);
+    for (const id of ids) {
+      const runUpdates = subagentUpdates.filter((update) => update.subagentRunId === id);
+      expect(runUpdates.map((update) => update.event)).toEqual(["started", "delta", "completed"]);
+    }
+    expect(updates).toContainEqual({ type: "message", text: "done" });
+  });
+
+  it("completes a subagent whose output promise never settles without hanging", async () => {
+    const updates = await collectUpdates(createNeverSettlingOutputSubagentAgent(), true);
+    const subagentUpdates = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "subagent_activity" }> =>
+        update.type === "subagent_activity",
+    );
+    expect(subagentUpdates.map((update) => update.event)).toEqual([
+      "started",
+      "delta",
+      "completed",
+    ]);
+    expect(updates).toContainEqual({ type: "message", text: "done" });
+  });
+
+  it("emits an error activity (not completed) when a subagent output rejects", async () => {
+    const updates = await collectUpdates(createRejectingOutputSubagentAgent(), true);
+    const subagentUpdates = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "subagent_activity" }> =>
+        update.type === "subagent_activity",
+    );
+    expect(subagentUpdates.map((update) => update.event)).toEqual(["started", "delta", "error"]);
+    expect(subagentUpdates.some((update) => update.event === "completed")).toBe(false);
+    expect(subagentUpdates).toContainEqual(
+      expect.objectContaining({ event: "error", message: "subagent output failed" }),
+    );
+    expect(updates).toContainEqual({ type: "message", text: "done" });
+  });
+
+  it("emits started, deltas, then completed when a subagent output fulfills", async () => {
+    const runOutput = createDeferred<{
+      messages: Array<{ content: string; role: "assistant" }>;
+    }>();
+    const subagentOutput = createDeferred<unknown>();
+    const text = '{"type":"message","text":"done"}\n';
+    const agent: FakeAgent = {
+      async streamEvents() {
+        return {
+          messages: asyncIterableFrom([{ text: asyncIterableFrom([text]) }]),
+          subagents: asyncIterableFrom([
+            {
+              name: "researcher",
+              taskInput: "Find facts",
+              messages: asyncIterableFrom([{ text: asyncIterableFrom(["Looking"]) }]),
+              output: subagentOutput.promise,
+            },
+          ]),
+          output: runOutput.promise,
+        };
+      },
+    };
+    const updatesPromise = collectUpdates(agent, true);
+    subagentOutput.resolve({ ok: true });
+    runOutput.resolve({ messages: [{ content: text, role: "assistant" }] });
+    const updates = await updatesPromise;
+    const subagentUpdates = updates.filter(
+      (update): update is Extract<UiUpdate, { type: "subagent_activity" }> =>
+        update.type === "subagent_activity",
+    );
+    expect(subagentUpdates.map((update) => update.event)).toEqual([
+      "started",
+      "delta",
+      "completed",
+    ]);
+    expect(subagentUpdates.some((update) => update.event === "error")).toBe(false);
+  });
+
+  it("keeps the parent stream successful when a subagent output rejects", async () => {
+    const interaction = createInteractionStream({
+      agent: asStreamable(createRejectingOutputSubagentAgent()),
+      includeActivity: true,
+      messages: [{ content: "generate concepts", role: "user" }],
+      sessionId: "rejected-subagent-non-fatal",
+    });
+    for await (const _update of interaction.updates) {
+      void _update;
+    }
+    await expect(interaction.result).resolves.toMatchObject({ failure: null });
   });
 });
 
