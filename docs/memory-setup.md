@@ -23,80 +23,48 @@ The agent only sees virtual paths. A memory store maps those paths to durable st
 
 Files outside `/memory` use the temporary state backend. Changing the memory store does not change the model facing paths.
 
-## Option 1. One local memory
+## Option 1. Local memory for development
 
-The web app already uses one persistent local memory for all requests. Use this setup for local development or for one server process with a persistent disk.
+The web app uses **one process-wide in-memory store** for guest memory, shared by every request and **namespaced per guest**. Every user is an anonymous guest identified by a UUID v4 minted in the browser and sent via the `x-guest-id` header. Each guest gets an isolated memory tree, created lazily on their first turn.
 
-### Configure the path
+This setup is intended for local development or a single server process. **Guest memory is ephemeral:** it lives only in the web-app process and is lost on restart, on agent-cache eviction (LRU-bounded), and across instances behind a load balancer. There is no on-disk persistence for guests today.
 
-Set `WEB_APP_MEMORY_DIR` in the root `.env` file:
+### How memory is scoped per guest
 
-```dotenv
-WEB_APP_MEMORY_DIR=".data/memory"
-```
+The execution environment resolves an identity `{ tenantId: "guests", userId: <uuid> }` for each request and passes it to `createAgentForIdentity`. Memory is scoped by `userId`:
 
-A relative path starts in `packages/web-app`. The setting above resolves to:
+1. A single `InMemoryStore` is shared by all guests (one process-wide instance in `packages/web-app/src/server/agent-provider.ts`).
+2. The `userId` selects a namespace via `createUserMemoryNamespace(userId)`, which yields `["users", "<encoded-id>", "memory"]`.
+3. Seed files (`project-facts.md`, `user-preferences.md`) are created lazily per guest — only when that guest's first turn runs, and only if the file does not already exist (idempotent read-then-write). There is no startup-time seeding pass.
+4. The scaffolded agent is memoized per guest, so the store, repository, and tool graph are built once per guest rather than on every turn.
 
-```text
-packages/web-app/.data/memory
-```
+The `<encoded-id>` segment is either the raw `userId` (when it is already filesystem-safe — a UUID v4 always is, so guest ids flow through raw) or `encoded_` followed by a base64url encoding of the `userId`. See `packages/core/src/memory/namespace.ts` for the exact rules. `assertSafeNamespace` rejects path-traversal attempts.
 
-The same path is the default when `WEB_APP_MEMORY_DIR` is empty. The directory is ignored by Git.
+### Verify guest memory
 
-You may use an absolute path:
-
-```dotenv
-WEB_APP_MEMORY_DIR="/var/lib/deep-agent-template/memory"
-```
-
-The selected directory must be writable by the web server and must remain available after a restart.
-
-### Start the web app
-
-```bash
-bun run web-app
-```
-
-During startup, the web app:
-
-1. Creates a `FileSystemMemoryStore`.
-2. Uses the `single-user` namespace.
-3. Creates the two default memory files when they are missing.
-4. Keeps existing files unchanged.
-5. Passes the same store to the scaffolded agent.
-
-With the default path, the Markdown files are stored at:
-
-```text
-packages/web-app/.data/memory/single-user/memory/project-facts.md
-packages/web-app/.data/memory/single-user/memory/user-preferences.md
-```
-
-Each Markdown file has a neighboring `.meta.json` file. The metadata records the namespace, virtual path, and creation and update times.
-
-### Verify local memory
-
-Ask the agent to save an explicit fact:
+Because memory is in-process, you cannot inspect files on disk. Instead, ask the agent to save a fact:
 
 ```text
 Remember that this project's build command is bun run build.
 ```
 
-Restart the web app, then ask:
+Then in the same process, ask:
 
 ```text
 What is this project's build command?
 ```
 
-You can also inspect the stored file directly:
-
-```bash
-sed -n '1,160p' packages/web-app/.data/memory/single-user/memory/project-facts.md
-```
+If you restart the web app, the answer is gone — the guest's memory started fresh.
 
 ### Local limits
 
-Use one web server process with this setup. Several processes can race while creating or updating the same files. An ephemeral serverless filesystem will lose the files when the instance is replaced.
+- One web server process. The in-memory store is not shared across instances.
+- No persistence across restarts.
+- Bounded by the agent cache's LRU eviction (see `DeepAgentTemplate-htgo`).
+
+### Future: durable storage (S3)
+
+When durable guest memory is needed, replace the in-memory singleton in `createAgentForIdentity` with a `BucketMemoryStore` (S3-backed) — see `DeepAgentTemplate-58p3`. The S3 adapter must implement LangGraph's `BaseStore` contract. See Option 2 below for the bucket layout that the placeholder `BucketMemoryStore` will use.
 
 ## Option 2. One memory in S3
 
@@ -142,7 +110,7 @@ Map each store item to one JSON object so the content and metadata are written t
 <prefix>/<encoded namespace>/<virtual path without the leading slash>.json
 ```
 
-For the default single-user memory, the objects would be:
+For the default single-user memory namespace, the objects would be:
 
 ```text
 deep-agent-template/memory/v1/single-user/memory/project-facts.md.json
@@ -231,10 +199,10 @@ const agent = createScaffoldedAgent({
 });
 ```
 
-The default namespace remains `["single-user"]`. If the application later serves several users, pass the same `memoryUserId` to both `createMemoryRepository()` and `createScaffoldedAgent()`:
+When no `memoryUserId` is supplied the memory namespace falls back to the single-user default `["single-user"]`. The web app already passes a per-guest `memoryUserId` (the guest UUID v4) into both `createMemoryRepository()` and `createScaffoldedAgent()` — see Option 1 above. Each guest gets a `["users", "<uuid>", "memory"]` namespace (UUIDs are filesystem-safe, so the encoder uses the raw id). When wiring a custom S3 store, pass the same `memoryUserId` to both:
 
 ```ts
-const memoryUserId = authenticatedUser.id;
+const memoryUserId = guestUserId; // UUID v4 from x-guest-id
 
 const memoryRepository = createMemoryRepository({
   store: memoryStore,
@@ -251,6 +219,10 @@ const agent = createScaffoldedAgent({
 ```
 
 Do not add a user ID to only one side. The repository and agent must use the same namespace.
+
+#### Breaking change / migration
+
+For a short period on the `dev` branch the scaffold backfilled `"default"` and produced the namespace `["users", "default", "memory"]` when no `memoryUserId` was supplied. That behavior was reverted: the default is now `["single-user"]` again, matching the long-standing `master` behavior. Callers that wrote data under `["users", "default", "memory"]` during that window should move it to `["single-user"]`, or pass `memoryUserId: "default"` to keep reading it in place.
 
 ### Prevent lost updates
 
@@ -271,9 +243,23 @@ Verify these cases before deployment:
 
 ## Content policy
 
-The current content policy is enforced mainly through prompts and seed file instructions. `reviewMemoryContent()` can flag likely secrets, inferred preferences, and transient details, but the agent's filesystem write path does not call it automatically.
+The web app wires `createMemoryPolicyMiddleware` (from `@deep-agent-template/core/memory`) onto the guest agent. The middleware reviews every `write_file` / `edit_file` whose `file_path` targets `/memory/...` by calling `reviewMemoryContent(...)`. If the content matches a disallowed category — secrets, inferred preferences, or transient details — the write is rejected with a `ToolMessage` and the model is asked to rewrite (drop the credential, state an explicit preference, or keep transient details in `/scratch`). Everything else passes through untouched: reads, writes outside `/memory`, and clean `/memory` writes all reach the underlying tool unchanged.
 
-If the application needs strict enforcement, call the content review helper in the S3 adapter or in a host controlled write policy before `PutObject`. Treat the helper as a basic safety check, not a complete secret scanner.
+```ts
+import {
+  createMemoryPolicy,
+  createMemoryPolicyMiddleware,
+  createScaffoldedAgent,
+} from "@deep-agent-template/core";
+
+const memoryPolicy = createMemoryPolicy();
+const agent = createScaffoldedAgent({
+  // ...
+  middleware: [createMemoryPolicyMiddleware(memoryPolicy)],
+});
+```
+
+The middleware is opt-in at the library level: core's `createScaffoldedAgent` does not add it by default. The web app opts in inside `buildAgent`. Treat `reviewMemoryContent` as a basic safety check, not a complete secret scanner; applications needing stricter enforcement can additionally call the helper in the S3 adapter or a host-controlled write policy before `PutObject`.
 
 ## Choose a setup
 

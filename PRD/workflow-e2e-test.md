@@ -20,7 +20,7 @@ Add a single live-LLM e2e test, `packages/core/e2e/workflow.e2e.test.ts`, gated 
 2. Sends one short, self-contained user request whose scope is small enough that the clarifier marks it `ready_to_proceed` in a single round and the supervisor has a concrete deliverable to submit via `workflow_complete_execution`.
 3. Asserts on the resulting transcript — without touching production code — that the controller intervened, forced each required subagent delegation in order, never produced a terminal failure, and that the supervisor delivered a non-narration final message.
 
-The test reuses the existing e2e helpers (`createDefaultModelRuntime`, `hasLiveLLMCredentials`, `findTaskToolMessage`, `AgentInvokeResult`) and the transcript-stringification helper already inlined in `guardrails.e2e.test.ts` and `memory.e2e.test.ts`. No new helpers, no production changes.
+The test reuses the existing e2e helpers (`createDefaultModelRuntime`, `hasLiveLLMCredentials`, `findToolMessage`, `AgentInvokeResult`) and the transcript-stringification helper already inlined in `guardrails.e2e.test.ts` and `memory.e2e.test.ts`. No new helpers, no production changes.
 
 ## User Stories
 
@@ -57,7 +57,7 @@ The test reuses the existing e2e helpers (`createDefaultModelRuntime`, `hasLiveL
 
 **Prior art in the codebase.**
 
-- `review.e2e.test.ts` — same `describe.skipIf` gate, same `createScaffoldedAgent` shape, same `parseTaskToolPayload(findTaskToolMessage(...))` pattern for inspecting `task` tool outputs.
+- `review.e2e.test.ts` — same `describe.skipIf` gate, same `createScaffoldedAgent` shape, same `findToolMessage(msgs, "task")` pattern for inspecting `task` tool outputs.
 - `subagents.e2e.test.ts` — proves the clarifier delegation works through the scaffolded agent.
 - `generative-ui.e2e.test.ts` — proves the product-generator delegation works and that `generativeUi: {}` is the right knob to enable that subagent.
 - `guardrails.e2e.test.ts` and `memory.e2e.test.ts` — supply the `stringifyMessageContent` / `transcriptOf` helper pattern this test reuses for transcript assertions.

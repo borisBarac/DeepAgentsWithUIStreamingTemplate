@@ -8,6 +8,7 @@
 - MultiUser support (Session executor + workers + stream for connections) - DEV Branch
 - Horizontal scaling for workers
 - Support to use ImageGeneration in the GeneratedUI elements (example procut cart with a image of product)
+- Horizontal scaling via workers
 
 ## Description
 
@@ -25,6 +26,10 @@ Deep Agent Template gives you:
 Product requests create or update reviewed product batches. Casual messages go to a small conversational agent and do not start the product workflow.
 
 ## Capabilities
+
+### Multi-user support
+- Anonymous-guest isolation via identity-scoped `(tenantId, userId, sessionId)` sessions, memory namespaces, and sandbox identity
+- Production routes through `BullMqAgentExecutor` (Redis Streams + worker process); `InlineAgentExecutor` remains for focused runner and telemetry tests behind the `AgentExecutor` seam
 
 ### Supervisor-Specialist Agent Architecture
 - One-call factory (`createScaffoldedAgent()`) producing a fully wired multi-agent system
@@ -91,7 +96,7 @@ Product requests create or update reviewed product batches. Casual messages go t
 
 ### Web Scraping (Linkloom MCP)
 - Camoufox browser via MCP server
-- Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`
+- Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`, `search_web`
 - Wired exclusively to the `researcher` subagent
 
 ### System Observability
@@ -138,7 +143,7 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **Web**: Next.js 16 (App Router), React 19
 - **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
 - **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
-- **Web Scraping**: `@boris.barac/linkloom` MCP server (Camoufox browser)
+- **Web Scraping**: LinkLoom MCP server (dedicated HTTP service, Camoufox browser)
 - **Image Gen**: Replicate SDK
 - **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
 - **Observability**: OpenTelemetry system tracing and metrics, plus LangSmith agent tracing
@@ -164,6 +169,14 @@ bun run web-app
 bun run agent-cli "Design a product card for a hiking backpack"
 bun run agent-cli --repl    # Interactive mode
 ```
+
+### LinkLoom MCP modes
+
+`docker compose --env-file .env -f infra/docker-compose.yml up --build` starts
+LinkLoom with the application stack. The
+Compose services use the internal `http://linkloom:3000/mcp` URL. Compose also
+publishes LinkLoom on host port `3001`, so inline/host development
+(`bun run web-app`) uses `LINKLOOM_MCP_URL=http://localhost:3001/mcp`.
 
 ## Environment Variables
 
@@ -193,6 +206,19 @@ bun run agent-cli --repl    # Interactive mode
 | `USE_FAKE_IMAGE_PROVIDER` | `true` (default) for stub, `false` for Replicate |
 | `REPLICATE_API_TOKEN` | Required when using real image generation |
 
+### LinkLoom MCP
+
+| Variable | Default | Description |
+|---|---|---|
+| `LINKLOOM_MCP_URL` | `http://localhost:3001/mcp` | Host-reachable streamable-HTTP MCP endpoint. Compose services use the internal `http://linkloom:3000/mcp` URL. |
+| `LINKLOOM_PORT` | `3001` | Host port published for the LinkLoom container. |
+| `PAGE_LOAD_TIMEOUT` | `10000` | Page-load timeout in milliseconds, passed to the LinkLoom container. |
+| `FRAME_TIMEOUT` | `5000` | Frame timeout in milliseconds, passed to the LinkLoom container. |
+| `PDF_DOWNLOAD_TIMEOUT` | `30000` | PDF download timeout in milliseconds, passed to the LinkLoom container. |
+| `PROXY_URL` | empty | Optional proxy URL passed to the LinkLoom container. |
+| `LINKLOOM_CPU` | `1.0` | Compose CPU limit for the LinkLoom container. |
+| `LINKLOOM_MEM` | `1g` | Compose memory limit for the LinkLoom container. |
+
 ## Scripts
 
 ```bash
@@ -201,6 +227,8 @@ bun run typecheck                     # TypeScript type checking
 bun run check                         # Biome lint + format
 bun run --filter @deep-agent-template/web-app build   # Next.js build
 bun run web-app                        # Start web dev server
+bun run worker                         # Worker (uses .env REDIS_URL)
+bun run worker:local                   # Worker vs host-exposed Docker Redis, concurrency=1 (see docs/horizontal-scaling.md)
 bun run agent-cli                      # CLI client
 bun run storybook                      # Storybook (port 6006)
 bun run smoke:langsmith                # Verify LangSmith tracing
@@ -209,6 +237,12 @@ bun run smoke:langsmith                # Verify LangSmith tracing
 ### Live E2E tests (opt-in, requires LLM credentials)
 
 ```bash
+# Worker round-trip: real Redis (testcontainer) + in-process BullMQ worker.
+# Cancellation + session-busy 409 run with Docker only; the product-workflow
+# happy path additionally needs RUN_LIVE_E2E=1 + LLM credentials.
+bun run --filter @deep-agent-template/web-app test:e2e
+
+# Core in-process suites (Python sandbox =42, LangSmith query) — kept opt-in.
 bun run --filter @deep-agent-template/core test:e2e
 ```
 

@@ -47,6 +47,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const executePython = createPythonSandboxTool({
   backend: createDockerSandboxBackend(),
+  singleUser: true,
   defaultResourceProfile: "sandbox-small",
 });
 
@@ -154,15 +155,15 @@ the truncation fields before assuming that stdout or stderr is complete.
 ## Reuse a running container
 
 The default backend starts a fresh container for every execution. For faster
-local startup, you can reuse the container defined in
-`packages/sandbox/infra/docker-compose.yml`.
+local startup, you can reuse the `sandbox` service defined in the root
+`infra/docker-compose.yml` (profile-gated).
 
-Run these commands from `packages/sandbox/infra`:
+Run these commands from the repo root:
 
 ```bash
-mkdir -p sandbox-workspace
-chmod 0777 sandbox-workspace
-docker compose up --detach sandbox
+mkdir -p .sandbox-workspace
+chmod 0777 .sandbox-workspace
+docker compose --env-file .env -f infra/docker-compose.yml --profile sandbox up --detach sandbox
 ```
 
 Then configure the backend with the matching host path:
@@ -173,7 +174,7 @@ import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 
 const backend = createDockerSandboxBackend({
   containerName: "python-sandbox",
-  workDirRoot: resolve("packages/sandbox/infra/sandbox-workspace"),
+  workDirRoot: resolve(".sandbox-workspace"),
 });
 ```
 
@@ -187,8 +188,38 @@ untrusted code or concurrent runs.
 Stop the reused container when finished:
 
 ```bash
-docker compose down
+docker compose --env-file .env -f infra/docker-compose.yml down
 ```
+
+## Let the app manage one reused container
+
+Use `createManagedDockerSandboxBackend()` when one process should own the
+container and its host workspace:
+
+```ts
+const backend = createManagedDockerSandboxBackend({
+  containerName: "web-app-sandbox-1234",
+  workspaceRoot: "/tmp/web-app-sandbox-1234",
+  image: "python:3.12-slim",
+  cpus: 2.5,
+  memory: "1280m",
+  maxConcurrency: 5,
+  queueCapacity: 25,
+});
+```
+
+The backend starts the container on its first execution. It runs later
+executions with `docker exec`. Call `await backend.dispose()` during process
+shutdown to remove the container and workspace.
+
+The queue uses FIFO order. By default, five executions can run and 25 can wait.
+A full queue returns retryable `resource_exhausted`. Cancelling a waiting
+request removes it from the queue.
+
+Resource profiles still control each execution's timeout, output limit, and
+artifact limit. The `cpus` and `memory` options apply to the whole container.
+Concurrent executions share those limits, the container user, PID namespace,
+and `/tmp`.
 
 ## Change the Python image
 
