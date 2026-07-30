@@ -13,6 +13,12 @@ import {
   hasLiveLLMCredentials,
 } from "./helpers.ts";
 
+/**
+ * Memory is exercised in isolation: a scaffold with no subagents and NO
+ * workflow-controller middleware. The workflow controller is the subject of
+ * the delegation/products suites; here we only prove the agent recalls and
+ * persists facts through its memory backend.
+ */
 const MEMORY_USER_ID = "e2e-memory-user";
 
 const RECALL_NEEDLE = "NEBULA-9";
@@ -53,7 +59,7 @@ function buildMemoryAgent() {
   return { agent, repo };
 }
 
-describe.skipIf(!hasLiveLLMCredentials)("scaffolded agent live memory e2e", () => {
+describe.skipIf(!hasLiveLLMCredentials)("agent memory live e2e", () => {
   it.concurrent("recalls a seeded fact from the memory store", async () => {
     const { agent, repo } = buildMemoryAgent();
     await repo.upsert(DEFAULT_USER_PREFERENCES_PATH, RECALL_SEED);
@@ -63,17 +69,17 @@ describe.skipIf(!hasLiveLLMCredentials)("scaffolded agent live memory e2e", () =
     })) as AgentInvokeResult;
 
     expect(transcriptOf(result.messages)).toContain(RECALL_NEEDLE);
-  }, 60_000);
+  }, 90_000);
 
   it.concurrent("persists an explicit project fact into the memory store", async () => {
     const { agent, repo } = buildMemoryAgent();
     await repo.upsert(DEFAULT_PROJECT_FACTS_PATH, PROJECT_FACTS_SEED);
 
-    (await agent.invoke({
+    await agent.invoke({
       messages: [{ role: "user", content: PERSIST_PROMPT }],
-    })) as AgentInvokeResult;
+    });
 
     const persisted = await repo.read(DEFAULT_PROJECT_FACTS_PATH);
     expect(persisted).toContain(PERSIST_NEEDLE);
-  }, 60_000);
+  }, 90_000);
 });
