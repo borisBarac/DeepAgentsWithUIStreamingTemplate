@@ -11,6 +11,7 @@ import {
   isSessionBusyError,
   makeSessionBusyError,
 } from "../../../src/server/worker/bullmq-executor.ts";
+import { createAgentCancellationHandler } from "./cancel/route.ts";
 import { createAgentRequestHandler } from "./route.ts";
 
 const SUCCESS_RESULT: ExecutionResult = {
@@ -39,6 +40,9 @@ function fakeExecutor(events: ExecutionEvent[]): AgentExecutor {
       };
       return Promise.resolve(handle);
     },
+    async cancel() {
+      return { status: "requested" };
+    },
   };
 }
 
@@ -46,6 +50,9 @@ function fakeBusyExecutor(activeRunId: string): AgentExecutor {
   return {
     execute(_request: ExecutionRequest, _signal: AbortSignal): Promise<AgentExecutionHandle> {
       return Promise.reject(makeSessionBusyError(activeRunId));
+    },
+    async cancel() {
+      return { status: "unknown" };
     },
   };
 }
@@ -64,7 +71,7 @@ describe("createAgentRequestHandler", () => {
     const handler = createAgentRequestHandler(fakeExecutor([]));
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi" }),
+        body: JSON.stringify({ message: "hi", runId: "r1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -76,7 +83,7 @@ describe("createAgentRequestHandler", () => {
     const handler = createAgentRequestHandler(fakeExecutor([]));
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ sessionId: "s1" }),
+        body: JSON.stringify({ runId: "r1", sessionId: "s1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -94,7 +101,7 @@ describe("createAgentRequestHandler", () => {
     const handler = createAgentRequestHandler(fakeExecutor(events));
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi", sessionId: "s1" }),
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -112,7 +119,7 @@ describe("createAgentRequestHandler", () => {
     const handler = createAgentRequestHandler(fakeBusyExecutor("run-active-1"));
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi", sessionId: "s1" }),
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -128,11 +135,14 @@ describe("createAgentRequestHandler", () => {
       execute(): Promise<AgentExecutionHandle> {
         return Promise.reject(new Error("Redis connection refused"));
       },
+      async cancel() {
+        return { status: "unknown" };
+      },
     };
     const handler = createAgentRequestHandler(executor);
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi", sessionId: "s1" }),
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -145,7 +155,7 @@ describe("createAgentRequestHandler", () => {
     const handler = createAgentRequestHandler(fakeExecutor(events));
     const response = await handler(
       new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi", sessionId: "s1" }),
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -154,6 +164,127 @@ describe("createAgentRequestHandler", () => {
     const updates = await readNdjson(response);
     expect(updates).toEqual([]);
   });
+
+  it("aborts the executor when response delivery is cancelled in debug mode", async () => {
+    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = "true";
+    let aborted = false;
+    const executor = fakeExecutor([]);
+    executor.execute = async (_request, receivedSignal) => {
+      receivedSignal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return {
+        events: {
+          async *[Symbol.asyncIterator]() {
+            await new Promise<never>(() => undefined);
+          },
+        },
+        result: new Promise<never>(() => undefined),
+      };
+    };
+    const response = await createAgentRequestHandler(executor)(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    await response.body?.cancel();
+    expect(aborted).toBe(true);
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
+  });
+
+  it("aborts the executor from request.signal in debug mode", async () => {
+    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = "true";
+    const controller = new AbortController();
+    let aborted = false;
+    const executor = fakeExecutor([]);
+    executor.execute = async (_request, receivedSignal) => {
+      receivedSignal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return {
+        events: {
+          async *[Symbol.asyncIterator]() {
+            await new Promise<never>(() => undefined);
+          },
+        },
+        result: new Promise<never>(() => undefined),
+      };
+    };
+    await createAgentRequestHandler(executor)(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        signal: controller.signal,
+      }),
+    );
+    controller.abort();
+    expect(aborted).toBe(true);
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
+  });
+
+  it("does not abort the executor when response delivery is cancelled outside debug mode", async () => {
+    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = "false";
+    let aborted = false;
+    const executor = fakeExecutor([]);
+    executor.execute = async (_request, signal) => {
+      signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      return {
+        events: {
+          async *[Symbol.asyncIterator]() {
+            await new Promise<never>(() => undefined);
+          },
+        },
+        result: new Promise<never>(() => undefined),
+      };
+    };
+    const response = await createAgentRequestHandler(executor)(
+      new Request("http://localhost/api/agent", {
+        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    await response.body?.cancel();
+    expect(aborted).toBe(false);
+    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
+  });
+});
+
+describe("createAgentCancellationHandler", () => {
+  for (const [result, expectedStatus] of [
+    [{ status: "requested" }, 202],
+    [{ status: "already_requested" }, 202],
+    [{ status: "unknown" }, 404],
+    [{ status: "terminal" }, 409],
+  ] as const) {
+    it(`returns ${expectedStatus} for ${result.status}`, async () => {
+      const executor: AgentExecutor = {
+        async cancel() {
+          return result;
+        },
+        async execute() {
+          throw new Error("unused");
+        },
+      };
+      const response = await createAgentCancellationHandler(executor)(
+        new Request("http://localhost/api/agent/cancel", {
+          body: JSON.stringify({ runId: "r1" }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        }),
+      );
+      expect(response.status).toBe(expectedStatus);
+      expect((await response.json()).status).toBe(result.status);
+    });
+  }
 });
 
 describe("isSessionBusyError + makeSessionBusyError", () => {

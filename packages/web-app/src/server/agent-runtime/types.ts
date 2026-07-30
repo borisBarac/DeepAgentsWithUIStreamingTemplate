@@ -49,6 +49,10 @@ export type AgentExecutionHandle = {
   readonly result: Promise<ExecutionResult>;
 };
 
+export type CancellationResult =
+  | { readonly status: "requested" | "already_requested" }
+  | { readonly status: "unknown" | "terminal" };
+
 export type SessionRecord = {
   readonly failure: InteractionStreamFailure | null;
   readonly history: readonly unknown[];
@@ -84,4 +88,5 @@ export type AgentExecutor = {
     request: ExecutionRequest,
     signal: AbortSignal,
   ): AgentExecutionHandle | Promise<AgentExecutionHandle>;
+  cancel(runId: string): Promise<CancellationResult>;
 };

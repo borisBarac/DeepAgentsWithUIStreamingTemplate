@@ -284,15 +284,16 @@ export async function runWorkerJob(options: {
         structuredOutput: null,
         finalText: "",
       };
-      await eventStream.publishError(
-        request.runId,
-        error instanceof Error ? error.message : String(error),
-      );
+      if (result.outcome === "cancelled") {
+        await eventStream.publishLifecycle(request.runId, "cancelled");
+      } else {
+        await eventStream.publishError(
+          request.runId,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
       await eventStream.publishResult(request.runId, result);
-      await runState.recordFailed(
-        request.runId,
-        error instanceof Error ? error.message : String(error),
-      );
+      await recordTerminalState(runState, request, result);
       return result;
     } finally {
       refresh.stop();

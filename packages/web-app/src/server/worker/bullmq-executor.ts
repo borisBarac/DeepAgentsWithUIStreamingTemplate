@@ -4,6 +4,7 @@ import type { AgentSource, AsyncEventQueue } from "../agent-runtime/turn-runner.
 import type {
   AgentExecutionHandle,
   AgentExecutor,
+  CancellationResult,
   ExecutionEvent,
   ExecutionRequest,
   ExecutionResult,
@@ -97,6 +98,17 @@ export class BullMqAgentExecutor implements AgentExecutor {
 
     const handle = this.#projectHandle(request, signal, acquire);
     return handle;
+  }
+
+  async cancel(runId: string): Promise<CancellationResult> {
+    const state = await this.runState.get(runId);
+    if (!state) return { status: "unknown" };
+    if (state.status === "completed" || state.status === "failed" || state.status === "cancelled") {
+      return { status: "terminal" };
+    }
+    if (await this.cancellation.isCancelled(runId)) return { status: "already_requested" };
+    await this.cancellation.cancel(runId);
+    return { status: "requested" };
   }
 
   #projectHandle(

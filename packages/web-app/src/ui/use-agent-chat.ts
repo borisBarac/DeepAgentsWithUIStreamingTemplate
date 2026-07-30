@@ -21,6 +21,8 @@ import {
   reduceMainAgentActivity,
 } from "./session-model.ts";
 
+const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG === "true";
+
 export type {
   DisplayAgentActivity,
   DisplayMessage,
@@ -56,11 +58,28 @@ export type AgentChat = {
   error: string | null;
   loading: boolean;
   canSubmit: boolean;
+  stop: () => Promise<void>;
   setInput: (value: string) => void;
   submitAnswer: (questionId: string, answer: string) => void;
   submitMessage: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   submitText: (rawMessage: string) => Promise<void>;
 };
+
+export async function stopActiveRun(
+  runId: string | null,
+  reader: ReadableStreamDefaultReader<Uint8Array> | null,
+): Promise<void> {
+  if (!runId) return;
+  try {
+    await fetch("/api/agent/cancel", {
+      body: JSON.stringify({ runId }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+  } finally {
+    await reader?.cancel().catch(() => undefined);
+  }
+}
 
 export function useAgentChat(): AgentChat {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -74,6 +93,8 @@ export function useAgentChat(): AgentChat {
   const [questionAnswers, setQuestionAnswers] = useState<Map<string, string>>(() => new Map());
   const sessionIdRef = useRef<string>(createId());
   const loadingRef = useRef(false);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const runIdRef = useRef<string | null>(null);
 
   const hasOpenQuestions = openQuestionIds.size > 0;
   const allOpenQuestionsAnswered = [...openQuestionIds].every((id) =>
@@ -108,6 +129,8 @@ export function useAgentChat(): AgentChat {
     }
 
     loadingRef.current = true;
+    const runId = crypto.randomUUID();
+    runIdRef.current = runId;
     setMessages((current) => [...current, { role: "user", content: message, id: createId() }]);
     setError(null);
     setInput("");
@@ -184,8 +207,9 @@ export function useAgentChat(): AgentChat {
     try {
       const response = await fetch("/api/agent", {
         body: JSON.stringify({
-          includeSubagentActivity: true,
+          includeSubagentActivity: AGENT_DEBUG,
           message,
+          runId,
           sessionId: sessionIdRef.current,
         }),
         headers: { "Content-Type": "application/json" },
@@ -197,6 +221,7 @@ export function useAgentChat(): AgentChat {
       }
 
       const reader = response.body.getReader();
+      readerRef.current = reader;
       const decoder = new TextDecoder();
       let buffered = "";
 
@@ -229,9 +254,17 @@ export function useAgentChat(): AgentChat {
       finishStreamingAssistant();
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      readerRef.current = null;
+      if (runIdRef.current === runId) runIdRef.current = null;
       loadingRef.current = false;
       setLoading(false);
     }
+  }, []);
+
+  const stop = useCallback(async () => {
+    const runId = runIdRef.current;
+    if (!runId || !loadingRef.current) return;
+    await stopActiveRun(runId, readerRef.current);
   }, []);
 
   const submitAnswer = useCallback((questionId: string, answer: string) => {
@@ -277,6 +310,7 @@ export function useAgentChat(): AgentChat {
     error,
     loading,
     canSubmit,
+    stop,
     setInput,
     submitAnswer,
     submitMessage,

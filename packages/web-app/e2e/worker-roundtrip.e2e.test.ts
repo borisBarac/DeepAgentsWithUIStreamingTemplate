@@ -48,10 +48,14 @@ describe("worker round-trip (Redis + BullMQ)", () => {
     stack = await startWorkerStack({ agentSource: () => hangingAgent(), concurrency: 1 });
 
     const controller = new AbortController();
-    const handle = await stack.executor.execute(
-      buildRequest({ sessionId: "cancel-test", content: "hang" }),
-      controller.signal,
+    const request = buildRequest({ sessionId: "cancel-test", content: "hang" });
+    await stack.services.sessionStore.commitSession(
+      request.identity,
+      request.sessionId,
+      { failure: null, history: [{ content: "prior", role: "user" }], structuredOutput: null },
+      0,
     );
+    const handle = await stack.executor.execute(request, controller.signal);
 
     const drained = drainHandle(handle);
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -59,6 +63,23 @@ describe("worker round-trip (Redis + BullMQ)", () => {
 
     const result = await drained;
     expect(result.result.outcome).toBe("cancelled");
+    expect(
+      await stack.services.sessionStore.loadSession(request.identity, request.sessionId),
+    ).toEqual({
+      record: {
+        failure: null,
+        history: [{ content: "prior", role: "user" }],
+        structuredOutput: null,
+      },
+      version: 1,
+    });
+    expect(
+      await stack.services.lock.currentHolder(
+        request.identity.tenantId,
+        request.identity.userId,
+        request.sessionId,
+      ),
+    ).toBeNull();
   });
 
   testIf("returns 409 for a busy session", async () => {

@@ -18,6 +18,8 @@ import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-c
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
 
+const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG === "true";
+
 const JsonRenderPreview = dynamic(
   () => import("../src/ui/catalog.tsx").then((module) => module.JsonRenderPreview),
   {
@@ -292,6 +294,7 @@ export function AgentWorkspace() {
     error,
     loading,
     canSubmit,
+    stop,
     setInput,
     submitAnswer,
     submitMessage,
@@ -434,9 +437,15 @@ export function AgentWorkspace() {
             <span aria-live="polite" className="sr-only">
               {loading ? "Processing" : "Ready"}
             </span>
-            <button disabled={!canSubmit} type="submit">
-              Send
-            </button>
+            {loading ? (
+              <button onClick={() => void stop()} type="button">
+                Stop
+              </button>
+            ) : (
+              <button disabled={!canSubmit} type="submit">
+                Send
+              </button>
+            )}
           </div>
           <p className="composer-hint">
             <kbd>{SHORTCUT_KEY}</kbd>+<kbd>Enter</kbd> to send
@@ -465,7 +474,7 @@ export function AgentWorkspace() {
         </div>
       </section>
 
-      <AgentActivityPanel activity={agentActivity} />
+      {AGENT_DEBUG ? <AgentActivityPanel activity={agentActivity} /> : null}
 
       {requestTarget
         ? createPortal(

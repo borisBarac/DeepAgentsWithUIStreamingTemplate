@@ -189,6 +189,24 @@ describe("BullMqAgentExecutor", () => {
     expect(result.outcome).toBe("cancelled");
   });
 
+  it("requests cancellation once and reports terminal or unknown runs", async () => {
+    const request = buildRequest();
+    const handle = await executor.execute(request, new AbortController().signal);
+    expect(await executor.cancel(request.runId)).toEqual({ status: "requested" });
+    expect(await executor.cancel(request.runId)).toEqual({ status: "already_requested" });
+    await executor.runState.recordCancelled(request.runId);
+    expect(await executor.cancel(request.runId)).toEqual({ status: "terminal" });
+    expect(await executor.cancel("unknown-run")).toEqual({ status: "unknown" });
+    await eventStream.publishResult(request.runId, {
+      outcome: "cancelled",
+      failure: null,
+      history: [],
+      structuredOutput: null,
+      finalText: "",
+    });
+    await handle.result;
+  });
+
   it("releases the lock when enqueue fails so the session is not wedged", async () => {
     // Simulate BullMQ rejecting the enqueue (Redis hiccup, etc.).
     queue.throwOnAdd = new Error("enqueue boom");
