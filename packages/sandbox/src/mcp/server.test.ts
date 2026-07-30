@@ -76,4 +76,111 @@ describe("sandbox MCP server", () => {
     ]);
     await Promise.all([client.close(), server.close()]);
   });
+
+  it("returns an internal-error result when backend execution throws", async () => {
+    const response = await callTool({
+      name: "fake",
+      capabilities: { isolation: "none", supportsArtifacts: false, supportsAbort: false },
+      async execute() {
+        throw new Error("backend unavailable");
+      },
+    });
+
+    expect(publicResult(response)).toMatchObject({
+      executionId: expect.any(String),
+      status: "internal_error",
+      exitCode: null,
+      startedAt: expect.any(String),
+      finishedAt: expect.any(String),
+      stdout: "",
+      stderr: "",
+      failureClass: "internal_error",
+      failureMessage: "backend unavailable",
+      retryable: false,
+      resourceProfile: "sandbox-small",
+    });
+  });
+
+  it("returns an internal-error result for preflight and cleanup failures", async () => {
+    for (const failureMessage of ["preflight failed", "cleanup failed"]) {
+      const response = await callTool({
+        name: "fake",
+        capabilities: { isolation: "none", supportsArtifacts: false, supportsAbort: false },
+        async execute() {
+          throw failureMessage;
+        },
+      });
+
+      expect(publicResult(response)).toMatchObject({
+        status: "internal_error",
+        failureClass: "internal_error",
+        failureMessage,
+        stdout: "",
+        stderr: "",
+      });
+    }
+  });
+
+  it("returns an internal-error result when result projection or serialization throws", async () => {
+    const projectionResponse = await callTool({
+      name: "fake",
+      capabilities: { isolation: "none", supportsArtifacts: false, supportsAbort: false },
+      async execute() {
+        return {
+          get artifacts(): never {
+            throw new Error("post-run collection failed");
+          },
+        } as unknown as SandboxResult;
+      },
+    });
+    const serializationResponse = await callTool({
+      name: "fake",
+      capabilities: { isolation: "none", supportsArtifacts: false, supportsAbort: false },
+      async execute() {
+        return {
+          ...result,
+          stdout: {
+            toJSON: () => {
+              throw new Error("result serialization failed");
+            },
+          },
+        } as unknown as SandboxResult;
+      },
+    });
+
+    expect(publicResult(projectionResponse)).toMatchObject({
+      status: "internal_error",
+      failureClass: "internal_error",
+      failureMessage: "post-run collection failed",
+      stdout: "",
+      stderr: "",
+    });
+    expect(publicResult(serializationResponse)).toMatchObject({
+      status: "internal_error",
+      failureClass: "internal_error",
+      failureMessage: "result serialization failed",
+      stdout: "",
+      stderr: "",
+    });
+  });
 });
+
+async function callTool(backend: SandboxBackend) {
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "0.0.0" });
+  const server = createSandboxMcpServer({ backend });
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+  try {
+    return await client.callTool({ name: "execute_python", arguments: { code: "print('done')" } });
+  } finally {
+    await Promise.all([client.close(), server.close()]);
+  }
+}
+
+function publicResult(response: unknown) {
+  const content = (response as { content?: unknown }).content;
+  if (!Array.isArray(content) || content[0]?.type !== "text") {
+    throw new Error("Expected a text tool response.");
+  }
+  return JSON.parse(content[0].text) as Record<string, unknown>;
+}
