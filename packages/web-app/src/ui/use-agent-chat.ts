@@ -21,7 +21,7 @@ import {
   reduceMainAgentActivity,
 } from "./session-model.ts";
 
-const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG === "true";
+const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG !== "false";
 
 export type {
   DisplayAgentActivity,

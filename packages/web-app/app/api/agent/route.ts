@@ -138,7 +138,7 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 function isAgentDebugEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_AGENT_DEBUG === "true";
+  return process.env.NEXT_PUBLIC_AGENT_DEBUG !== "false";
 }
 
 function connectDebugDisconnect(

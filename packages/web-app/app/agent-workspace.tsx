@@ -18,7 +18,7 @@ import type { DisplayAgentActivity, DisplayMessage } from "../src/ui/use-agent-c
 import { useAgentChat } from "../src/ui/use-agent-chat.ts";
 import { useStickyBottomScroll } from "../src/ui/use-sticky-bottom-scroll.ts";
 
-const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG === "true";
+const AGENT_DEBUG = process.env.NEXT_PUBLIC_AGENT_DEBUG !== "false";
 
 const JsonRenderPreview = dynamic(
   () => import("../src/ui/catalog.tsx").then((module) => module.JsonRenderPreview),
