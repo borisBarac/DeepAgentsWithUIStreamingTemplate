@@ -6,6 +6,7 @@ export const GUEST_COOKIE_NAME = "guest_identity";
 export const GUEST_STATE_TTL_SECONDS = 1_800;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+const DEFAULT_GUEST_IDENTITY_SECRET = "deep-agent-template-guest-identity-default-20260731-v1";
 
 export type ResolvedGuestIdentity = {
   readonly identity: ExecutionIdentity;
@@ -14,8 +15,7 @@ export type ResolvedGuestIdentity = {
 
 function secret(): string {
   const value = process.env.GUEST_IDENTITY_SECRET?.trim();
-  if (!value) throw new Error("GUEST_IDENTITY_SECRET is required.");
-  return value;
+  return value || DEFAULT_GUEST_IDENTITY_SECRET;
 }
 
 function signature(uuid: string): string {
