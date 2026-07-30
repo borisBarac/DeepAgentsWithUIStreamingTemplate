@@ -1,39 +1,29 @@
-import path from "node:path";
 import {
   connectLinkloomResearchTools,
+  connectSandboxTools,
   type LinkloomResearchConnection,
+  type SandboxMcpConnection,
 } from "@deep-agent-template/core";
 import { createScaffoldedAgent, type DeepAgent } from "@deep-agent-template/core/agent";
 import { catalogPrompt } from "@deep-agent-template/core/generative-ui";
-import {
-  createFileSystemMemoryStore,
-  createMemoryRepository,
-  createMemorySeedFiles,
-} from "@deep-agent-template/core/memory";
+import { createMemoryRepository, createMemorySeedFiles } from "@deep-agent-template/core/memory";
 import { createModelRuntimeFromEnv } from "@deep-agent-template/core/models";
 import { createImageGenerationServiceFromEnv } from "@deep-agent-template/image-gen";
+import type { BaseStore } from "@langchain/langgraph";
 
 import type { ExecutionIdentity } from "./agent-runtime/types.ts";
+import { getSharedRedis, resolveRedisOptions } from "./redis/client.ts";
+import { RedisMemoryStore } from "./redis/redis-memory-store.ts";
 
-function resolveWebAppDirectory(): string {
-  const cwd = process.cwd();
-  return path.basename(cwd) === "web-app" && path.basename(path.dirname(cwd)) === "packages"
-    ? cwd
-    : path.resolve(cwd, "packages/web-app");
-}
-
-function resolveMemoryRoot(): string {
-  // This local file store is intended for the single-user template only.
-  // In production, the application bundle may be read-only, and several server
-  // processes may race while creating the seed files below. Use durable object
-  // storage, such as a bucket with a separate prefix for each user's memory,
-  // and create missing seed files atomically.
-  const configuredRoot = process.env.WEB_APP_MEMORY_DIR?.trim() || ".data/memory";
-  return path.resolve(resolveWebAppDirectory(), configuredRoot);
+async function resolveMemoryStore(): Promise<BaseStore> {
+  if (testMemoryStore) return testMemoryStore;
+  const { keyPrefix } = resolveRedisOptions();
+  const client = await getSharedRedis();
+  return new RedisMemoryStore({ client, keyPrefix });
 }
 
 export async function createAgentProvider(): Promise<DeepAgent> {
-  const store = createFileSystemMemoryStore({ rootDir: resolveMemoryRoot() });
+  const store = await resolveMemoryStore();
   const repository = createMemoryRepository({ store });
 
   await Promise.all(
@@ -44,14 +34,20 @@ export async function createAgentProvider(): Promise<DeepAgent> {
     }),
   );
   const modelRuntime = createModelRuntimeFromEnv({});
-  const linkloom = await resolveLinkloomConnection();
+  const [linkloom, sandbox] = await Promise.all([
+    resolveLinkloomConnection(),
+    resolveSandboxConnection(),
+  ]);
 
   return createScaffoldedAgent({
     generativeUi: { catalogPrompt },
     guardrails: false,
     imageGenerationService: createImageGenerationServiceFromEnv(),
     modelRuntime,
-    ...(linkloom?.tools.length ? { additionalResearcherTools: linkloom.tools } : {}),
+    ...(linkloom?.tools.length || sandbox?.tools.length
+      ? { additionalResearcherTools: [...(linkloom?.tools ?? []), ...(sandbox?.tools ?? [])] }
+      : {}),
+    ...(sandbox?.tools.length ? { additionalAnalystTools: sandbox.tools } : {}),
     store,
   });
 }
@@ -93,6 +89,34 @@ export async function disposeLinkloomConnection(): Promise<void> {
   });
 }
 
+// One streamable-HTTP sandbox connection per process. Like Linkloom, sandbox
+// discovery failures degrade the worker rather than preventing agent startup.
+let sandboxConnectionPromise: Promise<SandboxMcpConnection | null> | null = null;
+
+async function resolveSandboxConnection(): Promise<SandboxMcpConnection | null> {
+  if (sandboxConnectionPromise) return sandboxConnectionPromise;
+  sandboxConnectionPromise = (async () => {
+    try {
+      return await connectSandboxTools();
+    } catch (error) {
+      console.error(
+        "[agent-provider] Sandbox MCP unavailable; starting without Python tools.",
+        error,
+      );
+      return null;
+    }
+  })();
+  return sandboxConnectionPromise;
+}
+
+export async function disposeSandboxConnection(): Promise<void> {
+  const pending = sandboxConnectionPromise;
+  sandboxConnectionPromise = null;
+  if (!pending) return;
+  const connection = await pending.catch(() => null);
+  await connection?.close().catch(() => {});
+}
+
 // Worker-callable factory. Single-user template: the identity is ignored —
 // every worker process serves the same single user. The agent is built once
 // and cached for the process lifetime so the tool/store graph is not rebuilt
@@ -108,12 +132,17 @@ export async function createAgentForIdentity(_identity: ExecutionIdentity): Prom
   return cachedWorkerAgent;
 }
 
-// No shared sandbox backend in the single-user template; no-op for the worker
-// shutdown sequence.
-export async function disposeSandboxBackend(): Promise<void> {}
-
 export function __resetAgentCacheForTest(): void {
   cachedWorkerAgent = null;
+}
+
+// Test-only override for the memory store. Pass a BaseStore (e.g. a
+// FakeRedis-backed RedisMemoryStore) to bypass the real Redis client, or
+// `undefined` to restore production resolution.
+let testMemoryStore: BaseStore | null = null;
+
+export function __setMemoryStoreForTest(store: BaseStore | null | undefined): void {
+  testMemoryStore = store ?? null;
 }
 
 // Inject a Linkloom connection (or `null` for degraded mode) for tests, or pass
@@ -122,4 +151,10 @@ export function __setLinkloomConnectionForTest(
   connection: LinkloomResearchConnection | null | undefined,
 ): void {
   linkloomConnectionPromise = connection === undefined ? null : Promise.resolve(connection);
+}
+
+export function __setSandboxConnectionForTest(
+  connection: SandboxMcpConnection | null | undefined,
+): void {
+  sandboxConnectionPromise = connection === undefined ? null : Promise.resolve(connection);
 }

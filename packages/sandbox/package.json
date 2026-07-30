@@ -4,14 +4,23 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test"
+    "test": "bun test",
+    "mcp": "bun run src/mcp/cli.ts"
+  },
+  "bin": {
+    "sandbox-mcp": "./src/mcp/cli.ts"
   },
   "exports": {
     ".": "./src/index.ts",
+    "./mcp": "./src/mcp/index.ts",
     "./test": "./src/backend-test-harness.ts",
     "./backend-helpers": "./src/backends/backend-helpers.ts",
     "./envelope": "./src/envelope.ts",
     "./profiles": "./src/profiles.ts"
   },
-  "types": "./src/index.ts"
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  }
 }

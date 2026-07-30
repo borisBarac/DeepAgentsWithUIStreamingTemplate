@@ -1,5 +1,5 @@
 /**
- * Agent-facing sandbox tools.
+ * Sandbox re-exports.
  *
  * Code-execution contracts and backends live in
  * `@deep-agent-template/sandbox`. They are re-exported here to preserve the
@@ -26,7 +26,3 @@ export {
   type SandboxResult,
   type SandboxStatus,
 } from "@deep-agent-template/sandbox";
-export {
-  type CreatePythonSandboxToolOptions,
-  createPythonSandboxTool,
-} from "./tool.ts";

@@ -1,7 +1,11 @@
 import type { AgentInputMessage } from "@deep-agent-template/core/interaction-stream";
 import { Worker } from "bullmq";
 
-import { createAgentForIdentity, disposeSandboxBackend } from "../agent-provider.ts";
+import {
+  createAgentForIdentity,
+  disposeLinkloomConnection,
+  disposeSandboxConnection,
+} from "../agent-provider.ts";
 import { buildTurnMessages } from "../agent-runtime/messages.ts";
 import {
   context,
@@ -113,7 +117,7 @@ export async function createAgentWorker(
 
   const close = async () => {
     await worker.close();
-    await disposeSandboxBackend();
+    await Promise.all([disposeLinkloomConnection(), disposeSandboxConnection()]);
   };
 
   return {

@@ -112,12 +112,21 @@ export {
 } from "./image-designer/index.ts";
 export {
   connectLinkloomResearchTools,
+  connectSandboxTools,
   createLinkloomMcpClient,
+  createSandboxConnection,
+  createSandboxMcpClient,
   DEFAULT_LINKLOOM_MCP_URL,
+  DEFAULT_SANDBOX_MCP_DISCOVERY_TIMEOUT,
+  DEFAULT_SANDBOX_MCP_URL,
   LINKLOOM_MCP_SERVER_NAME,
   LINKLOOM_MCP_TOOL_NAMES,
   type LinkloomMcpOptions,
   type LinkloomResearchConnection,
+  SANDBOX_MCP_SERVER_NAME,
+  SANDBOX_MCP_TOOL_NAMES,
+  type SandboxMcpConnection,
+  type SandboxMcpOptions,
 } from "./mcp/index.ts";
 export {
   BucketMemoryStore,
@@ -244,9 +253,7 @@ export {
 } from "./review/index.ts";
 export {
   CONTAINER_WORKSPACE_PATH,
-  type CreatePythonSandboxToolOptions,
   createDockerSandboxBackend,
-  createPythonSandboxTool,
   DEFAULT_PYTHON_IMAGE,
   DEFAULT_RESOURCE_PROFILE,
   type DockerSandboxBackendOptions,

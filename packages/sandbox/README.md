@@ -1,54 +1,23 @@
 # Sandbox runtime
 
 Isolated Python execution for the Deep Agent runtime. Docker is the default
-implementation behind the `SandboxBackend` interface. Agent-facing LangChain
-tool definitions remain in `@deep-agent-template/core`.
+implementation behind the `SandboxBackend` interface. Agent-facing tools are
+served through MCP as `execute_python`.
 
 The current runtime is single-user. It does not provide multi-tenant isolation,
 network access, package installation, GPU support, or a policy engine.
 
 ## Quick start
 
-The scaffolded agent wires `execute_python` to the `researcher` and `analyst`
-subagents by default. The auto-added `general-purpose` subagent does **not**
-receive `execute_python` — it inherits the supervisor's tools, and the sandbox
-tool is scoped to specific subagents only. Pass a custom backend to swap the
-implementation:
+Run the HTTP MCP server and point workers at it. The web-app injects
+`execute_python` into the `researcher` and `analyst` subagents.
 
 ```ts
-import { createScaffoldedAgent } from "@deep-agent-template/core";
-import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
-
-const agent = createScaffoldedAgent({
-  pythonSandboxBackend: createDockerSandboxBackend(),
-});
+SANDBOX_MCP_URL=http://localhost:3010/mcp bun run --filter @deep-agent-template/sandbox mcp
 ```
 
-To wire the tool yourself — for a custom role, or to replace the default
-array — build it directly and pass it through `subagentOverrides`:
-
-```ts
-import {
-  createPythonSandboxTool,
-  createScaffoldedAgent,
-} from "@deep-agent-template/core";
-import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
-
-const pythonTool = createPythonSandboxTool({
-  backend: createDockerSandboxBackend(),
-});
-
-const agent = createScaffoldedAgent({
-  subagentOverrides: {
-    analyst: { tools: [pythonTool] },
-  },
-});
-```
-
-The tool name is `execute_python`, so callers can opt into an
-`interruptOn.execute_python` rule when they want approval prompts for Python
-execution. The name avoids colliding with the built-in `execute` (shell) tool
-reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`.
+Use `--transport stdio` for stdio clients. The MCP result omits artifacts and
+backend metadata, returning execution status, output, truncation, and timing.
 
 ## Backends
 
@@ -192,8 +161,8 @@ file + one test file. The tool layer never needs to change.
 
 4. **Export the factory** from `backends/index.ts`.
 
-That's it — `createPythonSandboxTool({ backend: createE2bSandboxBackend() })`
-now works without any changes to the core tool package or runtime contracts.
+That's it — wire `createE2bSandboxBackend()` into `createSandboxMcpServer()`
+without changing the MCP tool or runtime contracts.
 
 ## File layout
 

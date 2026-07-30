@@ -13,7 +13,6 @@ import type { GenerativeUiOptions } from "../generative-ui/index.ts";
 import type { ModelRuntime } from "../models/index.ts";
 import type { PromptLoader } from "../prompts/index.ts";
 import type { ReviewConfig } from "../review/index.ts";
-import type { SandboxBackend } from "../sandbox/index.ts";
 
 export type SpecialistRole =
   | "researcher"
@@ -58,9 +57,9 @@ export type DefaultSubagentOverride = Omit<Partial<SubAgent>, "responseFormat">;
 
 export type CreateDefaultSubagentCatalogOptions = {
   additionalResearcherTools?: NonNullable<SubAgent["tools"]>;
+  additionalAnalystTools?: NonNullable<SubAgent["tools"]>;
   imageGenerationService?: ImageGenerationServiceContract;
   modelRuntime?: ModelRuntime;
-  pythonSandboxBackend?: SandboxBackend;
   generativeUi?: GenerativeUiOptions;
   researcher?: DefaultSubagentOverride;
   analyst?: DefaultSubagentOverride;

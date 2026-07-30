@@ -1,86 +1,59 @@
 import { describe, expect, it } from "bun:test";
-
+import { createSandboxMcpServer, startSandboxHttpServer } from "@deep-agent-template/sandbox";
 import {
+  connectSandboxTools,
   createDockerSandboxBackend,
-  createPythonSandboxTool,
-  createScaffoldedAgent,
   type SandboxResult,
 } from "../src/index.ts";
-import {
-  type AgentInvokeResult,
-  createDefaultModelRuntime,
-  hasLiveLLMCredentials,
-} from "./helpers.ts";
 
 const PYTHON_IMAGE = process.env.SANDBOX_TEST_PYTHON_IMAGE ?? "python:3.12-alpine";
 const RESULT_MARKER = "SANDBOX_E2E_RESULT=42";
 const DOCKER_AVAILABLE = await checkDockerAvailable();
 
-const EXECUTION_PROMPT = [
-  "Use the execute_python tool to run Python code in the sandbox.",
-  `The Python code must print exactly ${RESULT_MARKER}.`,
-  "Do not calculate or simulate the result yourself; you must call the tool before answering.",
-].join("\n");
-
-type ExecuteToolMessage = {
-  name?: string;
-  content?: unknown;
-  tool_call_id?: string;
-};
-
-describe.skipIf(!hasLiveLLMCredentials || !DOCKER_AVAILABLE)(
-  "scaffolded agent live Python sandbox execution",
-  () => {
-    it("uses deepseek-v4-flash to execute Python through the sandbox tool", async () => {
-      const execute = createPythonSandboxTool({
+describe.skipIf(!DOCKER_AVAILABLE)("sandbox MCP execution", () => {
+  it("executes Python through the MCP tool", async () => {
+    const http = await startSandboxHttpServer(
+      createSandboxMcpServer({
         backend: createDockerSandboxBackend({ pythonImage: PYTHON_IMAGE }),
-      });
-      const agent = createScaffoldedAgent({
-        modelRuntime: createDefaultModelRuntime(false),
-        guardrails: false,
-        interruptOn: { execute_python: false },
-        tools: [execute],
-      });
+      }),
+      { host: "127.0.0.1", port: 0 },
+    );
+    const connection = await connectSandboxTools({
+      url: `http://127.0.0.1:${http.port}/mcp`,
+    });
+    try {
+      const tool = connection.tools.find((candidate) => candidate.name === "execute_python");
+      if (!tool) throw new Error("Sandbox MCP did not expose execute_python.");
+      const response = await tool.invoke({ code: `print(${JSON.stringify(RESULT_MARKER)})` });
+      const sandboxResult = parseSandboxResult(response);
 
-      const result = (await agent.invoke({
-        messages: [{ role: "user", content: EXECUTION_PROMPT }],
-      })) as AgentInvokeResult;
-
-      const toolMessage = findExecuteToolMessage(result.messages);
-      const sandboxResult = parseSandboxResult(toolMessage);
-
-      expect(toolMessage?.tool_call_id).toBeString();
       expect(sandboxResult.status).toBe("succeeded");
       expect(sandboxResult.exitCode).toBe(0);
-      expect(sandboxResult.backend).toBe("docker");
       expect(sandboxResult.stdout.trim()).toBe(RESULT_MARKER);
       expect(sandboxResult.stderr).toBe("");
-    }, 120_000);
-  },
-);
-
-function findExecuteToolMessage(messages: unknown[] | undefined): ExecuteToolMessage | undefined {
-  if (!messages) return undefined;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index] as ExecuteToolMessage | undefined;
-    if (message?.name === "execute_python" && typeof message.tool_call_id === "string") {
-      return message;
+      expect("backend" in sandboxResult).toBeFalse();
+    } finally {
+      await connection.close();
+      await http.stop();
     }
-  }
-  return undefined;
-}
+  }, 120_000);
+});
 
-function parseSandboxResult(message: ExecuteToolMessage | undefined): SandboxResult {
-  if (!message) {
-    throw new Error("The agent did not invoke the execute_python tool.");
-  }
-
+function parseSandboxResult(response: unknown): Omit<SandboxResult, "artifacts" | "backend"> {
+  if (typeof response === "string")
+    return JSON.parse(response) as Omit<SandboxResult, "artifacts" | "backend">;
+  const content = response as { content?: unknown };
+  const text = Array.isArray(content.content)
+    ? content.content.find((part) => typeof part === "object" && part && "text" in part)
+    : undefined;
   const payload =
-    typeof message.content === "string" ? JSON.parse(message.content) : message.content;
+    typeof text === "object" && text && "text" in text ? JSON.parse(String(text.text)) : text;
   if (!payload || typeof payload !== "object") {
-    throw new Error("The execute tool did not return a structured sandbox result.");
+    throw new Error(
+      `The execute tool did not return a structured sandbox result: ${JSON.stringify(response)}`,
+    );
   }
-  return payload as SandboxResult;
+  return payload as Omit<SandboxResult, "artifacts" | "backend">;
 }
 
 async function checkDockerAvailable(): Promise<boolean> {

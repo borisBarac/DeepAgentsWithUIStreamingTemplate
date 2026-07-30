@@ -1,7 +1,7 @@
 /**
  * Backend-agnostic sandbox runtime and concrete code-execution backends.
  *
- * Agent-facing tool definitions remain in `@deep-agent-template/core`.
+ * MCP transport definitions live in `./mcp`.
  */
 export {
   createDockerSandboxBackend,
@@ -15,6 +15,13 @@ export {
   MAX_TIMEOUT_CEILING_SECONDS,
   SANDBOX_PROFILES,
 } from "./constants.ts";
+export {
+  createSandboxMcpServer,
+  type SandboxMcpHttpServerOptions,
+  type SandboxMcpServerOptions,
+  startSandboxHttpServer,
+  startSandboxStdioServer,
+} from "./mcp/index.ts";
 export type {
   SandboxArtifact,
   SandboxBackend,

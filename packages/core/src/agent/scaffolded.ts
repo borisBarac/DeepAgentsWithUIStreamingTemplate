@@ -36,6 +36,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     clarificationOptions,
     reviewOptions,
     generativeUi,
+    additionalAnalystTools,
     additionalResearcherTools,
     store = new InMemoryStore(),
     ...agentOptions
@@ -61,6 +62,7 @@ export function createScaffoldedAgent(options: CreateScaffoldedAgentOptions): De
     subagents,
     systemPrompt,
     ...(additionalResearcherTools ? { additionalResearcherTools } : {}),
+    ...(additionalAnalystTools ? { additionalAnalystTools } : {}),
     ...subagentOverrides,
   });
 

@@ -1,5 +1,8 @@
 #!/usr/bin/env bun
-import { disposeLinkloomConnection, disposeSandboxBackend } from "../src/server/agent-provider.ts";
+import {
+  disposeLinkloomConnection,
+  disposeSandboxConnection,
+} from "../src/server/agent-provider.ts";
 import { closeRedisClients } from "../src/server/redis/client.ts";
 import { registerTelemetry, shutdownTelemetry } from "../src/server/telemetry/bootstrap.ts";
 import { createAgentWorker } from "../src/server/worker/agent-worker.ts";
@@ -28,8 +31,8 @@ async function shutdown(services: { close: () => Promise<void> } | null, code: n
   console.info("[worker] shutdown signal received");
   try {
     if (services) await services.close();
-    await disposeSandboxBackend();
     await disposeLinkloomConnection();
+    await disposeSandboxConnection();
     await closeRedisClients();
     await shutdownTelemetry();
   } catch (error) {

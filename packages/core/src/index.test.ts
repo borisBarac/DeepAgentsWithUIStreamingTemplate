@@ -30,6 +30,12 @@ describe("index barrel exports", () => {
     expect(index.LINKLOOM_MCP_TOOL_NAMES).toBe(mcp.LINKLOOM_MCP_TOOL_NAMES);
   });
 
+  it("re-exports sandbox MCP helpers from the MCP module", () => {
+    expect(index.connectSandboxTools).toBe(mcp.connectSandboxTools);
+    expect(index.createSandboxMcpClient).toBe(mcp.createSandboxMcpClient);
+    expect(index.SANDBOX_MCP_TOOL_NAMES).toBe(mcp.SANDBOX_MCP_TOOL_NAMES);
+  });
+
   it("re-exports observability helpers from the observability module", () => {
     expect(index.configureLangSmithTracing).toBe(observability.configureLangSmithTracing);
   });
@@ -86,8 +92,7 @@ describe("index barrel exports", () => {
     expect(index.DEFAULT_SKILLS_ROOT).toBe(scaffold.DEFAULT_SKILLS_ROOT);
   });
 
-  it("re-exports sandbox tools and runtime compatibility exports", () => {
-    expect(index.createPythonSandboxTool).toBe(sandbox.createPythonSandboxTool);
+  it("re-exports sandbox runtime compatibility exports", () => {
     expect(index.createDockerSandboxBackend).toBe(sandbox.createDockerSandboxBackend);
     expect(index.SANDBOX_PROFILES).toBe(sandbox.SANDBOX_PROFILES);
   });

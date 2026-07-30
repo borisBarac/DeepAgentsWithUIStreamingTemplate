@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import type { SandboxBackend } from "@deep-agent-template/sandbox";
 import { tool } from "@langchain/core/tools";
 import type { SubAgent } from "deepagents";
 import type { AgentMiddleware } from "langchain";
@@ -64,8 +63,8 @@ describe("default subagents", () => {
     ]);
     expect(subagents.map((subagent) => subagent.tools?.map((tool) => tool.name) ?? [])).toEqual([
       [],
-      ["execute_python"],
-      ["execute_python"],
+      [],
+      [],
       [IMAGE_DESIGNER_TOOL_NAME],
       [],
     ]);
@@ -79,28 +78,20 @@ describe("default subagents", () => {
     expect(subagents.every((subagent) => subagent.interruptOn === undefined)).toBe(true);
   });
 
-  it("shares the configured Python sandbox tool between researcher and analyst", () => {
-    const backend: SandboxBackend = {
-      name: "test",
-      capabilities: {
-        isolation: "none",
-        supportsArtifacts: false,
-        supportsAbort: false,
-      },
-      async execute() {
-        throw new Error("not invoked");
-      },
-    };
-    const [, researcher, analyst] = asDefaultSubagents(
-      createDefaultSubagentCatalog({ pythonSandboxBackend: backend }),
+  it("injects additionalAnalystTools into the analyst", () => {
+    const sandboxTool = tool(async () => "ok", {
+      name: "execute_python",
+      description: "Run Python.",
+      schema: z.object({ code: z.string() }),
+    });
+    const [, , analyst] = asDefaultSubagents(
+      createDefaultSubagentCatalog({ additionalAnalystTools: [sandboxTool] }),
     );
 
-    expect(researcher?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
     expect(analyst?.tools?.map((tool) => tool.name)).toEqual(["execute_python"]);
-    expect(researcher?.tools?.[0]).toBe(analyst?.tools?.[0]);
   });
 
-  it("adds external research tools without removing Python execution", () => {
+  it("adds external research tools to the researcher", () => {
     const scrapeTool = tool(async ({ url }) => url, {
       name: "scrape",
       description: "Scrape a URL.",
@@ -110,14 +101,11 @@ describe("default subagents", () => {
       createDefaultSubagentCatalog({ additionalResearcherTools: [scrapeTool] }),
     );
 
-    expect(researcher?.tools?.map((researcherTool) => researcherTool.name)).toEqual([
-      "execute_python",
-      "scrape",
-    ]);
-    expect(analyst?.tools?.map((analystTool) => analystTool.name)).toEqual(["execute_python"]);
+    expect(researcher?.tools?.map((researcherTool) => researcherTool.name)).toEqual(["scrape"]);
+    expect(analyst?.tools).toEqual([]);
   });
 
-  it("lets explicit specialist tool overrides replace Python execution", () => {
+  it("lets explicit specialist tool overrides replace the defaults", () => {
     const [, researcher, analyst] = asDefaultSubagents(
       createDefaultSubagentCatalog({
         researcher: { tools: [] },

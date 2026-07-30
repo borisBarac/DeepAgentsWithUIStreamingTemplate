@@ -524,8 +524,8 @@ const agent = createScaffoldedAgent({
 ## Specialist tool wiring
 
 Specialist tools are wired as hard-coded per-subagent arrays. Build a LangChain
-tool — with `tool()` from `@langchain/core/tools`, or any factory such as
-`createPythonSandboxTool` — and pass it through `subagentOverrides.<role>.tools`:
+tool — with `tool()` from `@langchain/core/tools` — and pass it through
+`subagentOverrides.<role>.tools`:
 
 ```ts
 import { tool } from "@langchain/core/tools";
@@ -548,43 +548,27 @@ const agent = createScaffoldedAgent({
 ```
 
 `subagentOverrides.<role>.tools` **replaces** the default tool array for that
-role — it does not merge. To keep the default `execute_python` tool on the
-researcher while adding `search_sources`, include both in the array. The
-default per-role arrays live in `packages/core/src/scaffold/subagents.ts`.
+role — it does not merge. The default per-role arrays live in
+`packages/core/src/scaffold/subagents.ts`.
 
 ## Sandbox (Python execution)
 
-The default `researcher` and `analyst` subagents receive an `execute_python` tool backed by Docker. Pass `pythonSandboxBackend` to swap the implementation:
+The web app discovers `execute_python` from the Sandbox MCP server and gives it
+to the default `researcher` and `analyst` subagents. Configure its HTTP URL with
+`SANDBOX_MCP_URL` (default: `http://localhost:3010/mcp`).
 
 ```ts
+import { connectSandboxTools } from "@deep-agent-template/core";
+
+const sandbox = await connectSandboxTools();
 const agent = createScaffoldedAgent({
   modelRuntime,
-  pythonSandboxBackend: customSandboxBackend,
+  additionalResearcherTools: sandbox.tools,
+  additionalAnalystTools: sandbox.tools,
 });
 ```
 
-For custom wiring, build the tool directly with `createPythonSandboxTool` and pass it through `subagentOverrides`:
-
-```ts
-import {
-  createPythonSandboxTool,
-  createScaffoldedAgent,
-} from "@deep-agent-template/core";
-import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
-
-const pythonTool = createPythonSandboxTool({
-  backend: createDockerSandboxBackend(),
-});
-
-const agent = createScaffoldedAgent({
-  subagentOverrides: {
-    researcher: { tools: [pythonTool] },
-    analyst: { tools: [pythonTool] },
-  },
-});
-```
-
-The tool name is `execute_python` so callers can opt into an `interruptOn.execute_python` rule when they want approval prompts for Python execution. The `execute_python` name avoids colliding with the built-in `execute` (shell) tool reserved by `deepagents`'s `BUILTIN_TOOL_NAMES`.
+The tool name is `execute_python` so callers can opt into an `interruptOn.execute_python` rule when they want approval prompts for Python execution.
 
 The backend is hidden behind the `SandboxBackend` interface from
 `@deep-agent-template/sandbox` — swap Docker for a hosted sandbox (E2B,

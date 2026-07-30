@@ -1,8 +1,8 @@
 # Use the Python sandbox
 
-`@deep-agent-template/sandbox` runs Python in an isolated Docker container. Use
-it through the scaffolded agent, add it to a custom role, or call the backend
-directly.
+`@deep-agent-template/sandbox` runs Python in an isolated Docker container and
+exposes it through an MCP server. Agents receive it through MCP; applications
+can also call the backend directly.
 
 The current sandbox has no network access and does not install packages. The
 container uses the packages included in its Python image.
@@ -18,50 +18,25 @@ The package is already part of this workspace. Import it by package name:
 import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
 ```
 
-## Use the default agent setup
+## Use with the agent
 
-The scaffolded agent gives the `execute_python` tool to the `researcher` and
-`analyst` roles by default. Pass a backend when you create the agent:
+Start the Sandbox MCP service, then set `SANDBOX_MCP_URL`. The worker discovers
+the `execute_python` tool and provides it to the `researcher` and `analyst`.
 
 ```ts
-import { createScaffoldedAgent } from "@deep-agent-template/core";
-import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
-
-const agent = createScaffoldedAgent({
-  pythonSandboxBackend: createDockerSandboxBackend(),
-});
+SANDBOX_MCP_URL="http://localhost:3010/mcp"
 ```
 
 The `general-purpose` role does not receive the tool.
 
-## Add the tool to a custom role
+## Run the MCP service
 
-Create the tool yourself when you need to choose which roles can run Python:
-
-```ts
-import {
-  createPythonSandboxTool,
-  createScaffoldedAgent,
-} from "@deep-agent-template/core";
-import { createDockerSandboxBackend } from "@deep-agent-template/sandbox";
-
-const executePython = createPythonSandboxTool({
-  backend: createDockerSandboxBackend(),
-  defaultResourceProfile: "sandbox-small",
-});
-
-const agent = createScaffoldedAgent({
-  subagentOverrides: {
-    analyst: { tools: [executePython] },
-  },
-});
+```sh
+bun run --filter @deep-agent-template/sandbox mcp --transport http --host 0.0.0.0 --port 3010
 ```
 
-The `tools` array replaces the role's default tools. Include every default tool
-that you want to keep.
-
-The tool is named `execute_python`. Add an `interruptOn.execute_python` rule if
-the application should ask for approval before Python runs.
+Use `--transport stdio` for stdio clients. Compose starts the HTTP service as
+`sandbox-mcp` and mounts the Docker socket for per-execution containers.
 
 ## Call the backend directly
 
