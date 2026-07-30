@@ -1,5 +1,5 @@
 diff --git a/dist/converters/completions.cjs b/dist/converters/completions.cjs
-index e15ed2aeb3e8b1e058f431cc8f3e7577c40640d9..733e572325cc7581bca70a9d3dcb4acef4eee929 100644
+index e6953a9411c21ee4cbe7c8023fb4ed62934c32c2..a632d924d5670868887ac94c7a424e8c051f552f 100644
 --- a/dist/converters/completions.cjs
 +++ b/dist/converters/completions.cjs
 @@ -472,6 +472,7 @@ const convertStandardContentMessageToCompletionsMessage = ({ message, model }) =
@@ -19,7 +19,7 @@ index e15ed2aeb3e8b1e058f431cc8f3e7577c40640d9..733e572325cc7581bca70a9d3dcb4ace
  			role: "assistant",
  			audio: { id: message.additional_kwargs.audio.id }
 diff --git a/dist/converters/completions.js b/dist/converters/completions.js
-index 530c77309dc7359addc0e6e6e0c1269486af3fae..d3e1f1322955f62c8c3cb93856aaf1a924afc596 100644
+index 10fa07adeff33c7546e0bae7c43974c1bb8e528b..48525853f8f471e11f3c02f5385fea578abda9b8 100644
 --- a/dist/converters/completions.js
 +++ b/dist/converters/completions.js
 @@ -472,6 +472,7 @@ const convertStandardContentMessageToCompletionsMessage = ({ message, model }) =

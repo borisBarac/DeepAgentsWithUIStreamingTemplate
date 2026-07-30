@@ -7,10 +7,6 @@
   "workspaces": [
     "packages/*"
   ],
-  "overrides": {
-    "playwright": "1.59.1",
-    "playwright-core": "1.59.1"
-  },
   "scripts": {
     "check": "biome check .",
     "format": "biome format --write .",
@@ -22,6 +18,9 @@
     "web-app": "bun --env-file=.env run --filter @deep-agent-template/web-app dev",
     "agent-cli": "bun --env-file=.env packages/web-app/scripts/agent-cli.ts",
     "agent-cli:pipe": "bun run --filter @deep-agent-template/web-app bin:cli",
+    "worker": "bun --env-file=.env run --filter @deep-agent-template/web-app worker",
+    "worker:local": "REDIS_URL=redis://localhost:6379 WORKER_CONCURRENCY=1 bun --env-file=.env --watch run --filter @deep-agent-template/web-app worker",
+    "worker:pipe": "bun run --filter @deep-agent-template/web-app bin:worker",
     "storybook": "bun run --filter @deep-agent-template/web-app storybook",
     "build-storybook": "bun run --filter @deep-agent-template/web-app build-storybook"
   },
@@ -33,6 +32,6 @@
     "typescript": "^5.9.3"
   },
   "patchedDependencies": {
-    "@langchain/openai@1.4.7": "patches/@langchain%2Fopenai@1.4.7.patch"
+    "@langchain/openai@1.5.5": "patches/@langchain%2Fopenai@1.5.5.patch"
   }
 }
