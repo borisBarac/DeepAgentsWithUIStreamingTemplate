@@ -14,17 +14,15 @@ import {
   createMemoryRepository,
   createMemorySeedFiles,
   createSingleUserMemoryNamespace,
-  createSingleUserMemoryPolicy,
   createUserMemoryBackend,
   createUserMemoryNamespace,
   DEFAULT_MEMORY_FILE_PATHS,
   DEFAULT_MEMORY_ROOT,
   DEFAULT_PROJECT_FACTS_PATH,
+  DEFAULT_SINGLE_USER_MEMORY_NAMESPACE,
   DEFAULT_USER_PREFERENCES_PATH,
   FileSystemMemoryStore,
-  isMemoryWriteAutoApproved,
   normalizeVirtualPath,
-  resolveMemoryInterrupts,
   resolveMemoryNamespace,
   reviewMemoryContent,
 } from "./index.ts";
@@ -62,6 +60,7 @@ describe("single-user memory namespace", () => {
   it("returns a stable single-user namespace", () => {
     const namespace = createSingleUserMemoryNamespace();
     expect(namespace).toEqual(["single-user"]);
+    expect(DEFAULT_SINGLE_USER_MEMORY_NAMESPACE).toEqual(["single-user"]);
     expect(createSingleUserMemoryNamespace()).toEqual(namespace);
     expect(createSingleUserMemoryNamespace()).not.toBe(namespace);
   });
@@ -76,6 +75,8 @@ describe("user memory namespace", () => {
   it("returns a user-scoped namespace when userId is supplied", () => {
     expect(createUserMemoryNamespace("u1")).toEqual(["users", "u1", "memory"]);
     expect(createUserMemoryNamespace()).toEqual(["single-user"]);
+    expect(createUserMemoryNamespace(undefined)).toEqual(["single-user"]);
+    expect(createUserMemoryNamespace("")).toEqual(["single-user"]);
   });
 
   it("encodes user IDs that are unsafe for BaseStore namespace labels", () => {
@@ -161,6 +162,21 @@ describe("memory repository", () => {
 
     expect(await alice.read("/memory/project-facts.md")).toBe("Alice facts");
     expect(await bob.read("/memory/project-facts.md")).toBe("Bob facts");
+  });
+
+  it("targets the single-user namespace when no userId is supplied", async () => {
+    const store = createInMemoryMemoryStore();
+
+    const repo = createMemoryRepository({ store });
+    await repo.write("/memory/project-facts.md", "Single-user default");
+
+    expect((await store.search(["single-user"])).map((item) => item.value.content)).toEqual([
+      "Single-user default",
+    ]);
+
+    const backend = createUserMemoryBackend({ store });
+    const readBack = await backend.read("/memory/project-facts.md");
+    expect("content" in readBack ? readBack.content : "").toContain("Single-user default");
   });
 });
 
@@ -274,7 +290,7 @@ describe("bucket memory store", () => {
 
 describe("memory backend routing", () => {
   it("routes /memory to a dedicated store-backed route while other paths fall through to state", () => {
-    const memoryBackend = new StoreBackend({ namespace: createSingleUserMemoryNamespace() });
+    const memoryBackend = new StoreBackend({ namespace: createUserMemoryNamespace("test-user") });
     const defaultBackend = new StateBackend();
 
     const backend = createDefaultCompositeBackend({ defaultBackend, memoryBackend });
@@ -330,35 +346,6 @@ describe("memory permissions", () => {
       (entry) => entry.operations.includes("write") && entry.paths.includes("/memory/**"),
     );
     expect(memoryWritable).toBe(true);
-  });
-});
-
-describe("single-user memory approval policy", () => {
-  it("auto-approves the v1 writable memory files", () => {
-    const policy = createSingleUserMemoryPolicy();
-    expect(policy.approvalMode).toBe("auto");
-    expect(policy.autoApprovedPaths).toContain("/memory/project-facts.md");
-    expect(policy.autoApprovedPaths).toContain("/memory/user-preferences.md");
-    expect(isMemoryWriteAutoApproved(policy, "/memory/user-preferences.md")).toBe(true);
-    expect(isMemoryWriteAutoApproved(policy, "/memory/project-facts.md")).toBe(true);
-  });
-
-  it("does not auto-approve writes outside the memory files", () => {
-    const policy = createSingleUserMemoryPolicy();
-    expect(isMemoryWriteAutoApproved(policy, "/scratch/notes.md")).toBe(false);
-    expect(isMemoryWriteAutoApproved(policy, "/reports/final.md")).toBe(false);
-  });
-
-  it("preserves explicit interrupt settings when applying memory auto-approval", () => {
-    const policy = createSingleUserMemoryPolicy();
-    expect(policy.protectedInterrupts).toEqual(["write_file", "edit_file", "execute_python"]);
-
-    const interrupts = resolveMemoryInterrupts({
-      write_file: true,
-      edit_file: true,
-      execute: true,
-    });
-    expect(interrupts).toEqual({ write_file: true, edit_file: true, execute: true });
   });
 });
 

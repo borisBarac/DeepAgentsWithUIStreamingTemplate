@@ -53,7 +53,6 @@ export class MemoryRepository {
 
   async write(path: string, content: string): Promise<void> {
     const normalizedPath = normalizeVirtualPath(path);
-    assertStringContent(content);
 
     const existing = await this.get(normalizedPath);
     if (existing) {
@@ -65,7 +64,6 @@ export class MemoryRepository {
 
   async update(path: string, content: string): Promise<void> {
     const normalizedPath = normalizeVirtualPath(path);
-    assertStringContent(content);
 
     const existing = await this.get(normalizedPath);
     if (!existing) {
@@ -84,7 +82,6 @@ export class MemoryRepository {
 
   async upsert(path: string, content: string): Promise<void> {
     const normalizedPath = normalizeVirtualPath(path);
-    assertStringContent(content);
 
     const existing = await this.get(normalizedPath);
     if (!existing) {
@@ -229,12 +226,6 @@ function readStringContent(value: Record<string, unknown>, path: string): string
     throw new Error(`Memory file content must be a string: ${path}`);
   }
   return value.content;
-}
-
-function assertStringContent(content: string): void {
-  if (typeof content !== "string") {
-    throw new Error("Memory content must be a string.");
-  }
 }
 
 function isUnderVirtualRoot(path: string, rootPath: string): boolean {

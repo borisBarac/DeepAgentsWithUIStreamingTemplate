@@ -1,44 +1,13 @@
-import { DEFAULT_MEMORY_FILE_PATHS, DEFAULT_MEMORY_ROOT } from "../scaffold/constants.ts";
+import { DEFAULT_MEMORY_ROOT } from "../scaffold/constants.ts";
 
-export type MemorySensitiveInterrupt = "write_file" | "edit_file" | "execute_python";
-
-export const DEFAULT_SENSITIVE_INTERRUPTS: readonly MemorySensitiveInterrupt[] = [
-  "write_file",
-  "edit_file",
-  "execute_python",
-];
-
-export type MemoryApprovalMode = "auto" | "manual";
-
-export type SingleUserMemoryPolicy = {
-  approvalMode: Extract<MemoryApprovalMode, "auto">;
-  autoApprovedPaths: readonly string[];
+export type MemoryPolicy = {
   writableRoot: string;
-  protectedInterrupts: readonly MemorySensitiveInterrupt[];
 };
 
-export function createSingleUserMemoryPolicy(
-  options: {
-    autoApprovedPaths?: readonly string[];
-    protectedInterrupts?: readonly MemorySensitiveInterrupt[];
-  } = {},
-): SingleUserMemoryPolicy {
+export function createMemoryPolicy(options: { writableRoot?: string } = {}): MemoryPolicy {
   return {
-    approvalMode: "auto",
-    autoApprovedPaths: options.autoApprovedPaths ?? DEFAULT_MEMORY_FILE_PATHS,
-    writableRoot: DEFAULT_MEMORY_ROOT,
-    protectedInterrupts: options.protectedInterrupts ?? DEFAULT_SENSITIVE_INTERRUPTS,
+    writableRoot: options.writableRoot ?? DEFAULT_MEMORY_ROOT,
   };
-}
-
-export function isMemoryWriteAutoApproved(policy: SingleUserMemoryPolicy, path: string): boolean {
-  return policy.approvalMode === "auto" && policy.autoApprovedPaths.includes(path);
-}
-
-export function resolveMemoryInterrupts<T extends Record<string, unknown>>(
-  defaultInterrupts: T,
-): T {
-  return { ...defaultInterrupts };
 }
 
 export type MemoryContentCategory = "secrets" | "inferred-preferences" | "transient-details";
@@ -84,5 +53,3 @@ export function reviewMemoryContent(content: string): MemoryContentReview {
 
   return { allowed: reasons.length === 0, reasons };
 }
-
-export const MEMORY_POLICY_WORDING = `Single-user durable memory holds only explicit user preferences and stable project facts. It must not automatically store inferred preferences, credentials, arbitrary observations, or transient task details. Durable writes use Deep Agents filesystem tools and remain traceable; single-user memory writes are auto-approved in v1, and any additional interrupt policy is caller-controlled.`;
