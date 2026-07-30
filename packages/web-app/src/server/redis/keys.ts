@@ -19,6 +19,9 @@ export type RedisKeyspaces = {
   runStream(runId: string): string;
   sessionLock(tenantId: string, userId: string, sessionId: string): string;
   cancellation(runId: string): string;
+  memoryNamespaceIndex(namespaceHash: string): string;
+  memoryItem(namespaceHash: string, key: string): string;
+  memoryNamespaceRegistry(): string;
 };
 
 export const DEFAULT_TTL_SECONDS = {
@@ -41,6 +44,7 @@ export function createRedisKeys(keyPrefix: string): RedisKeyspaces {
   const sessionsBase = `${keyPrefix}session:`;
   const runsBase = `${keyPrefix}run:`;
   const streamsBase = `${keyPrefix}stream:`;
+  const memoryBase = `${keyPrefix}memory:`;
   const locksBase = `${keyPrefix}lock:`;
   const cancelBase = `${keyPrefix}cancel:`;
 
@@ -62,6 +66,15 @@ export function createRedisKeys(keyPrefix: string): RedisKeyspaces {
     cancellation(runId) {
       return `${cancelBase}${runId}`;
     },
+    memoryNamespaceIndex(namespaceHash) {
+      return `${memoryBase}idx:${namespaceHash}`;
+    },
+    memoryItem(namespaceHash, key) {
+      return `${memoryBase}item:${namespaceHash}:${sha256Digest(key)}`;
+    },
+    memoryNamespaceRegistry() {
+      return `${memoryBase}namespaces`;
+    },
     session(tenantId, userId, sessionId) {
       return `${sessionsBase}state:${sha256Digest(
         identityMaterial({ tenantId, userId }, sessionId),
@@ -73,4 +86,8 @@ export function createRedisKeys(keyPrefix: string): RedisKeyspaces {
       )}`;
     },
   };
+}
+
+export function hashNamespace(namespace: readonly string[]): string {
+  return sha256Digest(namespace.join(NULL));
 }

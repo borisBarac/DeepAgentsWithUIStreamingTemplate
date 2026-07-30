@@ -4,6 +4,7 @@ import {
   createRedisKeys,
   DEFAULT_LOCK_LEASE_SECONDS,
   DEFAULT_TTL_SECONDS,
+  hashNamespace,
   identityMaterial,
   resolveTtlConfig,
 } from "./keys.ts";
@@ -24,6 +25,9 @@ describe("createRedisKeys", () => {
     expect(keys.runStream("run-xyz")).toBe("dat:stream:run-xyz");
     expect(keys.sessionLock(ID.tenantId, ID.userId, "s1")).toMatch(/^dat:lock:[0-9a-f]+$/);
     expect(keys.cancellation("run-xyz")).toBe("dat:cancel:run-xyz");
+    expect(keys.memoryNamespaceIndex("ns-hash")).toBe("dat:memory:idx:ns-hash");
+    expect(keys.memoryItem("ns-hash", "memory-key")).toMatch(/^dat:memory:item:ns-hash:[0-9a-f]+$/);
+    expect(keys.memoryNamespaceRegistry()).toBe("dat:memory:namespaces");
   });
 
   it("isolates distinct identities by hashing them into different keys", () => {
@@ -58,6 +62,13 @@ describe("identityMaterial", () => {
     expect(identityMaterial({ tenantId: "a", userId: "bc" }, "x")).not.toBe(
       identityMaterial({ tenantId: "ab", userId: "c" }, "x"),
     );
+  });
+});
+
+describe("hashNamespace", () => {
+  it("hashes a namespace tuple deterministically", () => {
+    expect(hashNamespace(["t", "u", "mem"])).toBe(hashNamespace(["t", "u", "mem"]));
+    expect(hashNamespace(["t", "u", "mem"])).not.toBe(hashNamespace(["t", "u", "other"]));
   });
 });
 

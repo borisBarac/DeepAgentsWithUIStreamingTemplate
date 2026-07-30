@@ -1,15 +1,16 @@
-import { beforeEach, describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
+import { createMemorySeedFiles, createUserMemoryBackend } from "@deep-agent-template/core/memory";
 
 import {
-  createFileSystemMemoryStore,
-  createMemorySeedFiles,
-  createUserMemoryBackend,
-} from "@deep-agent-template/core/memory";
-
-import { __setLinkloomConnectionForTest, createAgentProvider } from "./agent-provider.ts";
+  __resetAgentCacheForTest,
+  __setLinkloomConnectionForTest,
+  __setMemoryStoreForTest,
+  __setSandboxConnectionForTest,
+  createAgentProvider,
+} from "./agent-provider.ts";
+import { FakeRedis } from "./redis/fake-redis.ts";
+import { RedisMemoryStore } from "./redis/redis-memory-store.ts";
 
 type WriteFileTool = {
   invoke(input: { content: string; file_path: string }): Promise<unknown>;
@@ -53,23 +54,10 @@ async function withEnv<T>(
   }
 }
 
-async function withTempMemory<T>(
-  overrides: Record<string, string | undefined>,
-  fn: (rootDir: string) => T | Promise<T>,
-): Promise<T> {
-  const rootDir = await mkdtemp(path.join(tmpdir(), "deep-agent-template-web-memory-"));
-  const cwd = process.cwd();
-  const webAppDirectory =
-    path.basename(cwd) === "web-app" && path.basename(path.dirname(cwd)) === "packages"
-      ? cwd
-      : path.resolve(cwd, "packages/web-app");
-  const relativeRoot = path.relative(webAppDirectory, rootDir);
-
-  try {
-    return await withEnv({ ...overrides, WEB_APP_MEMORY_DIR: relativeRoot }, () => fn(rootDir));
-  } finally {
-    await rm(rootDir, { force: true, recursive: true });
-  }
+function makeTestStore(): { store: RedisMemoryStore; fake: FakeRedis } {
+  const fake = new FakeRedis();
+  const store = new RedisMemoryStore({ client: fake.asRedis(), keyPrefix: "dat:" });
+  return { store, fake };
 }
 
 function getWriteFileTool(agent: Awaited<ReturnType<typeof createAgentProvider>>): WriteFileTool {
@@ -84,10 +72,21 @@ function getWriteFileTool(agent: Awaited<ReturnType<typeof createAgentProvider>>
 }
 
 describe("createAgentProvider", () => {
-  beforeEach(() => __setLinkloomConnectionForTest(null));
+  beforeEach(() => {
+    __setLinkloomConnectionForTest(null);
+    __setSandboxConnectionForTest(null);
+    __resetAgentCacheForTest();
+  });
+
+  afterEach(() => {
+    __setMemoryStoreForTest(undefined);
+    __resetAgentCacheForTest();
+  });
 
   it("returns the advanced scaffolded agent by default", async () => {
-    await withTempMemory({}, async (rootDir) => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    await withEnv({}, async () => {
       const agent = await createAgentProvider();
       const systemPrompt = JSON.stringify(agent.options.systemPrompt);
 
@@ -97,12 +96,13 @@ describe("createAgentProvider", () => {
       expect(systemPrompt).toContain("/home/user");
       expect(systemPrompt).toContain("/reports");
       expect(systemPrompt).toContain("/memory");
-      expect(systemPrompt).not.toContain(rootDir);
     });
   });
 
   it("ignores WEB_APP_AGENT_PROVIDER_MODE and always returns the advanced agent", async () => {
-    const agent = await withTempMemory({ WEB_APP_AGENT_PROVIDER_MODE: "simple" }, () =>
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    const agent = await withEnv({ WEB_APP_AGENT_PROVIDER_MODE: "simple" }, () =>
       createAgentProvider(),
     );
     expect(agent).toBeTruthy();
@@ -110,61 +110,83 @@ describe("createAgentProvider", () => {
   });
 
   it("seeds missing memory files and preserves backend edits across providers", async () => {
-    await withTempMemory({}, async (rootDir) => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    await withEnv({}, async () => {
       await createAgentProvider();
 
-      const store = createFileSystemMemoryStore({ rootDir });
       const backend = createUserMemoryBackend({ store });
       const seeds = createMemorySeedFiles();
 
       for (const seed of seeds) {
-        await expect(backend.read(seed.path)).resolves.toMatchObject({ content: seed.content });
+        await expect(backend.read(seed.path)).resolves.toMatchObject({
+          content: seed.content,
+        });
       }
 
-      const editedContents = new Map(
-        seeds.map((seed, index) => [seed.path, `Edited memory ${index + 1}`]),
-      );
       for (const seed of seeds) {
-        const edit = await backend.edit(
-          seed.path,
-          seed.content,
-          editedContents.get(seed.path) ?? "",
-        );
+        const edit = await backend.edit(seed.path, seed.content, `Edited ${seed.path}`);
         expect(edit.error).toBeUndefined();
       }
 
+      __resetAgentCacheForTest();
       await createAgentProvider();
 
-      for (const [memoryPath, content] of editedContents) {
-        await expect(backend.read(memoryPath)).resolves.toMatchObject({ content });
+      for (const seed of seeds) {
+        await expect(backend.read(seed.path)).resolves.toMatchObject({
+          content: `Edited ${seed.path}`,
+        });
       }
     });
   });
 
-  it("writes through the web app agent into its configured memory store", async () => {
-    await withTempMemory({}, async (rootDir) => {
+  it("concurrently seeds only missing memory files", async () => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    await withEnv({}, async () => {
+      const backend = createUserMemoryBackend({ store });
+      const [projectFacts] = createMemorySeedFiles();
+      if (!projectFacts) throw new Error("expected project facts seed");
+      await backend.write(projectFacts.path, "Existing project facts");
+
+      await Promise.all([createAgentProvider(), createAgentProvider()]);
+
+      await expect(backend.read(projectFacts.path)).resolves.toMatchObject({
+        content: "Existing project facts",
+      });
+      const remainingSeeds = createMemorySeedFiles().filter(
+        (seed) => seed.path !== projectFacts.path,
+      );
+      for (const seed of remainingSeeds) {
+        await expect(backend.read(seed.path)).resolves.toMatchObject({ content: seed.content });
+      }
+    });
+  });
+
+  it("writes through the web app agent into its Redis memory store", async () => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    await withEnv({}, async () => {
       const agent = await createAgentProvider();
       const writeFile = getWriteFileTool(agent);
       const virtualPath = "/memory/web-app-write-tool.md";
-      const fullPath = path.join(rootDir, "single-user", "memory", "web-app-write-tool.md");
 
       await writeFile.invoke({
         file_path: virtualPath,
         content: "web app write succeeded",
       });
 
-      const store = createFileSystemMemoryStore({ rootDir });
       const backend = createUserMemoryBackend({ store });
       await expect(backend.read(virtualPath)).resolves.toMatchObject({
         content: "web app write succeeded",
       });
-      expect(path.isAbsolute(fullPath)).toBeTrue();
-      await expect(readFile(fullPath, "utf8")).resolves.toBe("web app write succeeded");
     });
   });
 
   it("writes reports to the virtual reports root and denies host paths", async () => {
-    await withTempMemory({}, async () => {
+    const { store } = makeTestStore();
+    __setMemoryStoreForTest(store);
+    await withEnv({}, async () => {
       const agent = await createAgentProvider();
       const writeFile = getWriteFileTool(agent);
 

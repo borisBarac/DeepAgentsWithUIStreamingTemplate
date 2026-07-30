@@ -36,6 +36,15 @@ export const SESSION_RECORD_SCHEMA_VERSION = 1;
 export const RUN_METADATA_SCHEMA_VERSION = 1;
 export const RUN_STATE_SCHEMA_VERSION = 1;
 export const LOCK_SCHEMA_VERSION = 1;
+export const MEMORY_ITEM_SCHEMA_VERSION = 1;
+
+export type MemoryItemRecord = {
+  readonly key: string;
+  readonly namespace: readonly string[];
+  readonly value: Record<string, unknown>;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
 
 export type RunStateRecord = {
   readonly runId: string;

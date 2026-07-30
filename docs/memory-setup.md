@@ -18,38 +18,18 @@ The agent only sees virtual paths. A memory store maps those paths to durable st
   -> CompositeBackend
   -> StoreBackend
   -> BaseStore
-  -> local disk or S3
+  -> Redis (or S3)
 ```
 
 Files outside `/memory` use the temporary state backend. Changing the memory store does not change the model facing paths.
 
-## Option 1. One local memory
+## Option 1. Redis (default)
 
-The web app already uses one persistent local memory for all requests. Use this setup for local development or for one server process with a persistent disk.
+The web app stores durable agent memory in Redis, sharing the same Redis instance used for sessions, runs, and the BullMQ queue. Memory keys live under `{REDIS_KEY_PREFIX}memory:*` and are **not TTL'd** — they persist until explicitly deleted.
 
-### Configure the path
+### Prerequisites
 
-Set `WEB_APP_MEMORY_DIR` in the root `.env` file:
-
-```dotenv
-WEB_APP_MEMORY_DIR=".data/memory"
-```
-
-A relative path starts in `packages/web-app`. The setting above resolves to:
-
-```text
-packages/web-app/.data/memory
-```
-
-The same path is the default when `WEB_APP_MEMORY_DIR` is empty. The directory is ignored by Git.
-
-You may use an absolute path:
-
-```dotenv
-WEB_APP_MEMORY_DIR="/var/lib/deep-agent-template/memory"
-```
-
-The selected directory must be writable by the web server and must remain available after a restart.
+Redis must be configured via `REDIS_URL` (already required for worker scaling). See `.env.example`.
 
 ### Start the web app
 
@@ -59,22 +39,23 @@ bun run web-app
 
 During startup, the web app:
 
-1. Creates a `FileSystemMemoryStore`.
+1. Creates a `RedisMemoryStore` backed by the shared Redis client.
 2. Uses the `single-user` namespace.
 3. Creates the two default memory files when they are missing.
 4. Keeps existing files unchanged.
 5. Passes the same store to the scaffolded agent.
 
-With the default path, the Markdown files are stored at:
+### Redis key layout
 
-```text
-packages/web-app/.data/memory/single-user/memory/project-facts.md
-packages/web-app/.data/memory/single-user/memory/user-preferences.md
-```
+| Key pattern | Type | Purpose |
+|---|---|---|
+| `{prefix}memory:item:{nsHash}:{keyHash}` | string | One memory item (JSON record) |
+| `{prefix}memory:idx:{nsHash}` | set | Keys in one namespace |
+| `{prefix}memory:namespaces` | set | All namespace tuples (for listing) |
 
-Each Markdown file has a neighboring `.meta.json` file. The metadata records the namespace, virtual path, and creation and update times.
+No TTL is set on any memory key.
 
-### Verify local memory
+### Verify memory
 
 Ask the agent to save an explicit fact:
 
@@ -88,15 +69,11 @@ Restart the web app, then ask:
 What is this project's build command?
 ```
 
-You can also inspect the stored file directly:
+You can also inspect the stored data with `redis-cli`:
 
 ```bash
-sed -n '1,160p' packages/web-app/.data/memory/single-user/memory/project-facts.md
+redis-cli -u "$REDIS_URL" --scan --pattern "${REDIS_KEY_PREFIX:-dat:}memory:*"
 ```
-
-### Local limits
-
-Use one web server process with this setup. Several processes can race while creating or updating the same files. An ephemeral serverless filesystem will lose the files when the instance is replaced.
 
 ## Option 2. One memory in S3
 
@@ -277,7 +254,7 @@ If the application needs strict enforcement, call the content review helper in t
 
 ## Choose a setup
 
-Use local memory when one process serves one user and the disk is persistent. Use S3 when application instances are replaced, several processes need the same memory, or memory must live outside the application host.
+Use Redis (the default) for all deployments. It survives process restarts, supports multi-process scaling, and shares the same Redis instance already used for sessions and the BullMQ queue. Use S3 only when memory must live outside the Redis instance (e.g. regulatory requirements or separate storage lifecycle).
 
 ## S3 references
 

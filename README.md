@@ -75,7 +75,7 @@ Product requests create or update reviewed product batches. Casual messages go t
 ### Memory System (Single-User Durable Storage)
 - Virtual filesystem: `/memory`, `/scratch`, `/plans`, `/reports`, `/artifacts`, `/skills`
 - Durable: `/memory/project-facts.md`, `/memory/user-preferences.md`
-- Pluggable backends: `FileSystemMemoryStore`, `InMemoryMemoryStore`, `BucketMemoryStore`
+- Pluggable backends: `RedisMemoryStore` (web app default), `FileSystemMemoryStore`, `InMemoryMemoryStore`, `BucketMemoryStore`
 - Content review: flags credentials, inferred preferences, transient details
 - Auto-approved writes for single-user namespace
 
