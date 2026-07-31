@@ -1,4 +1,3 @@
-import type { UiUpdate } from "@deep-agent-template/core/interaction-stream";
 import { NextResponse } from "next/server";
 
 import { injectTraceContext } from "../../../src/server/agent-runtime/telemetry.ts";
@@ -18,8 +17,13 @@ export const runtime = "nodejs";
 
 const encoder = new TextEncoder();
 
-function encodeUpdate(update: UiUpdate): Uint8Array {
-  return encoder.encode(`${JSON.stringify(update)}\n`);
+type UiEvent = Extract<ExecutionEvent, { readonly kind: "ui" }>;
+
+function encodeUpdate(event: UiEvent): Uint8Array {
+  const frame = event.eventId
+    ? { eventId: event.eventId, update: event.update }
+    : { update: event.update };
+  return encoder.encode(`${JSON.stringify(frame)}\n`);
 }
 
 function parseRequestBody(body: unknown): {
@@ -119,11 +123,7 @@ export function createAgentRequestHandler(
       );
     }
 
-    const disconnect = connectDebugDisconnect(request.signal, abortController);
-    return applyGuestCookie(
-      streamEvents(handle.events, abortController, disconnect),
-      guestIdentity.setCookie,
-    );
+    return applyGuestCookie(streamEvents(handle.events), guestIdentity.setCookie);
   };
 }
 
@@ -150,26 +150,7 @@ export async function POST(request: Request): Promise<Response> {
   return createAgentRequestHandler(await getProductionExecutor())(request);
 }
 
-function isAgentDebugEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_AGENT_DEBUG !== "false";
-}
-
-function connectDebugDisconnect(
-  requestSignal: AbortSignal,
-  abortController: AbortController,
-): () => void {
-  if (!isAgentDebugEnabled()) return () => undefined;
-  const abort = () => abortController.abort();
-  requestSignal.addEventListener("abort", abort, { once: true });
-  if (requestSignal.aborted) abort();
-  return () => requestSignal.removeEventListener("abort", abort);
-}
-
-function streamUiUpdates(
-  updates: AsyncIterable<UiUpdate>,
-  abortController: AbortController,
-  disconnect: () => void,
-): Response {
+function streamUiUpdates(updates: AsyncIterable<UiEvent>): Response {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -179,17 +160,12 @@ function streamUiUpdates(
       } catch {
         // Controller was closed/errored (e.g. client disconnect).
       } finally {
-        disconnect();
         try {
           controller.close();
         } catch {
           // Already closed by cancellation.
         }
       }
-    },
-    cancel() {
-      if (isAgentDebugEnabled()) abortController.abort();
-      disconnect();
     },
   });
 
@@ -201,16 +177,12 @@ function streamUiUpdates(
   });
 }
 
-async function* filterUiUpdates(events: AsyncIterable<ExecutionEvent>): AsyncIterable<UiUpdate> {
+async function* filterUiUpdates(events: AsyncIterable<ExecutionEvent>): AsyncIterable<UiEvent> {
   for await (const event of events) {
-    if (event.kind === "ui") yield event.update;
+    if (event.kind === "ui") yield event;
   }
 }
 
-function streamEvents(
-  events: AsyncIterable<ExecutionEvent>,
-  abortController: AbortController,
-  disconnect: () => void,
-): Response {
-  return streamUiUpdates(filterUiUpdates(events), abortController, disconnect);
+function streamEvents(events: AsyncIterable<ExecutionEvent>): Response {
+  return streamUiUpdates(filterUiUpdates(events));
 }

@@ -26,13 +26,17 @@ function ndjsonResponse(
     ? new ReadableStream<Uint8Array>({
         start(controller) {
           const encoder = new TextEncoder();
-          for (const line of lines) {
-            controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+          for (const [index, line] of lines.entries()) {
+            controller.enqueue(
+              encoder.encode(`${JSON.stringify({ eventId: `${index + 1}-0`, update: line })}\n`),
+            );
           }
           controller.close();
         },
       })
-    : `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`;
+    : `${lines
+        .map((line, index) => JSON.stringify({ eventId: `${index + 1}-0`, update: line }))
+        .join("\n")}\n`;
   return new Response(body, {
     headers: { "Content-Type": "application/x-ndjson; charset=utf-8" },
     status,

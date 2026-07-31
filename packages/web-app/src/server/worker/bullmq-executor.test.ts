@@ -226,6 +226,87 @@ describe("BullMqAgentExecutor", () => {
     await terminate(handle, request.runId);
   });
 
+  it("reattaches after a cursor without enqueueing or cancelling the active run", async () => {
+    const request = buildRequest();
+    const original = await executor.execute(request, new AbortController().signal);
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "missed",
+    });
+    const cursor = await eventStream.publish(request.identity, request.runId, {
+      kind: "lifecycle",
+      phase: "started",
+      ts: Date.now(),
+    });
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "replayed",
+    });
+    await eventStream.publishResult(request.identity, request.runId, SUCCESS_RESULT);
+
+    const reattached = await executor.reattach(
+      request.identity,
+      request.sessionId,
+      request.runId,
+      cursor,
+    );
+    expect(reattached).not.toBeNull();
+    if (!reattached) throw new Error("expected reattach handle");
+    const events: ExecutionEvent[] = [];
+    for await (const event of reattached.events) events.push(event);
+    expect(events.filter((event) => event.kind === "ui")).toEqual([
+      {
+        eventId: expect.any(String),
+        kind: "ui",
+        update: { type: "message", text: "replayed" },
+      },
+    ]);
+    expect((await reattached.result).outcome).toBe("success");
+    expect(queue.adds).toHaveLength(1);
+    expect(await executor.cancellation.isCancelled(request.identity, request.runId)).toBe(false);
+    await original.result;
+  });
+
+  it("does not reattach a foreign or mismatched-session run", async () => {
+    const request = buildRequest();
+    const handle = await executor.execute(request, new AbortController().signal);
+    expect(
+      await executor.reattach(OTHER_IDENTITY, request.sessionId, request.runId, "0"),
+    ).toBeNull();
+    expect(await executor.reattach(IDENTITY, "other-session", request.runId, "0")).toBeNull();
+    await terminate(handle, request.runId);
+  });
+
+  it("waits for events published after reattach before returning the original result", async () => {
+    const request = buildRequest();
+    const original = await executor.execute(request, new AbortController().signal);
+    const reattached = await executor.reattach(
+      request.identity,
+      request.sessionId,
+      request.runId,
+      "0",
+    );
+    if (!reattached) throw new Error("expected reattach handle");
+    const iterator = reattached.events[Symbol.asyncIterator]();
+    const next = iterator.next();
+    await eventStream.publishUi(request.identity, request.runId, {
+      type: "message",
+      text: "later",
+    });
+    await eventStream.publishResult(request.identity, request.runId, SUCCESS_RESULT);
+    expect(await next).toEqual({
+      done: false,
+      value: {
+        eventId: expect.any(String),
+        kind: "ui",
+        update: { type: "message", text: "later" },
+      },
+    });
+    await iterator.return?.();
+    expect((await reattached.result).outcome).toBe("success");
+    await original.result;
+  });
+
   it("releases the lock when enqueue fails so the session is not wedged", async () => {
     // Simulate BullMQ rejecting the enqueue (Redis hiccup, etc.).
     queue.throwOnAdd = new Error("enqueue boom");

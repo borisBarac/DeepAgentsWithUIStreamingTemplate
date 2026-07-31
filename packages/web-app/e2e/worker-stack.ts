@@ -6,7 +6,6 @@ import type { Redis } from "ioredis";
 import type { AgentSource } from "../src/server/agent-runtime/turn-runner.ts";
 import type {
   AgentExecutionHandle,
-  AgentExecutor,
   ExecutionEvent,
   ExecutionIdentity,
   ExecutionRequest,
@@ -19,10 +18,13 @@ import {
   resolveRedisOptions,
 } from "../src/server/redis/client.ts";
 import { createAgentWorker, type WorkerServices } from "../src/server/worker/agent-worker.ts";
-import { buildBullMqAgentExecutor } from "../src/server/worker/bullmq-executor.ts";
+import {
+  type BullMqAgentExecutor,
+  buildBullMqAgentExecutor,
+} from "../src/server/worker/bullmq-executor.ts";
 
 export type WorkerStack = {
-  readonly executor: AgentExecutor;
+  readonly executor: BullMqAgentExecutor;
   readonly services: WorkerServices;
   readonly stop: () => Promise<void>;
 };
@@ -131,7 +133,7 @@ export async function drainHandle(handle: AgentExecutionHandle): Promise<Drained
 }
 
 export async function submitTurn(
-  executor: AgentExecutor,
+  executor: BullMqAgentExecutor,
   request: ExecutionRequest,
   signal: AbortSignal,
 ): Promise<DrainedTurn> {

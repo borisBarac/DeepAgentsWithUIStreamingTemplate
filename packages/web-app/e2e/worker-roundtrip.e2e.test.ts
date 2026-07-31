@@ -44,6 +44,86 @@ afterAll(async () => {
 });
 
 describe("worker round-trip (Redis + BullMQ)", () => {
+  testIf("reattaches a dropped stream without running the job twice", async () => {
+    let executions = 0;
+    let releaseSecondMessage: (() => void) | undefined;
+    const secondMessage = new Promise<void>((resolve) => {
+      releaseSecondMessage = resolve;
+    });
+    let firstMessageSeen: (() => void) | undefined;
+    const firstMessage = new Promise<void>((resolve) => {
+      firstMessageSeen = resolve;
+    });
+    stack = await startWorkerStack({
+      agentSource: () => {
+        executions++;
+        return {
+          async streamEvents() {
+            return {
+              messages: (async function* () {
+                yield {
+                  text: (async function* () {
+                    yield "first";
+                  })(),
+                };
+                firstMessageSeen?.();
+                await secondMessage;
+                yield {
+                  text: (async function* () {
+                    yield "second";
+                  })(),
+                };
+              })(),
+              output: Promise.resolve({ messages: [] }),
+            };
+          },
+          async invoke() {
+            return { messages: [] };
+          },
+        };
+      },
+      concurrency: 1,
+    });
+
+    const request = buildRequest({ sessionId: "reattach-test", content: "stream" });
+    const original = await stack.executor.execute(request, new AbortController().signal);
+    await firstMessage;
+    let entries = await stack.executor.eventStream.read(
+      request.identity,
+      request.runId,
+      "0",
+      20,
+      100,
+    );
+    for (let tries = 0; entries.length === 0 && tries < 20; tries++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      entries = await stack.executor.eventStream.read(
+        request.identity,
+        request.runId,
+        "0",
+        20,
+        100,
+      );
+    }
+    const cursor = entries.at(-1)?.id;
+    if (!cursor) throw new Error("expected initial stream event");
+
+    const reattached = await stack.executor.reattach(
+      request.identity,
+      request.sessionId,
+      request.runId,
+      cursor,
+    );
+    if (!reattached) throw new Error("expected reattach handle");
+    releaseSecondMessage?.();
+    const recovered = await drainHandle(reattached);
+    await drainHandle(original);
+
+    expect(executions).toBe(1);
+    expect(recovered.result.outcome).not.toBe("error");
+    expect(recovered.events.some((event) => event.kind === "result")).toBe(true);
+  });
+
   testIf("cancels a hanging turn on abort", async () => {
     stack = await startWorkerStack({ agentSource: () => hangingAgent(), concurrency: 1 });
 

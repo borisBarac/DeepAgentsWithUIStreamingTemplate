@@ -117,6 +117,20 @@ export class BullMqAgentExecutor implements AgentExecutor {
     return { status: "requested" };
   }
 
+  async reattach(
+    identity: ExecutionRequest["identity"],
+    sessionId: string,
+    runId: string,
+    afterEventId: string,
+  ): Promise<AgentExecutionHandle | null> {
+    const state = await this.runState.get(runId, identity);
+    if (!state || state.sessionId !== sessionId) return null;
+
+    const queue = new EventRelayQueue();
+    const result = this.#readReattached(identity, runId, afterEventId, queue);
+    return { events: queue, result };
+  }
+
   #projectHandle(
     request: ExecutionRequest,
     signal: AbortSignal,
@@ -125,6 +139,39 @@ export class BullMqAgentExecutor implements AgentExecutor {
     const queue = new EventRelayQueue();
     const result = this.#readUntilTerminal(request, signal, queue, acquire);
     return { events: queue, result };
+  }
+
+  async #readReattached(
+    identity: ExecutionRequest["identity"],
+    runId: string,
+    initialAfterId: string,
+    queue: EventRelayQueue,
+  ): Promise<ExecutionResult> {
+    let afterId = initialAfterId;
+    try {
+      while (true) {
+        const batch = await this.eventStream.read(identity, runId, afterId, 1_000, 100);
+        for (const entry of batch) {
+          afterId = entry.id;
+          const event = envelopeToEvent(entry.id, entry.envelope);
+          if (!event) continue;
+          queue.push(event);
+          if (event.kind === "result") return event.result;
+        }
+
+        const state = await this.runState.get(runId, identity);
+        if (
+          !state ||
+          state.status === "completed" ||
+          state.status === "failed" ||
+          state.status === "cancelled"
+        ) {
+          return terminalResultFromState(state?.status);
+        }
+      }
+    } finally {
+      queue.close();
+    }
   }
 
   async #readUntilTerminal(
@@ -154,7 +201,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
         );
         for (const entry of batch) {
           afterId = entry.id;
-          const event = envelopeToEvent(entry.envelope);
+          const event = envelopeToEvent(entry.id, entry.envelope);
           if (!event) continue;
           queue.push(event);
           if (event.kind === "result") {
@@ -185,7 +232,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
           );
           for (const entry of drain) {
             afterId = entry.id;
-            const event = envelopeToEvent(entry.envelope);
+            const event = envelopeToEvent(entry.id, entry.envelope);
             if (!event) continue;
             queue.push(event);
             if (event.kind === "result") {
@@ -212,7 +259,7 @@ export class BullMqAgentExecutor implements AgentExecutor {
           );
           for (const entry of drain) {
             afterId = entry.id;
-            const event = envelopeToEvent(entry.envelope);
+            const event = envelopeToEvent(entry.id, entry.envelope);
             if (!event) continue;
             queue.push(event);
             if (event.kind === "result") {
@@ -308,18 +355,28 @@ export class BullMqAgentExecutor implements AgentExecutor {
   }
 }
 
-function envelopeToEvent(envelope: RunEventEnvelope): ExecutionEvent | null {
+function terminalResultFromState(status: string | undefined): ExecutionResult {
+  return {
+    outcome: status === "cancelled" ? "cancelled" : status === "completed" ? "success" : "error",
+    failure: null,
+    history: [],
+    structuredOutput: null,
+    finalText: "",
+  };
+}
+
+function envelopeToEvent(eventId: string, envelope: RunEventEnvelope): ExecutionEvent | null {
   if (envelope.kind === "lifecycle") {
     return { kind: "lifecycle", phase: envelope.phase ?? "completed" };
   }
   if (envelope.kind === "ui" && envelope.update) {
-    return { kind: "ui", update: envelope.update };
+    return { kind: "ui", update: envelope.update, eventId };
   }
   if (envelope.kind === "result" && envelope.result) {
     return { kind: "result", result: envelope.result };
   }
   if (envelope.kind === "error" && envelope.message) {
-    return { kind: "ui", update: { message: envelope.message, type: "error" } };
+    return { kind: "ui", update: { message: envelope.message, type: "error" }, eventId };
   }
   return null;
 }

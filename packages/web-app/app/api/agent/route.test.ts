@@ -12,6 +12,7 @@ import {
   makeSessionBusyError,
 } from "../../../src/server/worker/bullmq-executor.ts";
 import { createAgentCancellationHandler } from "./cancel/route.ts";
+import { createAgentReattachHandler } from "./reattach/route.ts";
 import { createAgentRequestHandler } from "./route.ts";
 
 const SUCCESS_RESULT: ExecutionResult = {
@@ -55,6 +56,9 @@ function fakeExecutor(
       };
       return Promise.resolve(handle);
     },
+    reattach() {
+      return null;
+    },
     async cancel() {
       return { status: "requested" };
     },
@@ -65,6 +69,9 @@ function fakeBusyExecutor(activeRunId: string): AgentExecutor {
   return {
     execute(_request: ExecutionRequest, _signal: AbortSignal): Promise<AgentExecutionHandle> {
       return Promise.reject(makeSessionBusyError(activeRunId));
+    },
+    reattach() {
+      return null;
     },
     async cancel() {
       return { status: "unknown" };
@@ -153,11 +160,11 @@ describe("createAgentRequestHandler", () => {
     expect(identities[2]).not.toBe(identities[0]);
   });
 
-  it("streams UI updates as NDJSON and hides lifecycle/result events", async () => {
+  it("streams UI updates with their Redis cursors and hides lifecycle/result events", async () => {
     const events: ExecutionEvent[] = [
       { kind: "lifecycle", phase: "started" },
-      { kind: "ui", update: { type: "message", text: "hello" } },
-      { kind: "ui", update: { type: "message", text: "world" } },
+      { eventId: "1-0", kind: "ui", update: { type: "message", text: "hello" } },
+      { eventId: "2-0", kind: "ui", update: { type: "message", text: "world" } },
       { kind: "result", result: SUCCESS_RESULT },
     ];
     const handler = createAgentRequestHandler(fakeExecutor(events));
@@ -173,8 +180,8 @@ describe("createAgentRequestHandler", () => {
 
     const updates = await readNdjson(response);
     expect(updates).toHaveLength(2);
-    expect(updates[0]).toEqual({ type: "message", text: "hello" });
-    expect(updates[1]).toEqual({ type: "message", text: "world" });
+    expect(updates[0]).toEqual({ eventId: "1-0", update: { type: "message", text: "hello" } });
+    expect(updates[1]).toEqual({ eventId: "2-0", update: { type: "message", text: "world" } });
   });
 
   it("returns 409 when the executor reports session busy", async () => {
@@ -196,6 +203,9 @@ describe("createAgentRequestHandler", () => {
     const executor: AgentExecutor = {
       execute(): Promise<AgentExecutionHandle> {
         return Promise.reject(new Error("Redis connection refused"));
+      },
+      reattach() {
+        return null;
       },
       async cancel() {
         return { status: "unknown" };
@@ -227,9 +237,7 @@ describe("createAgentRequestHandler", () => {
     expect(updates).toEqual([]);
   });
 
-  it("aborts the executor when response delivery is cancelled in debug mode", async () => {
-    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = "true";
+  it("does not abort the executor when response delivery is cancelled", async () => {
     let aborted = false;
     const executor = fakeExecutor([]);
     executor.execute = async (_request, receivedSignal) => {
@@ -253,13 +261,10 @@ describe("createAgentRequestHandler", () => {
       }),
     );
     await response.body?.cancel();
-    expect(aborted).toBe(true);
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
+    expect(aborted).toBe(false);
   });
 
-  it("aborts the executor from request.signal in debug mode", async () => {
-    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = "true";
+  it("does not abort the executor from request.signal", async () => {
     const controller = new AbortController();
     let aborted = false;
     const executor = fakeExecutor([]);
@@ -285,38 +290,7 @@ describe("createAgentRequestHandler", () => {
       }),
     );
     controller.abort();
-    expect(aborted).toBe(true);
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
-  });
-
-  it("does not abort the executor when response delivery is cancelled outside debug mode", async () => {
-    const original = process.env.NEXT_PUBLIC_AGENT_DEBUG;
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = "false";
-    let aborted = false;
-    const executor = fakeExecutor([]);
-    executor.execute = async (_request, signal) => {
-      signal.addEventListener("abort", () => {
-        aborted = true;
-      });
-      return {
-        events: {
-          async *[Symbol.asyncIterator]() {
-            await new Promise<never>(() => undefined);
-          },
-        },
-        result: new Promise<never>(() => undefined),
-      };
-    };
-    const response = await createAgentRequestHandler(executor)(
-      new Request("http://localhost/api/agent", {
-        body: JSON.stringify({ message: "hi", runId: "r1", sessionId: "s1" }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      }),
-    );
-    await response.body?.cancel();
     expect(aborted).toBe(false);
-    process.env.NEXT_PUBLIC_AGENT_DEBUG = original;
   });
 });
 
@@ -337,6 +311,9 @@ describe("createAgentCancellationHandler", () => {
         async execute() {
           throw new Error("unused");
         },
+        reattach() {
+          return null;
+        },
       };
       const response = await createAgentCancellationHandler(executor)(
         new Request("http://localhost/api/agent/cancel", {
@@ -350,6 +327,57 @@ describe("createAgentCancellationHandler", () => {
       expect(identity).toEqual({ tenantId: "guest", userId: expect.any(String) });
     });
   }
+});
+
+describe("createAgentReattachHandler", () => {
+  it("streams reattached UI events and forwards the guest identity and cursor", async () => {
+    let received: unknown[] = [];
+    const executor = fakeExecutor([]);
+    executor.reattach = async (identity, sessionId, runId, afterEventId) => {
+      received = [identity, sessionId, runId, afterEventId];
+      return {
+        events: {
+          async *[Symbol.asyncIterator]() {
+            yield {
+              eventId: "124-0",
+              kind: "ui",
+              update: { text: "missed", type: "message" },
+            } as const;
+            yield { kind: "result", result: SUCCESS_RESULT } as const;
+          },
+        },
+        result: Promise.resolve(SUCCESS_RESULT),
+      };
+    };
+    const response = await createAgentReattachHandler(executor)(
+      new Request("http://localhost/api/agent/reattach", {
+        body: JSON.stringify({ afterEventId: "123-0", runId: "r1", sessionId: "s1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await readNdjson(response)).toEqual([
+      { eventId: "124-0", update: { text: "missed", type: "message" } },
+    ]);
+    expect(received).toEqual([
+      { tenantId: "guest", userId: expect.any(String) },
+      "s1",
+      "r1",
+      "123-0",
+    ]);
+  });
+
+  it("returns 404 when the run is unavailable to this guest/session", async () => {
+    const response = await createAgentReattachHandler(fakeExecutor([]))(
+      new Request("http://localhost/api/agent/reattach", {
+        body: JSON.stringify({ afterEventId: "0", runId: "r1", sessionId: "s1" }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
+    expect(response.status).toBe(404);
+  });
 });
 
 describe("isSessionBusyError + makeSessionBusyError", () => {

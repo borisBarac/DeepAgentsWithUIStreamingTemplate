@@ -81,6 +81,63 @@ export async function stopActiveRun(
   }
 }
 
+export function applyAgentStreamLine(
+  line: string,
+  handlers: AgentChatUpdateHandlers,
+): string | null {
+  try {
+    const frame = JSON.parse(line) as { eventId?: unknown; update?: unknown };
+    if (
+      typeof frame === "object" &&
+      frame !== null &&
+      "update" in frame &&
+      frame.update !== undefined
+    ) {
+      applyAgentChatLine(JSON.stringify(frame.update), handlers);
+      return typeof frame.eventId === "string" ? frame.eventId : null;
+    }
+  } catch {
+    // Preserve the validator's error reporting for malformed legacy lines.
+  }
+  applyAgentChatLine(line, handlers);
+  return null;
+}
+
+export async function consumeAgentStream(
+  response: Response,
+  handlers: AgentChatUpdateHandlers,
+  onEventId: (eventId: string) => void,
+  setReader: (reader: ReadableStreamDefaultReader<Uint8Array> | null) => void,
+): Promise<void> {
+  if (!response.body) throw new Error("Response did not include a stream.");
+  const reader = response.body.getReader();
+  setReader(reader);
+  const decoder = new TextDecoder();
+  let buffered = "";
+  const applyLine = (line: string) => {
+    const eventId = applyAgentStreamLine(line, handlers);
+    if (eventId) onEventId(eventId);
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffered += decoder.decode(value, { stream: true });
+      const lines = buffered.split("\n");
+      buffered = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) applyLine(trimmed);
+      }
+    }
+    const tail = buffered.trim();
+    if (tail) applyLine(tail);
+  } finally {
+    setReader(null);
+  }
+}
+
 export function useAgentChat(): AgentChat {
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [agentActivity, setAgentActivity] = useState<DisplayAgentActivity[]>([]);
@@ -204,6 +261,9 @@ export function useAgentChat(): AgentChat {
       },
     };
 
+    let afterEventId = "0";
+    let receivedInitialResponse = false;
+    let initialStreamValid = false;
     try {
       const response = await fetch("/api/agent", {
         body: JSON.stringify({
@@ -215,44 +275,57 @@ export function useAgentChat(): AgentChat {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
+      receivedInitialResponse = true;
 
       if (!response.ok || !response.body) {
         throw new Error(`Request failed with status ${response.status}.`);
       }
-
-      const reader = response.body.getReader();
-      readerRef.current = reader;
-      const decoder = new TextDecoder();
-      let buffered = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffered += decoder.decode(value, { stream: true });
-        const lines = buffered.split("\n");
-        buffered = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) {
-            continue;
-          }
-          applyAgentChatLine(trimmed, handlers);
-        }
-      }
-
-      const tail = buffered.trim();
-      if (tail) {
-        applyAgentChatLine(tail, handlers);
-      }
-
+      initialStreamValid = true;
+      await consumeAgentStream(
+        response,
+        handlers,
+        (eventId) => {
+          afterEventId = eventId;
+        },
+        (reader) => {
+          readerRef.current = reader;
+        },
+      );
       finishStreamingAssistant();
     } catch (caught) {
+      if (receivedInitialResponse && !initialStreamValid) {
+        finishStreamingAssistant();
+        setError(caught instanceof Error ? caught.message : String(caught));
+        return;
+      }
+
+      try {
+        const reattachResponse = await fetch("/api/agent/reattach", {
+          body: JSON.stringify({
+            afterEventId,
+            runId,
+            sessionId: sessionIdRef.current,
+          }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        });
+        if (!reattachResponse.ok || !reattachResponse.body) {
+          throw new Error(`Reattach failed with status ${reattachResponse.status}.`);
+        }
+        await consumeAgentStream(
+          reattachResponse,
+          handlers,
+          (eventId) => {
+            afterEventId = eventId;
+          },
+          (reader) => {
+            readerRef.current = reader;
+          },
+        );
+      } catch (reattachError) {
+        setError(reattachError instanceof Error ? reattachError.message : String(reattachError));
+      }
       finishStreamingAssistant();
-      setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       readerRef.current = null;
       if (runIdRef.current === runId) runIdRef.current = null;

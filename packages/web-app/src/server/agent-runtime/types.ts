@@ -40,7 +40,7 @@ export type ExecutionResult = {
 };
 
 export type ExecutionEvent =
-  | { readonly kind: "ui"; readonly update: UiUpdate }
+  | { readonly kind: "ui"; readonly update: UiUpdate; readonly eventId?: string }
   | { readonly kind: "lifecycle"; readonly phase: "started" | "completed" | "cancelled" }
   | { readonly kind: "result"; readonly result: ExecutionResult };
 
@@ -88,5 +88,11 @@ export type AgentExecutor = {
     request: ExecutionRequest,
     signal: AbortSignal,
   ): AgentExecutionHandle | Promise<AgentExecutionHandle>;
+  reattach(
+    identity: ExecutionIdentity,
+    sessionId: string,
+    runId: string,
+    afterEventId: string,
+  ): AgentExecutionHandle | Promise<AgentExecutionHandle | null> | null;
   cancel(identity: ExecutionIdentity, runId: string): Promise<CancellationResult>;
 };

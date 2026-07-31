@@ -33,7 +33,7 @@ function joinUrl(base: string, path: string): string {
  *
  * 1. Partial NDJSON lines are buffered across `reader.read()` chunks and
  *    dispatched only once the terminating newline arrives.
- * 2. Each completed line is parsed with `parseClientUpdateLine` (the same
+ * 2. Each completed frame's `update` is parsed with `parseClientUpdateLine` (the same
  *    helper the website's `applyAgentChatLine` uses). Malformed JSON or
  *    schema-invalid updates surface as a synthetic `{type:"error"}`
  *    update — matching the website's `handlers.onError(...)` path.
@@ -101,7 +101,7 @@ export async function streamAgentUpdates(
 }
 
 function dispatchLine(line: string, handlers: AgentStreamHandlers): void {
-  const result = parseClientUpdateLine(line);
+  const result = parseClientUpdateLine(unwrapUpdate(line));
   if (result.ok) {
     handlers.onUpdate(result.update);
     return;
@@ -111,6 +111,18 @@ function dispatchLine(line: string, handlers: AgentStreamHandlers): void {
   // server-emitted error.
   const message = result.issues[0]?.message ?? "UI update was rejected by the validator.";
   handlers.onUpdate({ type: "error", message });
+}
+
+function unwrapUpdate(line: string): string {
+  try {
+    const frame = JSON.parse(line) as { update?: unknown };
+    if (typeof frame === "object" && frame !== null && frame.update !== undefined) {
+      return JSON.stringify(frame.update);
+    }
+  } catch {
+    // Let parseClientUpdateLine produce the consistent validation error.
+  }
+  return line;
 }
 
 async function safeReadText(response: Response): Promise<string> {
