@@ -536,6 +536,8 @@ textarea {
 }
 
 .question-options button span {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-weight: 700;
 }
 
@@ -767,8 +769,10 @@ textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   display: grid;
-  min-height: 420px;
+  min-height: 0;
+  overflow: auto;
   padding: var(--space-6);
+  scrollbar-gutter: stable;
 }
 
 /* ===========================================================
