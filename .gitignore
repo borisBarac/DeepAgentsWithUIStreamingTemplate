@@ -5,6 +5,7 @@ coverage
 .turbo
 .cache
 packages/web-app/.data/
+packages/web-app/storybook-static/
 
 .DS_Store
 *.log

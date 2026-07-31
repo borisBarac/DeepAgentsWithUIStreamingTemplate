@@ -1,7 +1,15 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.0/schema.json",
   "files": {
-    "includes": ["**", "!bun.lock", "!node_modules", "!dist", "!**/.next", "!**/.beads"]
+    "includes": [
+      "**",
+      "!bun.lock",
+      "!node_modules",
+      "!dist",
+      "!**/.next",
+      "!**/.beads",
+      "!**/storybook-static"
+    ]
   },
   "formatter": {
     "enabled": true,
