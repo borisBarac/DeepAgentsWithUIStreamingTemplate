@@ -3,7 +3,7 @@ import type { Redis } from "ioredis";
 import type { ExecutionIdentity, ExecutionResult } from "../agent-runtime/types.ts";
 import { createRedisKeys, type RedisKeyspaces, resolveTtlConfig, type TtlConfig } from "./keys.ts";
 
-const STREAM_MAX_LEN = 1_000;
+const STREAM_MAX_LEN = 100_000;
 
 export type RedisEventStreamOptions = {
   readonly client: Redis;
