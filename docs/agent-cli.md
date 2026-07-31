@@ -18,7 +18,7 @@ bun run agent-cli --file prompt.txt
 bun run agent-cli --repl
 ```
 
-The dev server must be running (`bun run web-app` or `bun run --filter @deep-agent-template/web-app dev`). Defaults to `http://localhost:3000`.
+The dev server and a worker must be running (`bun run dev` starts both, or `bun run web-app` + `bun run worker` separately). Redis must be reachable at `REDIS_URL`. Defaults to `http://localhost:3000`.
 
 ## Options
 

@@ -5,20 +5,18 @@
 - Should be forked and used as starting point of the new project
 
 ## Features in development
-- MultiUser support (Session executor + workers + stream for connections) - DEV Branch
-- Horizontal scaling for workers
-- Support to use ImageGeneration in the GeneratedUI elements (example procut cart with a image of product)
+- Support to use ImageGeneration in the GeneratedUI elements (example product cart with an image of product)
 
 ## Description
 
-Deep Agent Template provides a supervisor, specialist subagents, clarification, guardrails, durable memory, a Python sandbox, image generation, and a Next.js workspace. The default workflow creates and reviews product concepts, then renders them in the web app.
+Multi-user web app built on a controlplane/worker architecture (Next.js API + BullMQ workers, Redis seam). Ships a pre-configured DeepAgent with specialist subagents:
 
-Deep Agent Template gives you:
-
-- `createScaffoldedAgent()` with a supervisor, clarifier, researcher, analyst, reviewer, product-generator, and optional image-designer.
-- A workflow controller that owns clarification, execution, product generation, review, revision, delivery, and errors.
-- A validated A2UI catalogue, an NDJSON interaction stream, durable memory, system tracing and metrics, agent tracing with LangSmith, and a Docker Python sandbox.
-- A Next.js workspace with chat, preview, and activity panes.
+- **clarifier** — structured intake with bounded clarification rounds
+- **researcher** — web scraping, research, Python sandbox execution
+- **analyst** — data analysis with Python sandbox
+- **review-agent** — quality review and feedback
+- **product-generator** — product concept creation
+- **image-designer** — product image generation
 
 [View the web app screenshot](IMG/web-app.jpg)
 
@@ -26,90 +24,18 @@ Product requests create or update reviewed product batches. Casual messages go t
 
 ## Capabilities
 
-### Supervisor-Specialist Agent Architecture
-- One-call factory (`createScaffoldedAgent()`) producing a fully wired multi-agent system
-- Specialist roles: `clarifier`, `researcher`, `analyst`, `review-agent`, `product-generator`, `image-designer`
-- `general-purpose` fallback subagent (disabled by default)
-- Named specialist delegation with configurable tool bundles per role
-
-### 3-Tier Model Runtime
-- **fast**: clarifier, guardrail classifiers (cheap/low-latency)
-- **normal**: researcher, image-designer, coder
-- **pro**: supervisor, analyst, reviewer, finalizer (heavy reasoning)
-- Works with any OpenAI-compatible endpoint
-- Lazy model caching per category, configurable via env vars or programmatic config
-
-### Clarification-First Intake
-- Every request enters clarification phase before execution
-- Structured questions with optional multiple-choice options and recommended answers
-- Bounded rounds (default 2) and questions per round (default 3)
-- Auto-proceeds with stated assumptions when round cap is reached
-
-### Guardrails (Preflight Safety)
-- **ContentSafetyGuardrail**: classifies user input for unsafe content
-- **TaskScopeGuardrail**: structured in-scope vs out-of-scope classification
-- Policy controlled by markdown files (`allowedTasks.md`, `disallowedTasks.md`, `requiredContext.md`)
-- Uses fast-tier model for classification
-- Casual messages use a separate scoped assistant and do not enter product execution
-
-### Generative UI (A2UI) System
-- Model-authored UI uses flat A2UI updates in the NDJSON interaction stream
-- Components: `Button`, `Card`, `ImagePlaceholder`, `ProductCard`, `ProductGrid`, `Stack`, `Text`, `TextInput`
-- `catalog.json` is the single source of truth for schemas and limits
-- Dual validation: Ajv (server) + mini-validator (browser)
-- Invalid model-authored UI gets one retry with structured validation feedback
-- Strict 128 KiB payload limit, max 100 components per update
-
-### Workflow Controller (State Machine)
-- State machine (8 phases including `error`) driving the agent lifecycle
-- Deterministic UI emission for clarification questions and reviewed product batches
-- Product updates replace the current product grid while preserving the approved count
-- Max clarification rounds, max review cycles, controller retry limits
-
-### Interaction Stream
-- NDJSON streaming: `message`, `ui`, `question`, `main_agent_activity`, `subagent_activity`, `error`
-- Controller feedback stays in workflow state and is shown in activity updates, not as a chat message
-- Auto-repair for invalid model-authored UI output (one retry with feedback)
-- Chat history management with transient context stripping
-
-### Memory System (Single-User Durable Storage)
-- Virtual filesystem: `/memory`, `/scratch`, `/plans`, `/reports`, `/artifacts`, `/skills`
-- Durable: `/memory/project-facts.md`, `/memory/user-preferences.md`
-- Pluggable backends: `RedisMemoryStore` (web app default), `FileSystemMemoryStore`, `InMemoryMemoryStore`, `BucketMemoryStore`
-- Content review: flags credentials, inferred preferences, transient details
-- Auto-approved writes for single-user namespace
-
-### Python Sandbox (Docker)
-- `execute_python` tool for researcher and analyst subagents
-- Strict isolation: no network, `cap_drop: ALL`, read-only FS, `nobody` user
-- Configurable resource profiles (small/medium/large)
-- Pluggable `SandboxBackend` interface (Docker, E2B, Daytona, Vercel, etc.)
-
-### Image Generation
-- Pluggable providers: Replicate (real) or fixed stub (default, no API key needed)
-- `generate_image` tool wired to `image-designer` subagent
-
-### Web Scraping (Linkloom MCP)
-- Streamable-HTTP MCP service (dedicated container)
-- Tools: `scrape`, `html_to_markdown`, `pdf_to_markdown`, `render_page`, `extract_links`, `extract_tables`, `search_web`
-- Wired exclusively to the `researcher` subagent via the BullMQ worker
-
-### System Observability
-- OpenTelemetry traces for requests, agent runs, dispatch, workers, environments, and sandbox execution
-- Metrics for active runs, run outcomes, run duration, dispatch duration, environment duration, and stream events
-- W3C trace context propagation across worker boundaries
-- Metadata only. Prompts, messages, outputs, memory, UI payloads, and credentials are excluded
-
-### Agent Observability with LangSmith
-- Full tracing of model calls, tool invocations, agent runs
-- Per-subagent metadata for querying traces
-- Query helpers: `listRunsBySubagent()`, `listTracesBySubagent()`
-
-### Prompt System
-- All prompts in Markdown files under `packages/core/prompts/`
-- Typed `PromptLoader` extension point for custom sources
-- Per-role prompts + bundled skills (`clarify-deeply`)
-- `SOUL.md` core identity + `FILESYSTEM_CONTRACT` appended to all agents
+- **Supervisor-specialist architecture** — one-call factory (`createScaffoldedAgent()`), configurable tool bundles per role, optional `general-purpose` fallback
+- **3-tier model runtime** — fast/normal/pro tiers, any OpenAI-compatible endpoint, lazy model caching
+- **Clarification-first intake** — structured questions, bounded rounds (2×3), auto-proceeds with assumptions
+- **Guardrails** — content safety + task scope classification (fast-tier), markdown policy files, casual-message gate
+- **Generative UI (A2UI)** — model-authored UI via NDJSON stream, catalog-validated, dual validation (Ajv + mini-validator), 128 KiB limit
+- **Workflow controller** — 8-phase state machine, deterministic UI emission, bounded retries
+- **Interaction stream** — NDJSON (`message`, `ui`, `question`, activity, `error`), auto-repair, context stripping
+- **Durable memory** — virtual filesystem, pluggable backends (Redis, FS, S3, in-memory), content review
+- **Python sandbox** — Docker-isolated `execute_python`, strict containment, pluggable backend interface
+- **Image generation** — pluggable providers (Replicate or stub), wired to `image-designer`
+- **Web scraping** — Linkloom MCP (scrape, markdown, PDF, search), wired to `researcher`
+- **Observability** — OpenTelemetry system traces/metrics + LangSmith agent tracing with per-subagent queries
 
 ## Architecture
 
@@ -119,6 +45,13 @@ User request → product/casual gate → guardrails → clarification
 ```
 
 Workflow phases: `clarification` → `waiting_for_user` → `execution` → `product_generation` → `review` → `revision` → `delivery_ready` (plus `error`). The controller also limits clarification rounds, review cycles, and retries.
+
+### API / Worker split
+
+The web app runs as two process types: the **API** (Next.js) and one or more **workers**. **Redis** is the seam between them — the API never calls an LLM; it enqueues a BullMQ job and tail-reads a per-session Redis Stream. Workers run agent turns and publish UI events back through the stream. Sessions, runs, locks, cancellation flags, and durable memory all live in Redis, namespaced by `sha256(tenantId \0 userId \0 sessionId)` so concurrent guests never collide.
+
+- **Workflow flowchart & data flow diagram**: [`docs/diagram.md`](docs/diagram.md)
+- **Isolation layers, scaling knobs & timing constants**: [`docs/worker-architecture.md`](docs/worker-architecture.md)
 
 ### Monorepo (4 packages)
 
@@ -136,105 +69,34 @@ Workflow phases: `clarification` → `waiting_for_user` → `execution` → `pro
 - **AI Framework**: `deepagents` (supervisor-specialist agent library)
 - **LLM**: LangChain + OpenAI-compatible endpoints (DeepSeek, OpenAI, Ollama, vLLM)
 - **Web**: Next.js 16 (App Router), React 19
+- **Coordination**: Redis (sessions, runs, streams, locks, memory) + BullMQ (job queue)
 - **Generative UI**: catalogue-validated flat A2UI adapted to `@json-render/core` at the renderer boundary
 - **Validation**: Ajv 2020-12 (server), mini-validator (browser), Zod 4
 - **Web Scraping**: `@boris.barac/linkloom` 0.2.1 MCP server (streamable-HTTP, dedicated container)
 - **Image Gen**: Replicate SDK
 - **Sandbox**: Docker (`python:3.12-slim`, strict isolation)
 - **Observability**: OpenTelemetry system tracing and metrics, plus LangSmith agent tracing
-- **Linting**: Biome 2.5
-- **Testing**: Bun test runner
-- **Storybook**: 10.5
 
-## Quick Start
+## Quick Start, Env Vars, Scripts & CLI
 
-```bash
-# 1. Install dependencies
-bun install
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env — at minimum set LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
-
-# 3. Run the web app
-bun run web-app
-# → http://localhost:3000
-
-# 4. Run the CLI (requires web app running)
-bun run agent-cli "Design a product card for a hiking backpack"
-bun run agent-cli --repl    # Interactive mode
-```
-
-## Environment Variables
-
-### Required (live agent calls)
-
-| Variable | Description |
-|---|---|
-| `LLM_BASE_URL` | OpenAI-compatible endpoint (e.g. `https://api.deepseek.com`) |
-| `LLM_API_KEY` | API key |
-| `LLM_MODEL` | Normal-tier model (default for all roles) |
-
-### Optional model tiers
-
-| Variable | Default | Roles |
-|---|---|---|
-| `FAST_MODEL` | falls back to `LLM_MODEL` | clarifier, guardrail classifier |
-| `PRO_MODEL` | falls back to `LLM_MODEL` | supervisor, analyst, reviewer, finalizer |
-
-### Optional features
-
-| Variable | Description |
-|---|---|
-| `LANGSMITH_TRACING` | `true` to enable LangSmith tracing |
-| `LANGSMITH_API_KEY` | LangSmith API key |
-| `LANGSMITH_PROJECT` | LangSmith project name |
-| `LANGSMITH_ENDPOINT` | Non-US region endpoint |
-| `USE_FAKE_IMAGE_PROVIDER` | `true` (default) for stub, `false` for Replicate |
-| `REPLICATE_API_TOKEN` | Required when using real image generation |
-
-## Scripts
-
-```bash
-bun test                              # Unit tests (all packages)
-bun run typecheck                     # TypeScript type checking
-bun run check                         # Biome lint + format
-bun run --filter @deep-agent-template/web-app build   # Next.js build
-bun run web-app                        # Start web dev server
-bun run agent-cli                      # CLI client
-bun run storybook                      # Storybook (port 6006)
-bun run smoke:langsmith                # Verify LangSmith tracing
-```
-
-### Live E2E tests (opt-in, requires LLM credentials)
-
-```bash
-bun run --filter @deep-agent-template/core test:e2e
-```
+See [`docs/getting-started.md`](docs/getting-started.md) for setup, environment variables, available scripts, and agent CLI usage.
 
 ## Documentation
 
 | Path | Description |
 |---|---|
+| [`docs/getting-started.md`](docs/getting-started.md) | Quick start, env vars, scripts, agent CLI |
 | `packages/core/README.md` | Full API reference: scaffolding, models, memory, prompts, guardrails, tools, sandbox, LangSmith |
+| `docs/worker-architecture.md` | API/worker split, Redis seam, isolation layers, scaling knobs |
+| `docs/memory-setup.md` | Durable memory backends (Redis default, S3) |
+| `docs/sandbox.md` | Python sandbox usage and MCP wiring |
 | `docs/diagram.md` | Mermaid flowchart of the supervisor workflow |
 | `docs/agent-cli.md` | CLI usage, options, REPL commands |
 | `docs/ui-catalogue.md` | UI component catalogue, wire format, validation, adding components |
+| `docs/image-generation.md` | Image generation providers and agent wiring |
 | `packages/sandbox/README.md` | Sandbox backend design and "writing a new backend" checklist |
 | `CONTEXT.md` | Domain vocabulary |
 | `AGENTS.md` | Issue tracker config and quality gates |
-
-
-## Agent CLI for use with agents
-
-```bash
-bun run agent-cli "Your message"          # One-shot
-bun run agent-cli --ndjson "Your message" # Machine-readable
-bun run agent-cli --file prompt.txt        # From file
-bun run agent-cli --repl                  # Interactive REPL
-```
-
-REPL commands: `:reset`, `:session`, `:activity`, `:raw`, `:history`, `:specs`, `:format`, `:help`
 
 ## License
 

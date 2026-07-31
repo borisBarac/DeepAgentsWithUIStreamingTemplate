@@ -306,11 +306,11 @@ const result = await agent.invoke({
 });
 ```
 
-The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app provides a filesystem-backed store under `packages/web-app/.data/memory`, or the path set by `WEB_APP_MEMORY_DIR`.
+The scaffold loads `/memory/project-facts.md` and `/memory/user-preferences.md` by default. Core uses an in-memory store when no store is supplied, so applications that need persistence must provide one. The web app uses a Redis-backed store (`RedisMemoryStore`, keys under `{REDIS_KEY_PREFIX}memory:*`). See [`docs/memory-setup.md`](../../docs/memory-setup.md).
 
-The default specialist subagents are intentionally isolated. They start with their own empty tool lists except for the built-in Python tool on `researcher` and `analyst`. Supplying `imageGenerationService` adds the `image-designer` specialist with its image-generation tool. Wire other specialist capabilities through `subagentOverrides` or fully custom `subagents`.
+The default specialist subagents are intentionally isolated. They start with their own empty tool lists. The `execute_python` tool is **not** built in — the web app discovers it from the Sandbox MCP server (`SANDBOX_MCP_URL`) and injects it into the `researcher` and `analyst` via `additionalResearcherTools` / `additionalAnalystTools`. Supplying `imageGenerationService` adds the `image-designer` specialist with its image-generation tool. Wire other specialist capabilities through `subagentOverrides` or fully custom `subagents`.
 
-The auto-added `general-purpose` subagent is **not** part of the catalog and is not customizable via `subagentOverrides`. It inherits the supervisor's tools (which do not include the sandbox-scoped `execute_python` tool — that's wired only into `researcher` and `analyst`). Customize it through the harness profile instead.
+The auto-added `general-purpose` subagent is **not** part of the catalog and is not customizable via `subagentOverrides`. It inherits the supervisor's tools (which do not include `execute_python`). Customize it through the harness profile instead.
 
 The default `clarifier` subagent is wired with the bundled `clarify-deeply` skill via `skills: ["/skills/clarify-deeply/"]`. Because the scaffold uses `StateBackend` by default, include `files: createDefaultSkillFiles()` in each `agent.invoke(...)` call so the skill file is present in the per-run state.
 
